@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# TFI One — Pre-commit hook
+# Enforces Five Points coding standards (CODING_STANDARDS.md §1, §8, §10, §11)
+#
+# Install:
+#   cp .git-hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Or via the fivepoints plugin:
+#   claire fivepoints install-hooks
+
+set -euo pipefail
+
+ERRORS=()
+
+# ─────────────────────────────────────────────────────────────
+# Check 1 — Branch naming convention
+# Rule: feature/{numeric-id}-description OR bugfix/{numeric-id}-description
+# ─────────────────────────────────────────────────────────────
+BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+
+if [[ -n "$BRANCH" ]]; then
+    if [[ ! "$BRANCH" =~ ^(feature|bugfix)/[0-9]+-. ]] && \
+       [[ "$BRANCH" != "main" ]] && \
+       [[ "$BRANCH" != "dev" ]] && \
+       [[ ! "$BRANCH" =~ ^release/ ]]; then
+        ERRORS+=("Branch '$BRANCH' does not follow naming convention.")
+        ERRORS+=("  Required: feature/{ticket-id}-short-description")
+        ERRORS+=("            bugfix/{ticket-id}-short-description")
+        ERRORS+=("  Examples: feature/10856-client-export, bugfix/10901-fix-null")
+    fi
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 2 — com.tfione.api.d.ts must not be staged
+# Rule: CODING_STANDARDS.md §11
+# ─────────────────────────────────────────────────────────────
+if git diff --name-only --cached | grep -q "com\.tfione\.api\.d\.ts"; then
+    ERRORS+=("com.tfione.api.d.ts must not be committed (generated file, in .gitignore).")
+    ERRORS+=("  Fix: git restore --staged com.tfione.api.d.ts")
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 3 — No GRANT/DENY in Flyway migrations
+# Rule: CODING_STANDARDS.md §10
+# ─────────────────────────────────────────────────────────────
+STAGED_MIGRATIONS=$(git diff --name-only --cached | grep -i "migration.*\.sql$" || true)
+
+if [[ -n "$STAGED_MIGRATIONS" ]]; then
+    while IFS= read -r migration_file; do
+        if git show ":$migration_file" 2>/dev/null | grep -iqE "^\s*(GRANT|DENY|EXEC\s+sp_addrolemember)"; then
+            ERRORS+=("Migration '$migration_file' contains role permissions (GRANT/DENY).")
+            ERRORS+=("  Roles are managed via the UI — never add them to migrations.")
+            ERRORS+=("  See: CODING_STANDARDS.md §10")
+        fi
+    done <<< "$STAGED_MIGRATIONS"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 4 — No business logic tests in com.tfione.service.test
+# Rule: CODING_STANDARDS.md §8
+# Allowed namespaces: encryption, password, signing, mapping, email, messaging
+# Forbidden: client, provider, organization, fds, intake, household, org
+# ─────────────────────────────────────────────────────────────
+STAGED_TESTS=$(git diff --name-only --cached | grep -i "service\.test.*\.cs$" || true)
+FORBIDDEN_NAMESPACES="client|provider|organization|fds|intake|household|\.org\."
+
+if [[ -n "$STAGED_TESTS" ]]; then
+    while IFS= read -r test_file; do
+        # Check namespace declaration in the file
+        NAMESPACE=$(git show ":$test_file" 2>/dev/null | grep -i "^namespace " | head -1 || true)
+        if echo "$NAMESPACE" | grep -iqE "$FORBIDDEN_NAMESPACES"; then
+            ERRORS+=("Test file '$test_file' tests business domain logic.")
+            ERRORS+=("  Namespace: $NAMESPACE")
+            ERRORS+=("  Only infrastructure/external-API tests belong in service.test.")
+            ERRORS+=("  Allowed: encryption, password, signing, mapping, email, messaging")
+            ERRORS+=("  See: CODING_STANDARDS.md §8")
+        fi
+    done <<< "$STAGED_TESTS"
+fi
+
+# ─────────────────────────────────────────────────────────────
+# Output results
+# ─────────────────────────────────────────────────────────────
+if [[ ${#ERRORS[@]} -gt 0 ]]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║  🚫  TFI One Pre-Commit Check FAILED                     ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    for error in "${ERRORS[@]}"; do
+        echo "  $error"
+    done
+    echo ""
+    echo "Fix the issues above and try again."
+    echo "See: five_points/operational/CODING_STANDARDS.md"
+    echo ""
+    exit 1
+fi
+
+echo "✅ TFI One pre-commit checks passed."

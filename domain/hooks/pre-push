@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# TFI One — Pre-push hook
+# Blocks any push to the origin (ADO) remote.
+#
+# Rule: The dev NEVER pushes to origin (ADO).
+#       The only valid push is: git push github feature/{ticket-id}-{description}
+#       ADO push is handled by: fivepoints ado-push (called by the tester after tests pass)
+#
+# Install:
+#   cp .git-hooks/pre-push .git/hooks/pre-push
+#   chmod +x .git/hooks/pre-push
+#
+# Or via the fivepoints plugin:
+#   claire fivepoints install-hooks
+
+set -euo pipefail
+
+REMOTE_NAME="$1"
+REMOTE_URL="$2"
+
+# Block any push to origin or to Azure DevOps URLs
+if [[ "$REMOTE_NAME" == "origin" ]] || \
+   [[ "$REMOTE_URL" == *"visualstudio.com"* ]] || \
+   [[ "$REMOTE_URL" == *"dev.azure.com"* ]]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════╗"
+    echo "║  🚫  TFI One Pre-Push Check FAILED                       ║"
+    echo "╚══════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "  Direct push to origin (ADO) is not allowed."
+    echo ""
+    echo "  The dev role only pushes to the GitHub remote (fivepoints-test):"
+    echo "    git push github feature/{ticket-id}-{description}"
+    echo ""
+    echo "  ADO push happens at the END of the pipeline, via:"
+    echo "    fivepoints ado-push --issue N"
+    echo "  (called by the tester after all tests pass)"
+    echo ""
+    exit 1
+fi
+
+exit 0

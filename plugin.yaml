@@ -1,0 +1,73 @@
+name: fivepoints
+version: 1.0.0
+description: "Azure DevOps integration for TFI One project - PR comments, status, builds"
+
+author:
+  name: "Claire Labs"
+  url: "https://github.com/claire-labs/claire"
+
+type: domain
+
+dependencies:
+  system:
+    - curl
+    - git
+    - jq
+  claire:
+    min: 0.2.0
+
+commands:
+  - name: "fivepoints reply"
+    script: "domain/commands/reply.sh"
+    description: "Reply to a PR comment thread on Azure DevOps, or approve a PR (--approve)"
+
+  - name: "fivepoints pr-status"
+    script: "domain/commands/pr-status.sh"
+    description: "Show PR status, build results, reviewer votes"
+
+  - name: "fivepoints pr-comments"
+    script: "domain/commands/pr-comments.sh"
+    description: "List all comment threads on a PR"
+
+  - name: "fivepoints build-log"
+    script: "domain/commands/build-log.sh"
+    description: "Fetch build/pipeline results for a PR"
+
+  - name: "fivepoints wait"
+    script: "domain/commands/wait.sh"
+    description: "Wait for PR activity (auto-sets AZURE_DEVOPS_PAT from git remote)"
+
+  - name: "fivepoints ado-watch"
+    script: "domain/commands/ado-watch.sh"
+    description: "Continuously monitor a specific ADO PR for all comments, votes, and merge events (--pr N)"
+
+  - name: "fivepoints validation-proof"
+    script: "domain/commands/validation-proof.sh"
+    description: "Record dual validation proof: frontend UI errors + Swagger API 400 responses"
+
+  - name: "fivepoints transition"
+    script: "domain/commands/transition.sh"
+    description: "Transition a pipeline issue to the next role (analyst → dev → tester → ado-push)"
+
+  - name: "fivepoints ado-push"
+    script: "domain/commands/ado-push.sh"
+    description: "Push branch to ADO, create PR, watch for merge, close GitHub issue on completion"
+
+  - name: "fivepoints ado-transition"
+    script: "domain/commands/ado-transition.sh"
+    description: "PAT-gated transition from dev to ADO: verify branch + request write PAT + push to ADO"
+
+  - name: "fivepoints reset-pipeline"
+    script: "domain/commands/reset-pipeline.sh"
+    description: "Reset all pipeline issues to clean backlog state (remove assignees, labels, worktrees, branches)"
+
+  - name: "fivepoints install-hooks"
+    script: "domain/commands/install-hooks.sh"
+    description: "Install TFI One pre-commit hook into TFIOneGit (branch naming, no GRANT/DENY, no d.ts, no biz logic tests)"
+
+  - name: "fivepoints test-env-start"
+    script: "domain/commands/test-env-start.sh"
+    description: "Start full TFI One stack for local testing (SQL Server + .NET API + Vite frontend)"
+
+config:
+  api_version: "7.1"

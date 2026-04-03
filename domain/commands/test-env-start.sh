@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# fivepoints test-env-start
+# Starts the full TFI One stack for local testing (SQL Server + API + frontend).
+# Run from the TFI One project root directory.
+#
+# Usage:
+#   claire fivepoints test-env-start [--path /path/to/TFIOneGit]
+
+set -euo pipefail
+
+if [[ "${1:-}" == "--agent-help" ]]; then
+    cat <<'HELP'
+# fivepoints test-env-start — LLM Agent Guide
+
+## Purpose
+Start the full TFI One stack for local testing: SQL Server (Docker) + .NET API + Vite frontend.
+Run this at the start of every tester or dev self-test session (step 1 of the checklist).
+
+## Usage
+```bash
+claire fivepoints test-env-start
+claire fivepoints test-env-start --path /Users/andreperez/TFIOneGit
+```
+
+## What it does
+1. Starts Docker SQL Server container (tfione-sqlserver)
+2. Starts the .NET API on https://localhost:58337
+3. Starts the Vite frontend on https://localhost:5173
+4. Waits for both services to respond
+5. Prints PIDs for clean shutdown
+
+## Output
+```
+✅ Environment ready
+   API:      https://localhost:58337
+   Swagger:  https://localhost:58337/swagger
+   UI:       https://localhost:5173
+   API_PID=12345
+   VITE_PID=12346
+   Shutdown: kill 12345 12346 && docker stop tfione-sqlserver
+```
+
+## Shutdown
+```bash
+kill $API_PID $VITE_PID
+docker stop tfione-sqlserver
+```
+
+## Notes
+- Must be run from the TFI One project root (or pass --path)
+- SQL Server container must exist (docker run on first use creates it automatically)
+HELP
+    exit 0
+fi
+
+PROJECT_DIR="${PWD}"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --path)
+            PROJECT_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            echo "Usage: claire fivepoints test-env-start [--path /path/to/TFIOneGit]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ ! -f "$PROJECT_DIR/com.tfione.sln" ]]; then
+    echo "❌ Not a TFI One project directory: $PROJECT_DIR" >&2
+    echo "   Expected com.tfione.sln to exist." >&2
+    echo "   Run from the project root or pass --path /path/to/TFIOneGit" >&2
+    exit 1
+fi
+
+cd "$PROJECT_DIR"
+
+echo "[1/4] Starting SQL Server..."
+if docker ps -a --format '{{.Names}}' | grep -q '^tfione-sqlserver$'; then
+    docker start tfione-sqlserver 2>/dev/null || true
+else
+    echo "  Container not found — creating tfione-sqlserver..."
+    docker run -d \
+        --name tfione-sqlserver \
+        -e 'ACCEPT_EULA=Y' \
+        -e 'MSSQL_SA_PASSWORD=YourStrong!Passw0rd' \
+        -p 1433:1433 \
+        mcr.microsoft.com/mssql/server:2022-latest
+fi
+sleep 5
+
+echo "[2/4] Starting .NET API..."
+dotnet run \
+    --project com.tfione.api/com.tfione.api.csproj \
+    --urls "https://localhost:58337" \
+    --no-launch-profile \
+    > /tmp/tfione-api.log 2>&1 &
+API_PID=$!
+
+echo "[3/4] Starting frontend..."
+(cd com.tfione.web && npm run dev > /tmp/tfione-vite.log 2>&1) &
+VITE_PID=$!
+
+echo "[4/4] Waiting for services..."
+API_READY=false
+for i in $(seq 1 30); do
+    if curl -sk "https://localhost:58337/swagger/index.html" > /dev/null 2>&1; then
+        API_READY=true
+        break
+    fi
+    sleep 2
+done
+[[ "$API_READY" != "true" ]] && echo "⚠️  API not ready after 60s — check /tmp/tfione-api.log"
+
+VITE_READY=false
+for i in $(seq 1 15); do
+    if curl -sk "https://localhost:5173" > /dev/null 2>&1 || curl -sk "http://localhost:5173" > /dev/null 2>&1; then
+        VITE_READY=true
+        break
+    fi
+    sleep 2
+done
+[[ "$VITE_READY" != "true" ]] && echo "⚠️  Vite not ready after 30s — check /tmp/tfione-vite.log"
+
+echo ""
+echo "✅ Environment ready"
+echo "   API:      https://localhost:58337"
+echo "   Swagger:  https://localhost:58337/swagger"
+echo "   UI:       https://localhost:5173"
+echo "   API_PID=$API_PID"
+echo "   VITE_PID=$VITE_PID"
+echo "   Shutdown: kill $API_PID $VITE_PID && docker stop tfione-sqlserver"
