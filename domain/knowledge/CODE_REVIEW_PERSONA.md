@@ -3,9 +3,9 @@ domain: five_points
 category: knowledge
 name: CODE_REVIEW_PERSONA
 title: "Five Points — Code Review Persona (AI Gatekeeper)"
-keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review]
+keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review, console-log, pascalcase, fds-compliance, magic-strings, static-checks]
 extends: claire/knowledge/BASE_REVIEWER
-updated: 2026-03-31
+updated: 2026-04-03
 ---
 
 # Five Points — Code Review Persona (AI Gatekeeper)
@@ -186,6 +186,124 @@ See: operational/CODING_STANDARDS.md §11
 
 ---
 
+### Check 6 — No `console.log` in Production Code (Tier 1 — Static)
+
+**Rule:** `.tsx` and `.ts` files must not contain `console.log` statements. Use the application's logging infrastructure instead.
+
+**Trigger:** A PR adds or modifies a `.tsx` or `.ts` file under `com.tfione.web/src/` that contains `console.log`.
+
+**Violation response:**
+```
+🚫 Console.log in Production Code
+
+The file `{filename}` contains `console.log` at line {line}.
+
+Console.log statements must not be committed to production code.
+Remove them or replace with the application's logging utility.
+
+See: ADO review pattern — Nathan Wallen: "Could remove this console log if not for user"
+```
+
+---
+
+### Check 7 — No Local Config Files Committed (Tier 1 — Static)
+
+**Rule:** Local development configuration files must never appear in a PR diff.
+
+**Trigger:** A PR includes any of these files in the changed files list:
+- `appsettings.Development.json`
+- `local.yml`
+- `*.local.json`
+- `.env.local`
+
+**Violation response:**
+```
+🚫 Local Config File Committed
+
+The file `{filename}` is a local development configuration file
+and must not be committed to source control.
+
+To fix:
+  git restore --staged {filename}
+
+If already tracked:
+  git rm --cached {filename}
+  echo "{filename}" >> .gitignore
+
+See: ADO review pattern — Jesse Oresnik: local config files committed by accident
+```
+
+---
+
+### Check 8 — PascalCase Enforcement in C# Models (Tier 1 — Static)
+
+**Rule:** All C# model properties must use PascalCase. No `Pascal_Snake`, `camelCase`, or `SCREAMING_SNAKE` in property names.
+
+**Trigger:** A PR adds or modifies a `.cs` file under `com.tfione.model/` and a `public` property name contains an underscore or starts with a lowercase letter.
+
+**Violation response:**
+```
+🚫 Naming Convention Violation
+
+The property `{property_name}` in `{filename}` does not follow PascalCase convention.
+
+C# model properties must use PascalCase:
+  ❌ Provider_Status → ✅ ProviderStatus
+  ❌ providerStatus  → ✅ ProviderStatus
+  ❌ PROVIDER_STATUS → ✅ ProviderStatus
+
+See: ADO review pattern — Elion Sickler: "Pascal_Snake must be PascalCase"
+```
+
+---
+
+### Check 9 — `disableExport` on Action Columns (Tier 1 — Static)
+
+**Rule:** DataGrid columns that render actions (buttons, icons, menus) must include `disableExport: true` to prevent action markup from appearing in exported data.
+
+**Trigger:** A PR adds or modifies a `.tsx` file that defines DataGrid columns with `renderCell` containing action elements (`<IconButton`, `<Button`, `<MenuIcon`, `onClick`) but does NOT include `disableExport: true` on that column definition.
+
+**Violation response:**
+```
+🚫 Missing disableExport on Action Column
+
+The DataGrid column definition in `{filename}` at line {line} renders action elements
+but does not set `disableExport: true`.
+
+Action columns must disable export to prevent button markup in CSV/Excel output:
+  {
+    field: 'actions',
+    headerName: '',
+    disableExport: true,   // ← required
+    renderCell: (params) => <IconButton ... />
+  }
+
+See: ADO review pattern — Stephen Miller: FDS requires disableExport on Action columns
+```
+
+---
+
+### Check 10 — No Hardcoded Values in Migration SQL WHERE Clauses (Tier 1 — Static)
+
+**Rule:** Flyway migration files must not contain hardcoded usernames, emails, or environment-specific values in `WHERE` clauses. Use parameters or lookup-based approaches instead.
+
+**Trigger:** A PR adds or modifies a file under `com.tfione.db/migration/` and a `WHERE` clause contains a quoted string literal that looks like a username, email, or environment-specific value (e.g., `'admin'`, `'john.doe'`, `'dev-server'`).
+
+**Violation response:**
+```
+🚫 Hardcoded Value in Migration WHERE Clause
+
+The migration file `{filename}` contains a hardcoded value in a WHERE clause at line {line}:
+  {quoted_value}
+
+Hardcoded usernames and environment-specific values in migrations will fail on other databases.
+Use lookup-based approaches or parameterized values instead.
+
+See: ADO review pattern — Jesse Oresnik: hardcoded usernames in WHERE clauses fail on other databases
+```
+
+---
+
 ## Review Checklist
 
 When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
@@ -194,6 +312,7 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] Branch follows `feature/{id}-*` or `bugfix/{id}-*` naming convention
 - [ ] PR title follows `{ticket-id}-short-description` convention
 - [ ] `com.tfione.api.d.ts` not present in changed files
+- [ ] No local config files committed (`appsettings.Development.json`, `local.yml`, `*.local.json`)
 
 ### DB Layer
 - [ ] No hand-coded files in `com.tfione.db/orm/` (must be scaffolded)
@@ -201,6 +320,8 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] Flyway migrations use `[schema].[table]` — no 3-part database name
 - [ ] Explicit constraint names on all FK/PK/unique constraints
 - [ ] No `GRANT`, `DENY`, or role assignment SQL in migration files
+- [ ] No hardcoded usernames/emails in migration WHERE clauses
+- [ ] No SQL typos in migration scripts (verify table/column names match schema)
 
 ### Backend
 - [ ] Controller is thin (2-3 lines per method, no business logic)
@@ -209,6 +330,10 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] `[PermissionAuthorize]` on all controller actions
 - [ ] XML docs on all public elements in `com.tfione.api` and `com.tfione.model`
 - [ ] SA1516 blank lines between elements (gate build treats warnings as errors)
+- [ ] Return type matches XML doc `<returns>` tag (no mismatch between doc and signature)
+- [ ] `OkObjectResult` used instead of `JsonResult` (standard return pattern)
+- [ ] No magic strings for type/status lookups — use `CONSTANTS.*` or `ClientLookups.cs`
+- [ ] PascalCase on all model properties (no `Pascal_Snake` or `camelCase`)
 
 ### Tests
 - [ ] No business logic tests committed (only infrastructure services + external API adapters in `service.test`)
@@ -220,15 +345,97 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] All inputs via `Tfio*` wrappers — no raw MUI or HTML elements
 - [ ] `fluentValidationResolver` used for form validation
 - [ ] Lazy-loaded routes with snake_case paths
+- [ ] No `console.log` in `.tsx`/`.ts` files
+- [ ] `disableExport: true` on all DataGrid action columns
+- [ ] No unnecessary `useCallback`/`useMemo` (only when measurable perf benefit)
+- [ ] Icon consistency: `<MenuIcon />` for dropdown menus, not `<Edit />`
+- [ ] If API model files changed, verify TS types are updated (`npm run generate-local`)
+
+### Code Patterns (Tier 2 — Pattern Analysis)
+- [ ] No copy-paste code blocks (>50 lines of duplicated logic should be refactored)
+- [ ] Repositories use `GetRestrictedQuery` — flag any direct query without it
+- [ ] No commits pushed after review approval without re-review
+
+---
+
+## FDS Compliance Review (Tier 3 — LLM-Assisted)
+
+When a PR implements or modifies a FDS (Functional Design Specification) section, the gatekeeper performs an additional FDS compliance check. This requires the FDS document to be loaded as context.
+
+### When to Trigger
+
+- The PR branch name contains a PBI number (e.g., `feature/10856-client-export`)
+- The PR modifies UI components that correspond to an FDS section
+- The PR description references an FDS requirement
+
+### FDS Context Loading
+
+Before performing FDS compliance review, load the relevant FDS section:
+```bash
+# Extract PBI from branch name, then load FDS context
+claire domain search "<pbi-description-keywords>"
+claire domain read fivepoints knowledge CLIENT_MANAGEMENT_REQUIREMENTS
+# Or load specific FDS screen sections:
+claire domain read fivepoints knowledge FDS_CLIENT_MANAGEMENT_SCREENS_INTAKE
+claire domain read fivepoints knowledge FDS_CLIENT_MANAGEMENT_SCREENS_ADOPTION
+claire domain read fivepoints knowledge FDS_CLIENT_MANAGEMENT_SCREENS_LEGAL
+```
+
+### FDS Compliance Checks
+
+- [ ] **Button labels match FDS exactly** — "Add Note", "Save Changes", etc. must be letter-perfect
+- [ ] **Date/time format shows AM/PM** when FDS specifies time display
+- [ ] **Separate Date and Time controls** when FDS specifies distinct inputs (not a single datetime picker)
+- [ ] **Control types match FDS** — dropdown vs. text input vs. checkbox as specified
+- [ ] **Field labels match FDS** — section headers, field names, tooltip text
+- [ ] **Required/optional fields match FDS** — validation rules align with FDS specification
+
+### FDS Violation Response
+
+```
+🚫 FDS Compliance Issue
+
+The UI in `{filename}` does not match the FDS specification:
+
+  FDS says: {fds_requirement}
+  Code has: {actual_implementation}
+
+Button labels, date formats, and control types must match the FDS exactly.
+Cross-reference: FDS section {section} — {description}
+
+See: ADO review pattern — Stephen Miller: "FDS says this should be labeled '{label}'"
+```
+
+### Limitations
+
+- FDS compliance review requires the FDS document to be available as a domain doc
+- If no FDS section can be identified from the branch/PBI, skip this tier and note it in the review
+- FDS indexing by PBI number is a future enhancement (see issue description — Tier 3 notes)
+
+---
+
+## ADO Review Patterns Reference
+
+The checks above are derived from a scan of **110 ADO PRs** (TFIOne/TFIOneGit, 2026-04-02). The active reviewers and their focus areas inform which patterns the gatekeeper prioritizes:
+
+| Reviewer | Focus Area | Checks Informed |
+|----------|-----------|-----------------|
+| Stephen Miller | FDS compliance | Tier 3, Check 9 |
+| Michael O'Donnell | Architecture, return types | Tier 2 (return type, JsonResult) |
+| Jesse Oresnik | DB migrations, SQL typos | Check 10, DB checklist |
+| Nathan Wallen | Code cleanup, console.log | Check 6 |
+| Elion Sickler | Conventions, DRY | Check 8, Code Patterns |
+| Faisal Alabdulkareem | Out-of-scope, generate-local | Frontend checklist (generate-local) |
 
 ---
 
 ## Approval Criteria
 
 Approve when:
-- All mandatory checks pass (no scaffolding violations, no committed unit tests, no role permissions in migrations, no generated files, branch follows convention)
-- All checklist items are satisfied
+- All mandatory checks pass (Checks 1–10)
+- All review checklist items are satisfied
 - Code follows the architectural patterns in `technical/PATTERNS.md`
+- FDS compliance checks pass (when applicable — Tier 3)
 
 ---
 
