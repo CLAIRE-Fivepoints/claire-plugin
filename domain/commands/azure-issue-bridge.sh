@@ -20,6 +20,12 @@ set -euo pipefail
 source "$LIB_DIR/logging.sh"
 source "$LIB_DIR/daemon_env.sh"
 
+# Plugin Python package — azure_issue_bridge lives under domain/scripts/ in this plugin
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PLUGIN_PYTHON_DIR="$PLUGIN_ROOT/domain/scripts"
+export PYTHONPATH="$PLUGIN_PYTHON_DIR:${PYTHONPATH:-}"
+
 # Daemon management — global PID and log files (singleton per machine, issue #2548)
 AZURE_BRIDGE_PIDFILE="$HOME/.claire/runtime/azure-issue-bridge.pid"
 AZURE_BRIDGE_LOGFILE="$HOME/.claire/runtime/logs/azure-issue-bridge.log"
@@ -86,7 +92,7 @@ cmd_azure_bridge_start() {
     export CLAIRE_HOME
 
     # Pass any extra args (e.g. --interval N) through to the python CLI start loop
-    nohup python3 -m claire_py.azure_issue_bridge.cli start "$@" \
+    nohup python3 -m azure_issue_bridge.cli start "$@" \
         >> "$AZURE_BRIDGE_LOGFILE" 2>&1 &
 
     local pid=$!
@@ -156,13 +162,13 @@ cmd_azure_issue_bridge_agent_help() {
 
 EOF
     cd "$CLAIRE_HOME"
-    python3 -m claire_py.azure_issue_bridge.cli --agent-help
+    python3 -m azure_issue_bridge.cli --agent-help
 }
 
 case "${1:-}" in
     run|test|restore-inbox)
         cd "$CLAIRE_HOME"
-        exec python3 -m claire_py.azure_issue_bridge.cli "$@"
+        exec python3 -m azure_issue_bridge.cli "$@"
         ;;
     start)
         shift
@@ -182,7 +188,7 @@ case "${1:-}" in
         fi
         echo ""
         cd "$CLAIRE_HOME"
-        exec python3 -m claire_py.azure_issue_bridge.cli status
+        exec python3 -m azure_issue_bridge.cli status
         ;;
     --agent-help)
         cmd_azure_issue_bridge_agent_help
