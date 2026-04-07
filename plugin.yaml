@@ -69,5 +69,9 @@ commands:
     script: "domain/commands/test-env-start.sh"
     description: "Start full TFI One stack for local testing (SQL Server + .NET API + Vite frontend)"
 
+  - name: "fivepoints bridge"
+    script: "domain/commands/bridge.sh"
+    description: "Manage the Azure DevOps → GitHub issue bridge daemon (start/stop/status/logs/run)"
+
 config:
   api_version: "7.1"

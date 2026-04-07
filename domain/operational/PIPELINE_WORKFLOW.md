@@ -4,7 +4,7 @@ category: operational
 name: PIPELINE_WORKFLOW
 title: "Five Points — Client Pipeline Workflow (PBI → ADO Merge)"
 keywords: [five-points, pipeline, workflow, analyst, dev, tester, ado-push, ado-transition, transition, labels, checklist, pbi, role-dev, fivepoints-dev, role-tester, role-analyst]
-updated: 2026-03-30
+updated: 2026-04-06
 pr: "#2188"
 ---
 
@@ -368,6 +368,37 @@ fivepoints transition --role <current_role> --issue <N>
 
 **Important:** `claire reopen` must run BEFORE `claire stop`. The new terminal starts
 while the old one is still alive, ensuring no gap.
+
+---
+
+## Script: `fivepoints bridge`
+
+Discoverable wrapper around `claire azure-issue-bridge` — manages the
+Azure DevOps → GitHub issue bridge daemon from the fivepoints namespace.
+This is the entry point used at the very top of the pipeline (PBI email →
+GitHub issue creation).
+
+```bash
+fivepoints bridge start             # start background daemon
+fivepoints bridge stop              # stop background daemon
+fivepoints bridge status            # daemon state + last-run stats
+fivepoints bridge logs [-f]         # tail the daemon log
+fivepoints bridge run [--dry-run]   # one-shot scan (manual trigger)
+```
+
+**What it does:**
+- `start` / `stop` / `status` / `run` delegate (via `exec`) to
+  `claire azure-issue-bridge` — no duplicated daemon logic.
+- `logs` reads `~/.claire/runtime/logs/azure-issue-bridge.log` directly.
+
+**When to use:**
+- Bringing up the pipeline on a fresh machine: `fivepoints bridge start`
+- Verifying the bridge is alive before assigning a PBI: `fivepoints bridge status`
+- Investigating why a PBI did not become a GitHub issue: `fivepoints bridge logs -f`
+- Manual catch-up after a daemon outage: `fivepoints bridge run --lookback 3`
+
+See: `claire domain read claire operational AZURE_ISSUE_BRIDGE` for daemon internals
+(orphan handling, business hours, lookback semantics).
 
 ---
 
