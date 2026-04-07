@@ -1,0 +1,28 @@
+# Auto Review — Triggers claire review on PR creation/update
+#
+# Runs on the self-hosted Mac Mini runner.
+# No secrets needed — review.sh loads REVIEWER_GITHUB_TOKEN from
+# ~/.config/claire/github_manager.env on the Mac Mini.
+
+name: Auto Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+concurrency:
+  group: auto-review-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 10
+
+    steps:
+      - name: Run Claire Review
+        run: |
+          cd /Users/andreperez/claire-reboot
+          claire review --pr ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
