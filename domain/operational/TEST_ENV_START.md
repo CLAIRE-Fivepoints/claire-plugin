@@ -82,6 +82,50 @@ npm --prefix com.tfione.web run dev &
 VITE_PID=$!
 ```
 
+## macOS and Environment Fixes (L1/L2/L3/L8)
+
+These fixes were added after issue #146 (2026-04-08) burned ~15 min each on silent failures.
+
+### L1 — ASPNETCORE_ENVIRONMENT=Development (set automatically)
+
+`test-env-start` now exports `ASPNETCORE_ENVIRONMENT=Development` before `dotnet run`.
+
+**Why:** Without this, the API runs in `Production` mode. In Production,
+`RecaptchaSettings.RecaptchaOn` defaults to `true`, which silently rejects all
+programmatic logins — the response is HTTP 200 with `userName: null` and `token: null`.
+No error message. ~15 min lost debugging before root cause identified.
+
+### L2 — macOS SQL auth override (injected automatically on macOS)
+
+On macOS, `test-env-start` exports `ConnectionStrings__tfione` with a SQL auth
+connection string: `Server=localhost,1433;Database=tfi_one;User Id=sa;Password=<detected>;TrustServerCertificate=True;Encrypt=False`
+
+**Why:** The default `appsettings.json` uses `Integrated Security=True` (Kerberos/Windows
+auth). On macOS + Docker SQL Server, Kerberos is not configured, and the API fails
+immediately at startup with:
+```
+GSSAPI operation failed: The context has expired and can no longer be used.
+```
+
+This override avoids editing `appsettings.Development.json` manually each session.
+
+### L3 — SA password auto-detected from existing container
+
+If `tfione-sqlserver` already exists, `test-env-start` reads its `MSSQL_SA_PASSWORD`
+via `docker inspect` and uses that value for both the connection string (L2) and
+any new container creation.
+
+**Why:** The container in the original `test-env-start.sh` defaulted to `YourStrong!Passw0rd`,
+but existing containers may have been created with a different password
+(e.g. `TFIOne_Dev2024!`). The mismatch caused silent connection failures.
+
+### L8 — --help and -h flags
+
+`test-env-start` now accepts `--help` and `-h`. Previously, these returned
+`Unknown argument: --help`, inconsistent with all other `claire fivepoints` subcommands.
+
+---
+
 ## Relation to the Pre-Gate Routine
 
 `claire fivepoints test-env-start` handles **steps 1–4** of the "Routine — Before Any Local Gate Run" defined in `DEVELOPER_GATES.md`:

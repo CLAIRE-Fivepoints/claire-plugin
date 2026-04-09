@@ -8,6 +8,19 @@
 
 set -euo pipefail
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+    echo "Usage: claire fivepoints test-env-start [--path /path/to/TFIOneGit]"
+    echo ""
+    echo "Start the full TFI One stack for local testing."
+    echo "  SQL Server (Docker) + .NET API + Vite frontend"
+    echo ""
+    echo "Options:"
+    echo "  --path <dir>    Path to TFI One project root (default: current directory)"
+    echo "  --agent-help    Show LLM-optimized help"
+    echo "  --help, -h      Show this help"
+    exit 0
+fi
+
 if [[ "${1:-}" == "--agent-help" ]]; then
     cat <<'HELP'
 # fivepoints test-env-start — LLM Agent Guide
@@ -49,6 +62,8 @@ docker stop tfione-sqlserver
 ## Notes
 - Must be run from the TFI One project root (or pass --path)
 - SQL Server container must exist (docker run on first use creates it automatically)
+- Sets ASPNETCORE_ENVIRONMENT=Development automatically (prevents silent login failure in Production mode)
+- On macOS: auto-detects SA password from existing container and injects SQL auth connection string (avoids Kerberos failure)
 HELP
     exit 0
 fi
@@ -64,6 +79,7 @@ while [[ $# -gt 0 ]]; do
         *)
             echo "Unknown argument: $1" >&2
             echo "Usage: claire fivepoints test-env-start [--path /path/to/TFIOneGit]" >&2
+            echo "Run with --help for full usage." >&2
             exit 1
             ;;
     esac
@@ -79,20 +95,41 @@ fi
 cd "$PROJECT_DIR"
 
 echo "[1/4] Starting SQL Server..."
+# L3: Auto-detect SA password from existing container env before falling back to default
+SA_PASSWORD="YourStrong!Passw0rd"
 if docker ps -a --format '{{.Names}}' | grep -q '^tfione-sqlserver$'; then
+    _detected_pw=$(docker inspect tfione-sqlserver --format='{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | grep '^MSSQL_SA_PASSWORD=' | head -1 | cut -d= -f2- || true)
+    if [[ -n "$_detected_pw" ]]; then
+        SA_PASSWORD="$_detected_pw"
+        echo "  SA password auto-detected from existing container"
+    fi
     docker start tfione-sqlserver 2>/dev/null || true
 else
     echo "  Container not found — creating tfione-sqlserver..."
     docker run -d \
         --name tfione-sqlserver \
         -e 'ACCEPT_EULA=Y' \
-        -e 'MSSQL_SA_PASSWORD=YourStrong!Passw0rd' \
+        -e "MSSQL_SA_PASSWORD=${SA_PASSWORD}" \
         -p 1433:1433 \
         mcr.microsoft.com/mssql/server:2022-latest
 fi
 sleep 5
 
 echo "[2/4] Starting .NET API..."
+# L1: Set ASPNETCORE_ENVIRONMENT=Development so RecaptchaSettings.RecaptchaOn defaults to false.
+# Without this, the API runs in Production mode and silently rejects programmatic logins (HTTP 200,
+# userName:null, token:null with no error message).
+export ASPNETCORE_ENVIRONMENT=Development
+
+# L2: On macOS with Docker SQL Server, override connection string to use SQL auth (avoid Kerberos).
+# The default appsettings.json uses Integrated Security=True which fails on macOS with:
+# "GSSAPI operation failed: The context has expired and can no longer be used"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    export ConnectionStrings__tfione="Server=localhost,1433;Database=tfi_one;User Id=sa;Password=${SA_PASSWORD};TrustServerCertificate=True;Encrypt=False"
+    echo "  macOS detected — injecting SQL auth connection string (avoids Kerberos)"
+fi
+
 dotnet run \
     --project com.tfione.api/com.tfione.api.csproj \
     --urls "https://localhost:58337" \

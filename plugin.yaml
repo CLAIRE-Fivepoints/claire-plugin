@@ -77,5 +77,13 @@ commands:
     script: "domain/commands/azure-issue-bridge.sh"
     description: "Watch Gmail for ADO PBI assignment emails → create GitHub issues in fivepoints"
 
+  - name: "fivepoints land"
+    script: "domain/commands/land.sh"
+    description: "End-to-end finish-existing-PR: backup, rebase, 4 gates, e2e, push (no-force fallback), proof post, ado-watch"
+
+  - name: "fivepoints rebase-no-force"
+    script: "domain/commands/rebase-no-force.sh"
+    description: "Rebase branch onto ADO target and push without ForcePush permission (snapshot+merge strategy)"
+
 config:
   api_version: "7.1"
