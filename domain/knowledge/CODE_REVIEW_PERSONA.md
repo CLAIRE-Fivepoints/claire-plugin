@@ -3,9 +3,9 @@ domain: five_points
 category: knowledge
 name: CODE_REVIEW_PERSONA
 title: "Five Points — Code Review Persona (AI Gatekeeper)"
-keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review, console-log, pascalcase, fds-compliance, magic-strings, static-checks]
+keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review, console-log, pascalcase, fds-compliance, magic-strings, static-checks, permission-code, orphan]
 extends: claire/knowledge/BASE_REVIEWER
-updated: 2026-04-03
+updated: 2026-04-08
 ---
 
 # Five Points — Code Review Persona (AI Gatekeeper)
@@ -186,7 +186,44 @@ See: operational/CODING_STANDARDS.md §11
 
 ---
 
-### Check 6 — No `console.log` in Production Code (Tier 1 — Static)
+### Check 6 — No Orphan `PermissionCode` Enum Values (Tier 1 — Static)
+
+**Rule:** Every new value added to `com.tfione.model/enumeration/auth/PermissionCode.cs` must ship in the same PR with at least one `[PermissionAuthorize(PermissionCode.<NewValue>)]` usage in `com.tfione.api/`. An enum value with no corresponding controller authorization is a dead stub.
+
+**Trigger:** A PR adds one or more new identifiers to the `PermissionCode` enum, and no file under `com.tfione.api/` (in the same PR) contains `[PermissionAuthorize(PermissionCode.<NewValue>)]` for at least one of the new identifiers.
+
+**Why it matters:**
+- Orphan permissions cause **CS0102 duplicate definition** errors when feature work is later cherry-picked from another branch that legitimately implements the same permission. Two parallel branches end up adding the same enum value, and the merge breaks.
+- An admin can toggle the permission in the UI but no route honors it — silently broken authorization.
+- Indicates a half-shipped feature: someone added the enum but never wired the controller, leaving the codebase in a partial state.
+
+**Violation response:**
+```
+🚫 Orphan PermissionCode Enum Value
+
+The PR adds new value(s) to `PermissionCode` without any
+`[PermissionAuthorize(PermissionCode.<NewValue>)]` usage in com.tfione.api/.
+
+Affected enum values:
+  - {NewValue1}
+  - {NewValue2}
+
+Either:
+  1. Add the corresponding controller endpoints + [PermissionAuthorize] in the same PR, OR
+  2. Remove the orphan enum value(s) until the controller work is ready
+
+Why: orphan permissions cause CS0102 duplicate-definition errors when the
+controller work is later cherry-picked from a parallel feature branch, and
+they leave the UI with permissions that no route honors.
+
+See: operational/CODING_STANDARDS.md §12
+```
+
+**Discovered:** fivepoints-test#146 / ADO PR #369 — `dev` contained `AccessClientAdoptionPlacements`, `ViewClientAdoptionPlacement`, `ManageClientAdoptionPlacement` as orphans.
+
+---
+
+### Check 7 — No `console.log` in Production Code (Tier 1 — Static)
 
 **Rule:** `.tsx` and `.ts` files must not contain `console.log` statements. Use the application's logging infrastructure instead.
 
@@ -206,7 +243,7 @@ See: ADO review pattern — Nathan Wallen: "Could remove this console log if not
 
 ---
 
-### Check 7 — No Local Config Files Committed (Tier 1 — Static)
+### Check 8 — No Local Config Files Committed (Tier 1 — Static)
 
 **Rule:** Local development configuration files must never appear in a PR diff.
 
@@ -235,7 +272,7 @@ See: ADO review pattern — Jesse Oresnik: local config files committed by accid
 
 ---
 
-### Check 8 — PascalCase Enforcement in C# Models (Tier 1 — Static)
+### Check 9 — PascalCase Enforcement in C# Models (Tier 1 — Static)
 
 **Rule:** All C# model properties must use PascalCase. No `Pascal_Snake`, `camelCase`, or `SCREAMING_SNAKE` in property names.
 
@@ -257,7 +294,7 @@ See: ADO review pattern — Elion Sickler: "Pascal_Snake must be PascalCase"
 
 ---
 
-### Check 9 — `disableExport` on Action Columns (Tier 1 — Static)
+### Check 10 — `disableExport` on Action Columns (Tier 1 — Static)
 
 **Rule:** DataGrid columns that render actions (buttons, icons, menus) must include `disableExport: true` to prevent action markup from appearing in exported data.
 
@@ -283,7 +320,7 @@ See: ADO review pattern — Stephen Miller: FDS requires disableExport on Action
 
 ---
 
-### Check 10 — No Hardcoded Values in Migration SQL WHERE Clauses (Tier 1 — Static)
+### Check 11 — No Hardcoded Values in Migration SQL WHERE Clauses (Tier 1 — Static)
 
 **Rule:** Flyway migration files must not contain hardcoded usernames, emails, or environment-specific values in `WHERE` clauses. Use parameters or lookup-based approaches instead.
 
@@ -328,6 +365,7 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] Repository uses `IRestrictedQueryProvider` (row-level security)
 - [ ] Permission errors via `model.Messages`, not exceptions
 - [ ] `[PermissionAuthorize]` on all controller actions
+- [ ] No new `PermissionCode` enum value without a matching `[PermissionAuthorize]` usage in `com.tfione.api/`
 - [ ] XML docs on all public elements in `com.tfione.api` and `com.tfione.model`
 - [ ] SA1516 blank lines between elements (gate build treats warnings as errors)
 - [ ] Return type matches XML doc `<returns>` tag (no mismatch between doc and signature)
@@ -420,11 +458,11 @@ The checks above are derived from a scan of **110 ADO PRs** (TFIOne/TFIOneGit, 2
 
 | Reviewer | Focus Area | Checks Informed |
 |----------|-----------|-----------------|
-| Stephen Miller | FDS compliance | Tier 3, Check 9 |
+| Stephen Miller | FDS compliance | Tier 3, Check 10 |
 | Michael O'Donnell | Architecture, return types | Tier 2 (return type, JsonResult) |
-| Jesse Oresnik | DB migrations, SQL typos | Check 10, DB checklist |
-| Nathan Wallen | Code cleanup, console.log | Check 6 |
-| Elion Sickler | Conventions, DRY | Check 8, Code Patterns |
+| Jesse Oresnik | DB migrations, SQL typos | Check 11, DB checklist |
+| Nathan Wallen | Code cleanup, console.log | Check 7 |
+| Elion Sickler | Conventions, DRY | Check 9, Code Patterns |
 | Faisal Alabdulkareem | Out-of-scope, generate-local | Frontend checklist (generate-local) |
 
 ---
@@ -432,7 +470,7 @@ The checks above are derived from a scan of **110 ADO PRs** (TFIOne/TFIOneGit, 2
 ## Approval Criteria
 
 Approve when:
-- All mandatory checks pass (Checks 1–10)
+- All mandatory checks pass (Checks 1–11)
 - All review checklist items are satisfied
 - Code follows the architectural patterns in `technical/PATTERNS.md`
 - FDS compliance checks pass (when applicable — Tier 3)

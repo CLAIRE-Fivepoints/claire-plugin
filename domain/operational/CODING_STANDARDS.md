@@ -174,6 +174,19 @@ git restore --staged com.tfione.api.d.ts
 
 > If this file is already tracked in git history, it must be removed with `git rm --cached`.
 
+### 12. PermissionCode Enum Values Must Be Wired in the Same PR
+
+Every new value added to `com.tfione.model/enumeration/auth/PermissionCode.cs` must ship in the same PR with at least one `[PermissionAuthorize(PermissionCode.<NewValue>)]` usage in `com.tfione.api/`.
+
+**An orphan enum value** (added to the enum with no corresponding controller authorization) causes two distinct failure modes:
+
+1. **CS0102 duplicate definition errors** — If a parallel feature branch later adds the same enum value to implement the actual feature, both branches define the same identifier in `PermissionCode`. The cherry-pick or merge breaks the build immediately at Gate 1.
+2. **Silently broken authorization** — An admin can toggle the permission in the UI, but no route honors it. The permission exists in name only.
+
+**Rule:** A PR that adds enum values to `PermissionCode` without any `[PermissionAuthorize]` usage in `com.tfione.api/` must not be merged.
+
+> **Source:** fivepoints-test#146 — `dev` branch contained `AccessClientAdoptionPlacements`, `ViewClientAdoptionPlacement`, `ManageClientAdoptionPlacement` as orphans, causing CS0102 build failures when the FDS 16.9 implementation was cherry-picked.
+
 ---
 
 ## Build & Quality Standards
