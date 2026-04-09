@@ -195,6 +195,54 @@ if [[ -n "$CURRENT_LABELS" && "$CURRENT_LABELS" != "role:${CURRENT_ROLE}" ]]; th
     exit 1
 fi
 
+# Pre-transition guard: tester → dev requires a real test failure, not just an ado-push failure.
+# This prevents the regression where an agent reads "ado-push FAILED" and mistakenly
+# runs `transition --role tester --next dev`, reverting role:tester to role:dev.
+#
+# Logic: scan issue comments in order. If the most recent failure marker is from
+# ado-push (and no test failure marker is more recent), refuse the transition.
+if [[ "$CURRENT_ROLE" == "tester" && "$NEXT_ROLE" == "dev" ]]; then
+    echo "  Checking tester → dev transition guard (ado-push failure marker)..."
+
+    # Fetch comments as a JSON array (already ordered chronologically by GitHub).
+    # We use 'to_entries' to get positional indices so we can compare recency.
+    # Note: --jq is intentionally omitted here so that the raw JSON is piped
+    # through jq separately — this keeps the gh call mockable in tests.
+    _COMMENTS_RAW=$(gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json comments 2>/dev/null \
+        || echo '{"comments":[]}')
+    _COMMENTS_JSON=$(echo "$_COMMENTS_RAW" | jq '.comments | to_entries' 2>/dev/null || echo "[]")
+
+    # Index of the last comment containing the ado-push failure marker (-1 if absent)
+    _ADO_FAIL_IDX=$(echo "$_COMMENTS_JSON" \
+        | jq '[.[] | select(.value.body | contains("ado-push FAILED"))] | last | .key // -1')
+
+    # Index of the last comment containing a test-failure marker (-1 if absent).
+    # Matches "Test Results: FAILED" (posted by test runners) or "TESTS FAILED".
+    _TEST_FAIL_IDX=$(echo "$_COMMENTS_JSON" \
+        | jq '[.[] | select(.value.body | (contains("Test Results: FAILED") or contains("TESTS FAILED")))] | last | .key // -1')
+
+    # Refuse when: an ado-push failure was recorded AND it is more recent than any test failure
+    if [[ "$_ADO_FAIL_IDX" -gt -1 && "$_ADO_FAIL_IDX" -ge "$_TEST_FAIL_IDX" ]]; then
+        echo "" >&2
+        echo "ERROR: Transition blocked — most recent failure in issue #${ISSUE_NUMBER} is from ado-push, not from tests." >&2
+        echo "" >&2
+        echo "  ado-push failure comment index : ${_ADO_FAIL_IDX}" >&2
+        echo "  test failure comment index     : ${_TEST_FAIL_IDX} (−1 = none found)" >&2
+        echo "" >&2
+        echo "The implementation is fine. The ado-push failed due to infrastructure/auth (PAT / network / ADO API)." >&2
+        echo "Pipeline state must stay at role:tester." >&2
+        echo "" >&2
+        echo "Recovery steps:" >&2
+        echo "  1. Fix the underlying cause (rotate PAT, check network, verify ADO API status)" >&2
+        echo "  2. Re-run: claire fivepoints ado-push --issue $ISSUE_NUMBER --branch <branch>" >&2
+        echo "" >&2
+        echo "Only run 'transition --role tester --next dev' when TESTS actually failed." >&2
+        exit 1
+    fi
+
+    echo "  ✅ Transition allowed (test failure is more recent than any ado-push failure)"
+fi
+
 # Pre-transition guard: analyst → dev requires feature branch referenced in issue
 if [[ "$CURRENT_ROLE" == "analyst" ]]; then
     echo "  Checking analyst handoff requirements..."

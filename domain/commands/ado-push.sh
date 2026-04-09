@@ -25,6 +25,25 @@ BRANCH=""
 TARGET_BRANCH="main"
 ASK_PAT=false
 
+# Step tracker — updated before each major operation so the ERR trap can report where we failed
+ADO_PUSH_CURRENT_STEP="initializing"
+
+# ERR trap: fires on any non-zero exit after the trap is installed.
+# Posts a structured failure comment on the GitHub issue so agents know
+# NOT to regress role:tester → role:dev — the failure is infra/auth, not tests.
+_on_ado_push_error() {
+    local _exit_code=$?
+    trap - ERR  # Prevent recursive firing if gh itself fails
+    if [[ -n "${ISSUE_NUMBER:-}" && -n "${GH_REPO:-}" ]]; then
+        gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body "❌ ado-push FAILED at step: \`${ADO_PUSH_CURRENT_STEP}\`
+
+Pipeline state preserved at \`role:tester\`. The implementation is fine — the failure is infrastructure/auth (exit code: ${_exit_code}).
+
+**DO NOT** run \`fivepoints transition --role tester --next dev\`.
+Fix the underlying cause (PAT / network / ADO API) and re-run \`fivepoints ado-push\`." 2>/dev/null || true
+    fi
+}
+
 show_help() {
     echo "Usage: claire fivepoints ado-push --issue <N> --branch <name> [--target <branch>] [--ask-pat]"
     echo ""
@@ -192,6 +211,10 @@ fi
 echo "✅ Proof verified: .mp4 evidence found in issue #${ISSUE_NUMBER} comments"
 echo ""
 
+# Install ERR trap now that ISSUE_NUMBER and GH_REPO are both known.
+# Any non-zero exit from this point onward will post the structured failure marker.
+trap '_on_ado_push_error' ERR
+
 # Derive PR title from branch name (strip feature/ or bugfix/ prefix)
 PR_TITLE="${BRANCH#feature/}"
 PR_TITLE="${PR_TITLE#bugfix/}"
@@ -227,6 +250,7 @@ fi
 # Step 1: Initialize ADO connection
 # We need to be in the client repo (TFIOneGit) for ado_init to work
 # Try to find the client repo path
+ADO_PUSH_CURRENT_STEP="ADO init"
 CLIENT_REPO_PATH="${FIVEPOINTS_REPO_PATH:-/Users/andreperez/TFIOneGit}"
 
 if [[ ! -d "$CLIENT_REPO_PATH/.git" ]]; then
@@ -245,6 +269,7 @@ echo ""
 
 # Step 2: Add ADO as remote (if not present)
 # Use write-capable PAT for git push (WRITE_PAT > DEV_PAT > fallback to read PAT)
+ADO_PUSH_CURRENT_STEP="add ADO remote"
 _ADO_PUSH_PAT="${AZURE_DEVOPS_WRITE_PAT:-${AZURE_DEVOPS_DEV_PAT:-${AZURE_DEVOPS_PAT}}}"
 if [[ -z "$_ADO_PUSH_PAT" ]]; then
     echo "ERROR: No ADO PAT available for git push. Set AZURE_DEVOPS_WRITE_PAT in ~/.config/claire/.env" >&2
@@ -262,6 +287,7 @@ else
 fi
 
 # Step 3: Push branch to ADO
+ADO_PUSH_CURRENT_STEP="git push to ADO"
 echo "Pushing branch ${BRANCH} to ADO..."
 git push ado "${BRANCH}:refs/heads/${BRANCH}" --force-with-lease
 
@@ -269,6 +295,7 @@ echo "✅ Branch pushed to ADO"
 echo ""
 
 # Step 4: Create PR via ADO REST API
+ADO_PUSH_CURRENT_STEP="create ADO PR"
 echo "Creating PR on ADO..."
 
 PR_BODY=$(cat <<PR_EOF
@@ -311,6 +338,7 @@ echo "   URL: ${ADO_PR_URL}"
 echo ""
 
 # Step 5: Post ADO PR link on GitHub issue
+ADO_PUSH_CURRENT_STEP="post GitHub comment"
 gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body "**ADO PR created:** [PR #${ADO_PR_NUMBER}](${ADO_PR_URL})
 
 Branch \`${BRANCH}\` → \`${TARGET_BRANCH}\`
@@ -318,6 +346,7 @@ Branch \`${BRANCH}\` → \`${TARGET_BRANCH}\`
 Waiting for Steven's review on ADO."
 
 # Step 6: Change label to role:ado-review
+ADO_PUSH_CURRENT_STEP="update GitHub label"
 CURRENT_LABELS=$(gh issue view "$ISSUE_NUMBER" --repo "$GH_REPO" --json labels --jq '[.labels[].name | select(startswith("role:"))] | join(",")')
 if [[ -n "$CURRENT_LABELS" ]]; then
     IFS=',' read -ra LABEL_ARRAY <<< "$CURRENT_LABELS"
@@ -332,6 +361,7 @@ echo "Label changed to role:ado-review"
 echo ""
 
 # Step 7: Start ADO watch (blocks until merge/abandon)
+ADO_PUSH_CURRENT_STEP="ado-watch"
 echo "Starting ADO PR watch..."
 echo "Monitoring PR #${ADO_PR_NUMBER} for comments, votes, and merge..."
 echo ""
