@@ -1,6 +1,6 @@
 name: fivepoints
 version: 1.0.0
-description: "Azure DevOps integration for TFI One project - PR comments, status, builds"
+description: "Azure DevOps integration for TFI One project - PR comments, status, builds. Source of truth: https://github.com/claire-labs/fivepoints-plugin (PRs for domain docs go here, not to CLAIRE-Fivepoints/fivepoints)"
 
 author:
   name: "Claire Labs"

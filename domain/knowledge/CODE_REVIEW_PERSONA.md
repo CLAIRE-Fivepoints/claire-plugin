@@ -3,14 +3,17 @@ domain: five_points
 category: knowledge
 name: CODE_REVIEW_PERSONA
 title: "Five Points — Code Review Persona (AI Gatekeeper)"
-keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review, console-log, pascalcase, fds-compliance, magic-strings, static-checks, permission-code, orphan]
+keywords: [five-points, tfi-one, code-review, gatekeeper, reviewer, ef-core, scaffolding, unit-tests, pr-review, console-log, pascalcase, fds-compliance, magic-strings, static-checks, permission-code, orphan, repo-location, fivepoints-plugin, source-of-truth, where-docs]
 extends: claire/knowledge/BASE_REVIEWER
-updated: 2026-04-08
+updated: 2026-04-09
 ---
 
 # Five Points — Code Review Persona (AI Gatekeeper)
 
 This document defines the rules the AI code reviewer (`gatekeeper-claire-ai`) must enforce when reviewing PRs on the TFI One repository.
+
+> **Source of truth:** https://github.com/claire-labs/fivepoints-plugin — PRs for fivepoints domain docs go here, not to `CLAIRE-Fivepoints/fivepoints`.
+> The installed plugin at `~/claire/30_universe/plugins/fivepoints/` is a **read-only local copy**. Never commit domain doc changes there directly.
 
 > **Context:** See `CODE_REVIEW_WORKFLOW.md` for the full review process.
 > For coding standards, see `operational/CODING_STANDARDS.md`.
