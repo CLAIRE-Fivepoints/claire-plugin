@@ -184,6 +184,11 @@ If it is tracked in git history:
 See: operational/CODING_STANDARDS.md §11
 ```
 
+**Note for dev sessions:** Because this file is gitignored, it is never up-to-date on a fresh
+checkout. Running `tsc -b` against a stale file causes `TS2724` / `TS2694` errors in unrelated
+files. **Always run `npm run generate-local` before `npm run build-gate`.**
+See: `claire domain read fivepoints operational DEVELOPER_GATES` → Gate 3.
+
 ---
 
 ### Check 6 — No Orphan `PermissionCode` Enum Values (Tier 1 — Static)

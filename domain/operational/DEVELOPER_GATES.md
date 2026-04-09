@@ -4,7 +4,7 @@ category: operational
 name: DEVELOPER_GATES
 title: "Five Points — Developer Gates Before Pushing to Azure DevOps"
 keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate]
-updated: 2026-03-07
+updated: 2026-04-08
 ---
 
 # Five Points — Developer Gates Before Pushing to Azure DevOps
@@ -123,6 +123,37 @@ change broke it — fix the code, not the test.
 
 ## Gate 3 — Frontend Build (TypeScript + Vite)
 
+### Step 3a — Regenerate `com.tfione.api.d.ts` (MANDATORY)
+
+`com.tfione.api.d.ts` is generated from the live .NET API's OpenAPI spec and is gitignored
+(it must never be committed — see DEV_RULES Rule 2). On any fresh checkout, or after `dev`
+pulls new .NET models, the local file is stale. Running `tsc -b` against a stale file causes
+dozens of `TS2724` / `TS2694` errors in files entirely unrelated to your changes.
+
+**Always regenerate before running `build-gate`:**
+
+```bash
+cd /Users/andreperez/projects/fivepoints/dev/com.tfione.web
+
+# Requires the .NET API to be running at http://localhost:8080
+# Start it if it is not already running:
+#   cd /Users/andreperez/projects/fivepoints/dev
+#   dotnet run --project com.tfione.api/com.tfione.api.csproj &
+#   until curl -sf http://localhost:8080/swagger/v1/swagger.json > /dev/null; do sleep 2; done
+
+npm run generate-local
+```
+
+This regeneration is **mandatory**, **routine**, and does not require user approval —
+it is part of the Gate 3 procedure itself.
+
+**If you see `TS2724` / `TS2694` errors in unrelated files** (`employment.ts`, `sibling.ts`,
+`client.ts`, `placement_request_*.ts`, etc.) after running `build-gate`, the root cause is
+a stale `com.tfione.api.d.ts`. Regenerate and re-run — do not attempt to fix the errors
+in those files.
+
+### Step 3b — Build
+
 **Command:**
 
 ```bash
@@ -228,6 +259,7 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 0  com.tfione.api.d.ts not staged or tracked
 [ ] Gate 1  dotnet build com.tfione.api/com.tfione.api.csproj -c Gate -WarnAsError -nowarn:nu1901,nu1902
 [ ] Gate 2  dotnet test com.tfione.service.test/com.tfione.service.test.csproj --configuration Gate
+[ ] Gate 3  cd com.tfione.web && npm run generate-local  → regenerate com.tfione.api.d.ts (MANDATORY before build)
 [ ] Gate 3  cd com.tfione.web && npm run build-gate   → 0 errors (tsc -b + vite build)
 [ ] Gate 4  cd com.tfione.web && npm run lint         → 0 errors in your files
 [ ] Gate 5  claire flyway verify     [if migrations]  → no checksum mismatches
