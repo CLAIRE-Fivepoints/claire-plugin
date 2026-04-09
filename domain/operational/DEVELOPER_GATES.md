@@ -24,6 +24,71 @@ and PR rejections.
 
 ---
 
+## Routine — Before Any Local Gate Run
+
+Whenever you are about to run **any** of:
+- `npm run build-gate`
+- `npm run lint`
+- `tsc -b` (directly or via another script)
+- `npm run generate-local` / `generate-gate` (these depend on a fresh API)
+
+…you MUST first refresh the local .NET API and regenerate the type bindings.
+
+**Why:** `com.tfione.api.d.ts` is gitignored (never committed), so on a fresh checkout or after pulling `dev` it is stale. In addition, any long-running local API instance holds a stale in-memory compiled assembly from whenever it was first started — if new .NET models were added since then, they will not appear in swagger.json and type regen will silently produce a stale `.d.ts`. This is the root cause of cascade TS2724/TS2694/TS2345 errors in files you never touched.
+
+```bash
+cd ~/TFIOneGit
+
+# 1. Kill any existing .NET API instance — it may have stale compiled code
+pkill -f "com.tfione.api" 2>/dev/null
+sleep 2
+
+# 2. (Optional) confirm the port is free
+lsof -iTCP:58337 -sTCP:LISTEN || echo "port 58337 free"
+
+# 3. Start a fresh .NET API in the background
+#    Use the canonical HTTPS URL — do NOT use http://localhost:8080
+dotnet run --project com.tfione.api/com.tfione.api.csproj --urls "https://localhost:58337" &
+API_PID=$!
+
+# 4. Wait for swagger to be ready (~30–90 s on first build, faster after)
+for i in {1..18}; do
+  if curl -sk -f https://localhost:58337/swagger/v1/swagger.json -o /dev/null; then
+    echo "✅ API ready after $((i*5))s"
+    break
+  fi
+  sleep 5
+done
+
+# 5. Regenerate the TS bindings from the running API
+#    Override GENERATE_API — env/.env.local hardcodes the wrong port (http://localhost:8080)
+cd com.tfione.web
+GENERATE_ENV=local \
+GENERATE_API="https://localhost:58337/swagger/v1/swagger.json" \
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  npx tsx src/types/com.tfione.api.generate.ts
+
+# 6. NOW run your gate
+npm run build-gate
+# ...or npm run lint, tsc -b, etc.
+
+# 7. (Optional) keep the API running for further iterations, or stop it
+# kill $API_PID
+```
+
+> **Shortcut:** `claire fivepoints test-env-start` handles steps 1–4 (kill old API, start SQL Server, start fresh API, wait for health). Run it, then continue from step 5 (regen types).
+
+### Failure modes this routine prevents
+
+| Symptom | Without this routine | With this routine |
+|---------|---------------------|-------------------|
+| Cascade of TS2724 "has no exported member" errors in unrelated files | Hours of dead-end debugging | Not an issue |
+| `tsc` complains about types that exist in .NET source | Confusion + wrong cherry-pick blame | Not an issue |
+| `generate-local` runs but produces stale `.d.ts` | Quietly broken | API was killed/restarted, so swagger is fresh |
+| Two devs disagree on whether gate passes | One has fresh API, other has stale | Both produce same result |
+
+---
+
 ## Gate 0 — Source Control Hygiene
 
 **Run before anything else.** These checks prevent common mistakes from reaching ADO.
@@ -253,6 +318,7 @@ Or run the relevant E2E scenario for the area you changed.
 ### Before git push — Run ALL Applicable Gates Locally
 
 ```
+[ ] Pre     Kill API → restart fresh → wait for swagger → regen types (see Routine above)
 [ ] Gate 0  Branch follows feature/ or bugfix/ convention
 [ ] Gate 0  No business logic tests staged (infrastructure/external API tests only)
 [ ] Gate 0  No GRANT/DENY in staged migration files

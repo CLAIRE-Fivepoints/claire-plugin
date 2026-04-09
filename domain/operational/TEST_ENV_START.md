@@ -4,7 +4,7 @@ category: operational
 name: TEST_ENV_START
 title: "FivePoints — Test Environment Start (fivepoints test-env-start)"
 keywords: [five-points, fivepoints, tfi-one, test-env-start, test-environment, tfi-one-stack, sql-server, sqlserver, dotnet, vite, local-testing, dev, tester]
-updated: 2026-03-30
+updated: 2026-04-08
 pr: "#2346"
 ---
 
@@ -81,6 +81,30 @@ API_PID=$!
 npm --prefix com.tfione.web run dev &
 VITE_PID=$!
 ```
+
+## Relation to the Pre-Gate Routine
+
+`claire fivepoints test-env-start` handles **steps 1–4** of the "Routine — Before Any Local Gate Run" defined in `DEVELOPER_GATES.md`:
+
+| Routine step | What `test-env-start` does |
+|---|---|
+| 1. Kill existing API | Runs `pkill -f "com.tfione.api"` before starting |
+| 2. Start SQL Server | Starts `tfione-sqlserver` Docker container |
+| 3. Start fresh .NET API | `dotnet run --urls "https://localhost:58337"` |
+| 4. Wait for swagger | Health-checks both API and Vite before printing ready |
+
+After `test-env-start` completes, continue from **step 5** (regenerate TS types):
+```bash
+cd com.tfione.web
+GENERATE_ENV=local \
+GENERATE_API="https://localhost:58337/swagger/v1/swagger.json" \
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  npx tsx src/types/com.tfione.api.generate.ts
+```
+
+Then run your gate (`npm run build-gate`, `npm run lint`, etc.).
+
+---
 
 ## Related
 

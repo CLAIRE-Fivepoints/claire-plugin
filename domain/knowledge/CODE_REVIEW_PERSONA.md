@@ -184,10 +184,7 @@ If it is tracked in git history:
 See: operational/CODING_STANDARDS.md §11
 ```
 
-**Note for dev sessions:** Because this file is gitignored, it is never up-to-date on a fresh
-checkout. Running `tsc -b` against a stale file causes `TS2724` / `TS2694` errors in unrelated
-files. **Always run `npm run generate-local` before `npm run build-gate`.**
-See: `claire domain read fivepoints operational DEVELOPER_GATES` → Gate 3.
+> **Operational note:** Because `com.tfione.api.d.ts` is never committed, it is always stale on a fresh checkout or after pulling `dev`. Running `tsc -b` against a stale file causes `TS2724` / `TS2694` / `TS2345` errors in unrelated files. The canonical pre-gate routine (kill API → restart → wait for swagger → regen types) is defined in the **"Routine — Before Any Local Gate Run"** section of `operational/DEVELOPER_GATES.md`. Skipping the API restart step is the primary cause of stale `.d.ts` files — a running API holds its compiled assembly in memory and does not expose models added after it started.
 
 ---
 

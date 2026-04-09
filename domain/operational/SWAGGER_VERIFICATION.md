@@ -4,7 +4,7 @@ category: operational
 name: SWAGGER_VERIFICATION
 title: "FivePoints — Swagger Endpoint Verification (Code Gen tasks)"
 keywords: [five-points, fivepoints, tfi-one, swagger, endpoint, verification, code-gen, macos, jwt, bearer, playwright, curl, docker, sqlserver, appsettings]
-updated: 2026-03-30
+updated: 2026-04-08
 pr: "#2291"
 ---
 
@@ -217,6 +217,7 @@ This diff output is included as proof in the PR description or validation commen
 | `TOKEN` is empty | Wrong credentials | Use `prime.user` / `Admin123!` (not SA password) |
 | Swagger UI shows no auth | Authorize dialog unreliable | Use Playwright route interception (Step 6) |
 | API won't start | Previous instance still running | `pkill -f "com.tfione.api"` then restart |
+| Cascade of TS2724 / TS2694 / TS2345 type errors after regen | Stale API assembly — started before new .NET models were added; swagger doesn't expose new schemas yet | Kill API, restart (force recompile), wait for swagger, then regen types — see "Routine — Before Any Local Gate Run" in `DEVELOPER_GATES.md` |
 
 ---
 
