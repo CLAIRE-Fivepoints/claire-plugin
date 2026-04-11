@@ -4,14 +4,33 @@ category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
 keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention]
-updated: 2026-04-07
+updated: 2026-04-10
 ---
 
 # Azure DevOps Email Bridge
 
-Automated pipeline: watch Gmail for ADO PBI assignment emails → create structured GitHub issues in `claire-labs/fivepoints`.
+Automated pipeline: watch Gmail for ADO PBI assignment emails → create structured GitHub issues → spawn a Claire agent.
 
 This command lives inside the **fivepoints plugin**. The Python module is vendored under `domain/scripts/azure_issue_bridge/` and the bash router under `domain/commands/azure-issue-bridge.sh`.
+
+---
+
+## End-to-End Pipeline
+
+```
+ADO PBI assigned to andre.perez@dothelpllc.com
+  → Azure DevOps sends notification email (from: azuredevops@microsoft.com)
+  → Gmail inbox receives email (andre.perez@dothelpllc.com)
+  → azure-issue-bridge daemon detects email (polling every 15 min, 8AM–5PM)
+  → parses PBI ID from subject: "Product Backlog Item {ID} - {area} - {title}"
+  → TRIAGE: skip if duplicate, terminal state, or non-Task type
+  → fetches PBI details from ADO REST API (AZURE_DEVOPS_PAT)
+  → creates GitHub issue in ADO_BRIDGE_REPO (default: claire-labs/fivepoints-test)
+  → archives email in Gmail
+  → claire spawn daemon (consumer.py) detects new issue in ADO_BRIDGE_REPO
+  → spawns Claire agent in isolated worktree
+  → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_REPO> for wait/PR targeting
+```
 
 ---
 
@@ -38,7 +57,7 @@ Filter criteria:
 
 ---
 
-## Pipeline
+## Pipeline (Detail)
 
 ```
 Gmail inbox
@@ -48,7 +67,7 @@ Gmail inbox
       → if issue exists → action=skip (mark emails processed + archive)
       → if no issue   → action=create
   → [create only] GET https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{id}?$expand=all
-  → gh issue create --repo claire-labs/fivepoints
+  → gh issue create --repo <ADO_BRIDGE_REPO>
   → persist all email IDs for this PBI to ~/.claire/azure-issue-bridge/processed.json
   → archive all emails for this PBI in Gmail (remove INBOX label)
 ```
@@ -69,6 +88,29 @@ Gmail inbox
 - **Parent PBI link** — ADO URL for hierarchy traceability
 - **Parent PBI — Background** — the parent's description as business context (fetched from ADO)
 - Parent AC is intentionally excluded — it covers all child tasks and would mix context intended for other developers working on sibling tasks
+
+---
+
+## Spawn Daemon Pickup
+
+After the bridge creates a GitHub issue, the **claire spawn daemon** (`consumer.py`) takes over:
+
+1. The spawn daemon monitors `ADO_BRIDGE_REPO` for newly opened issues
+2. When an issue matching the spawn criteria is detected, it creates an isolated git worktree
+3. A Claire agent is launched inside the worktree with the issue as its task
+4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_REPO>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
+
+**`ADO_BRIDGE_REPO` vs `CLAIRE_WAIT_REPO`:**
+- `ADO_BRIDGE_REPO` — configures where the bridge creates GitHub issues (set at bridge/operator level)
+- `CLAIRE_WAIT_REPO` — passed by the spawn daemon into the spawned agent's environment so the agent knows which repo to watch for wait events
+- Both refer to the same repo; they are different variable names at different stages of the pipeline
+
+To repoint the pipeline to a different repo, set `ADO_BRIDGE_REPO`:
+
+```bash
+export ADO_BRIDGE_REPO=claire-labs/fivepoints   # production
+export ADO_BRIDGE_REPO=claire-labs/fivepoints-test  # staging (default)
+```
 
 ---
 
@@ -128,6 +170,18 @@ Each issue is created with:
 
 ---
 
+## Prerequisites
+
+Before the bridge can run, three things must be in place:
+
+| Requirement | What it enables | How to set up |
+|-------------|-----------------|---------------|
+| `AZURE_DEVOPS_PAT` | Fetch PBI details from ADO REST API | Set in `~/.config/claire/.env` or export in shell |
+| Gmail OAuth2 | Read + archive Gmail inbox | Run `claire email auth` (one-time browser flow) |
+| `ADO_BRIDGE_REPO` | Where GitHub issues are created | Set in `~/.config/claire/.env`; defaults to `claire-labs/fivepoints-test` |
+
+---
+
 ## Required Credentials
 
 | Credential | Scope | How to configure |
@@ -152,7 +206,7 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 |----------|---------|-------------|
 | `AZURE_DEVOPS_PAT` | _(required)_ | Read-only PAT for issue bridge — auto-starts daemon via `claire infra start` when set |
 | `AZURE_DEVOPS_DEV_PAT` | _(optional)_ | Full-access PAT for fivepoints plugin — falls back to `AZURE_DEVOPS_PAT` |
-| `ADO_BRIDGE_REPO` | `claire-labs/fivepoints-test` | Target GitHub repo for created issues |
+| `ADO_BRIDGE_REPO` | `claire-labs/fivepoints-test` | Target GitHub repo for created issues (also sets `CLAIRE_WAIT_REPO` in spawned agents) |
 | `ADO_ORG` | `FivePointsTechnology` | Azure DevOps organization |
 | `ADO_PROJECT` | `TFIOne` | Azure DevOps project |
 | `ADO_BRIDGE_HOUR_START` | `8` | Business hours start (local time, inclusive) |
@@ -192,13 +246,125 @@ claire email auth
 
 # 2. Set credentials
 export AZURE_DEVOPS_PAT=<your-pat>
-# Or add to ~/.config/claire/.env
+# Or add to ~/.config/claire/.env:
+#   AZURE_DEVOPS_PAT=<your-pat>
 
-# 3. Run (default target: claire-labs/fivepoints-test)
-claire fivepoints azure-issue-bridge run --dry-run   # Verify parsing without creating issues
-claire fivepoints azure-issue-bridge run             # Create issues in fivepoints-test
+# 3. Verify (dry-run — no issues created, no emails archived)
+claire fivepoints azure-issue-bridge run --dry-run
 
-# 4. Go live (production)
+# 4. Run against staging repo (default)
+claire fivepoints azure-issue-bridge run             # creates issues in claire-labs/fivepoints-test
+
+# 5. Go live (production)
 export ADO_BRIDGE_REPO=claire-labs/fivepoints
 claire fivepoints azure-issue-bridge run
+```
+
+---
+
+## Troubleshooting
+
+### Bridge creates no issues — dry-run shows nothing
+
+**Symptom:** `run --dry-run` exits with 0 issues found.
+
+**Causes:**
+- No unprocessed ADO emails in inbox — check Gmail for messages from `azuredevops@microsoft.com`
+- All matching emails already processed — check `~/.claire/azure-issue-bridge/processed.json`
+- Lookback window too narrow — try without `--lookback` or extend the window
+- Emails were archived but not recorded — run `restore-inbox` to reset
+
+```bash
+# Check what's in processed state
+cat ~/.claire/azure-issue-bridge/processed.json | python3 -m json.tool | head -30
+
+# Reset state and restore emails (use cautiously — re-processes everything)
+claire fivepoints azure-issue-bridge restore-inbox
+claire fivepoints azure-issue-bridge run --dry-run
+```
+
+### `AZURE_DEVOPS_PAT not set` — daemon skips auto-start
+
+**Symptom:** `claire infra start` shows "Azure issue bridge: AZURE_DEVOPS_PAT not set — skipping auto-start"
+
+**Fix:** Add the PAT to `~/.config/claire/.env`:
+```bash
+echo 'AZURE_DEVOPS_PAT=<your-pat>' >> ~/.config/claire/.env
+claire fivepoints azure-issue-bridge start
+```
+
+### Gmail not authorized — authentication error
+
+**Symptom:** Bridge exits with an OAuth2 error or `gmail_token.json` missing.
+
+**Fix:** Re-run the OAuth2 flow:
+```bash
+claire email auth
+claire email status          # verify: should show inbox access
+claire fivepoints azure-issue-bridge run --dry-run
+```
+
+If `gmail_credentials.json` is missing entirely, download it from Google Cloud Console (OAuth 2.0 client) and place it at `~/.config/claire/gmail_credentials.json`.
+
+### Issues created in wrong repo
+
+**Symptom:** Issues appear in `claire-labs/fivepoints-test` instead of `claire-labs/fivepoints` (or vice versa).
+
+**Fix:** Set `ADO_BRIDGE_REPO` explicitly:
+```bash
+export ADO_BRIDGE_REPO=claire-labs/fivepoints
+# Or add to ~/.config/claire/.env
+claire fivepoints azure-issue-bridge status    # confirm current config
+```
+
+### Daemon not starting — PID file stale
+
+**Symptom:** `status` reports "stopped" but `start` says "already running" or fails silently.
+
+**Fix:**
+```bash
+# Check for stale PID file
+cat ~/.claire/runtime/azure-issue-bridge.pid
+ps aux | grep azure_issue_bridge
+
+# Remove stale PID and restart
+rm -f ~/.claire/runtime/azure-issue-bridge.pid
+claire fivepoints azure-issue-bridge start
+```
+
+### ADO REST API returns 401 / 403
+
+**Symptom:** Bridge logs show HTTP 401 or 403 when fetching PBI details.
+
+**Causes:**
+- PAT expired — generate a new one in Azure DevOps (User Settings → Personal Access Tokens)
+- PAT lacks Work Items → Read scope
+
+**Fix:**
+```bash
+# Update the PAT
+export AZURE_DEVOPS_PAT=<new-pat>
+# Or update ~/.config/claire/.env
+
+# Verify API access
+PAT=$AZURE_DEVOPS_PAT
+AUTH=$(echo -n ":${PAT}" | base64)
+curl -s -H "Authorization: Basic ${AUTH}" \
+  "https://dev.azure.com/FivePointsTechnology/TFIOne/_apis/wit/workitems/1?api-version=7.1" \
+  | python3 -m json.tool | head -10
+```
+
+### Spawn daemon doesn't pick up the created issue
+
+**Symptom:** Bridge creates the GitHub issue, but no agent is spawned.
+
+**Check:**
+1. Is the spawn daemon running? `claire infra status` — look for `spawn-daemon`
+2. Does the issue match spawn criteria? The spawn daemon only picks up issues assigned to the configured GitHub assignee
+3. Is `ADO_BRIDGE_REPO` the same repo the spawn daemon monitors?
+
+```bash
+claire infra status                             # check spawn-daemon health
+claire spawn-daemon status                      # detailed spawn daemon state
+gh issue list --repo claire-labs/fivepoints-test --state open   # confirm issue exists
 ```
