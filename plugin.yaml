@@ -19,8 +19,8 @@ dependencies:
 requirements:
   tools:
     - name: dotnet
-      version: ">=8"
-      install: "brew install --cask dotnet-sdk"
+      version: "8"
+      install: "brew install --cask dotnet-sdk@8"
     - name: docker
       install: "Install Docker Desktop from https://docker.com"
     - name: node
