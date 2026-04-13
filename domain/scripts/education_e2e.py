@@ -3,11 +3,11 @@
 E2E test script for TFI One Education module.
 
 Records video proof of adding data through each Education sub-module:
-  1. 01_education_edit.webm - Main education form (IEP, 504 Plan, ARD, Grade Level)
-  2. 02_grade_achieved.webm - Add Grade Achieved record
-  3. 03_ged_test.webm       - Add GED Test score
-  4. 04_enrollment.webm     - Add Enrollment record
-  5. 05_report_card.webm    - Add Report Card entry
+  1. 01_education_edit.mp4 - Main education form (IEP, 504 Plan, ARD, Grade Level)
+  2. 02_grade_achieved.mp4 - Add Grade Achieved record
+  3. 03_ged_test.mp4       - Add GED Test score
+  4. 04_enrollment.mp4     - Add Enrollment record
+  5. 05_report_card.mp4    - Add Report Card entry
 
 Usage:
   python3 education_e2e.py [--base-url URL] [--client-id UUID] [--output-dir DIR]
@@ -16,6 +16,7 @@ Usage:
 import argparse
 import os
 import shutil
+import subprocess
 import sys
 import time
 
@@ -152,15 +153,23 @@ def new_recording_context(browser, subdir, video_dir):
 
 
 def save_video(raw_dir, output_name, video_dir):
-    """Move the recorded video to the final location."""
+    """Move the recorded video to the final location, converting webm → mp4."""
     if os.path.exists(raw_dir):
         for f in os.listdir(raw_dir):
             if f.endswith(".webm"):
                 src = os.path.join(raw_dir, f)
-                dst = os.path.join(video_dir, output_name)
-                shutil.move(src, dst)
-                size = os.path.getsize(dst)
-                print(f"  Saved: {output_name} ({size / 1024:.0f} KB)")
+                mp4_name = output_name.replace(".webm", ".mp4")
+                dst = os.path.join(video_dir, mp4_name)
+                result = subprocess.run(
+                    ["ffmpeg", "-i", src, "-c:v", "libx264", "-c:a", "aac", "-y", dst],
+                    capture_output=True,
+                )
+                if result.returncode == 0:
+                    size = os.path.getsize(dst)
+                    print(f"  Saved: {mp4_name} ({size / 1024:.0f} KB)")
+                else:
+                    shutil.move(src, os.path.join(video_dir, output_name))
+                    print(f"  Saved (webm fallback): {output_name} — ffmpeg not available")
                 break
         shutil.rmtree(raw_dir, ignore_errors=True)
 
@@ -234,7 +243,7 @@ def record_education_edit(browser, base_url, client_id, video_dir):
 
     page.close()
     ctx.close()
-    save_video(raw_dir, "01_education_edit.webm", video_dir)
+    save_video(raw_dir, "01_education_edit.mp4", video_dir)
 
 
 def record_grade_achieved(browser, base_url, client_id, video_dir):
@@ -292,7 +301,7 @@ def record_grade_achieved(browser, base_url, client_id, video_dir):
 
     page.close()
     ctx.close()
-    save_video(raw_dir, "02_grade_achieved.webm", video_dir)
+    save_video(raw_dir, "02_grade_achieved.mp4", video_dir)
 
 
 def record_ged_test(browser, base_url, client_id, video_dir):
@@ -336,7 +345,7 @@ def record_ged_test(browser, base_url, client_id, video_dir):
 
     page.close()
     ctx.close()
-    save_video(raw_dir, "03_ged_test.webm", video_dir)
+    save_video(raw_dir, "03_ged_test.mp4", video_dir)
 
 
 def record_enrollment(browser, base_url, client_id, video_dir):
@@ -409,7 +418,7 @@ def record_enrollment(browser, base_url, client_id, video_dir):
 
     page.close()
     ctx.close()
-    save_video(raw_dir, "04_enrollment.webm", video_dir)
+    save_video(raw_dir, "04_enrollment.mp4", video_dir)
 
 
 def record_report_card(browser, base_url, client_id, video_dir):
@@ -458,7 +467,7 @@ def record_report_card(browser, base_url, client_id, video_dir):
 
     page.close()
     ctx.close()
-    save_video(raw_dir, "05_report_card.webm", video_dir)
+    save_video(raw_dir, "05_report_card.mp4", video_dir)
 
 
 # -- Main --------------------------------------------------------------------
@@ -516,7 +525,7 @@ def main():
         if not os.path.isfile(fpath):
             continue
         size = os.path.getsize(fpath)
-        if f.endswith(".webm"):
+        if f.endswith(".mp4"):
             print(f"  {f} ({size / 1024:.0f} KB)")
             videos += 1
         elif f.endswith(".png"):
