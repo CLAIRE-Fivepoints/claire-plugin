@@ -196,20 +196,31 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       Every FDS requirement must be demonstrated on video.
       ❌ fivepoints ado-transition will reject if no .mp4 found in issue.
 
-      VIDEO QUALITY REQUIREMENTS (enforced — do NOT cut corners):
+      TWO TYPES OF PROOF REQUIRED (both mandatory):
+
+      1. Swagger proof (backend gate — record FIRST):
+         → Open Swagger UI at https://localhost:58337/swagger
+         → For each new endpoint: expand it, execute it with a valid Bearer token, show HTTP 200
+         → Do NOT skip this: reviewer must see each new route exists and responds correctly
+         → Reference: claire domain read five_points operational SWAGGER_VERIFICATION
+
+      2. Application UI proof (one video per FDS section):
+         → Show the complete user workflow for that FDS section
+         → Paste into issue: Swagger video URL + UI video URL, labelled separately
+
+      VIDEO QUALITY REQUIREMENTS (apply to both proof types):
       - Format: MP4 only (.mp4) — no webm, no gif, no screenshots
       - Duration: long enough to clearly show each feature — do NOT rush through
         → Pause on each field, show data entry, show the save action, show the result
         → A 5-second clip is NEVER sufficient for a new feature
-      - Coverage: each video must demonstrate the COMPLETE user workflow for that FDS section
-        → Show the feature from start to finish as a real user would use it
-        → If the feature has multiple states (e.g. empty → filled, before → after), show all of them
-      - Clarity: the new functionality must be clearly visible
-        → Do NOT just navigate to a screen — actually interact with the new feature
-        → Reviewer must be able to confirm the requirement is met from the video alone
-        → If an endpoint is involved: show the API call AND the UI result
+      - Coverage: show the COMPLETE workflow
+        → All relevant states (empty → filled, before → after, error → success)
+      - Clarity: new functionality must be unambiguously visible
+        → Do NOT just navigate to a screen — actively interact with the new feature
+        → Reviewer must be able to confirm the FDS requirement is met from the video alone
 
-      Post proof URL on the issue before continuing (one comment per FDS section).
+      ❌ fivepoints ado-transition will reject if no .mp4 found in issue
+      Post both proof URLs on the issue before continuing (one comment per FDS section).
       → TaskUpdate(<task_9_id>, status="completed")
 
 --- ADO TRANSITION (after ALL FDS sections proved working) ---
@@ -318,17 +329,29 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
             Terminal/API proof: claire domain read video_proof technical BACKEND_RECORDING
             ❌ Do NOT skip this step. fivepoints ado-push will reject if no .mp4 found in issue.
 
-            VIDEO QUALITY REQUIREMENTS (enforced — same standard as dev proof):
+            TWO TYPES OF PROOF REQUIRED (both mandatory):
+
+            1. Swagger proof (backend gate — record FIRST):
+               → Open Swagger UI at https://localhost:58337/swagger
+               → For each new endpoint: expand it, execute with valid Bearer token, show HTTP 200
+               → Do NOT skip: reviewer must see each new route exists and responds correctly
+               → Reference: claire domain read five_points operational SWAGGER_VERIFICATION
+
+            2. Application UI proof (one video per FDS section):
+               → Show the complete user workflow for that FDS section
+               → Paste into issue: Swagger video URL + UI video URL, labelled separately
+
+            VIDEO QUALITY REQUIREMENTS (apply to both proof types):
             - Format: MP4 only (.mp4) — no webm, no gif, no screenshots
             - Duration: long enough to clearly show each tested feature — do NOT rush
               → Pause on each field, show data entry, show the save action, show the result
               → A 5-second clip is NEVER sufficient for a new feature
-            - Coverage: each video must demonstrate the COMPLETE user workflow
-              → Show start to finish as a real user would interact with the feature
-              → Show all relevant states (empty → filled, before → after, error → success)
-            - Clarity: the new functionality must be unambiguously visible
+            - Coverage: complete workflow, all relevant states (before/after, error/success)
+            - Clarity: new functionality must be unambiguously visible
               → Do NOT just navigate to a screen — actively interact with the new feature
               → Reviewer must be able to confirm the FDS requirement is met from the video alone
+
+            ❌ fivepoints ado-push will reject if no .mp4 found in issue.
       → TaskUpdate(<task_5_id>, status="completed")
 
 - [ ] [6/8] Post test report on the issue (MANDATORY — proof URL required):
