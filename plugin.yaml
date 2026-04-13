@@ -16,6 +16,32 @@ dependencies:
   claire:
     min: 0.2.0
 
+requirements:
+  tools:
+    - name: dotnet
+      version: ">=8"
+      install: "brew install --cask dotnet-sdk"
+    - name: docker
+      install: "Install Docker Desktop from https://docker.com"
+    - name: node
+      version: ">=18"
+      install: "brew install node"
+
+  tokens:
+    - env: AZURE_DEVOPS_PAT
+      file: "~/.config/claire/.env"
+      description: "Azure DevOps — generate PAT in ADO portal"
+    - env: GITHUB_TOKEN
+      file: "~/.config/claire/github_manager.env"
+      description: "GitHub identity for spawned sessions"
+
+  paths:
+    - name: TFIOneGit
+      env: TFIONE_REPO_PATH
+      default: "~/TFIOneGit"
+      marker: "com.tfione.sln"
+      description: "TFI One repository — clone from ADO"
+
 commands:
   - name: "fivepoints reply"
     script: "domain/commands/reply.sh"
