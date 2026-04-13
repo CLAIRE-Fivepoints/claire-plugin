@@ -193,9 +193,23 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       → TaskUpdate(<task_8_id>, status="completed")
 
 - [ ] [9/11] 🚨 HARD STOP — Record MP4 proof for ALL FDS sections (MANDATORY):
-      Every FDS requirement must be demonstrated on video
-      Post proof URL on the issue before continuing
-      ❌ fivepoints ado-transition will reject if no .mp4 found in issue
+      Every FDS requirement must be demonstrated on video.
+      ❌ fivepoints ado-transition will reject if no .mp4 found in issue.
+
+      VIDEO QUALITY REQUIREMENTS (enforced — do NOT cut corners):
+      - Format: MP4 only (.mp4) — no webm, no gif, no screenshots
+      - Duration: long enough to clearly show each feature — do NOT rush through
+        → Pause on each field, show data entry, show the save action, show the result
+        → A 5-second clip is NEVER sufficient for a new feature
+      - Coverage: each video must demonstrate the COMPLETE user workflow for that FDS section
+        → Show the feature from start to finish as a real user would use it
+        → If the feature has multiple states (e.g. empty → filled, before → after), show all of them
+      - Clarity: the new functionality must be clearly visible
+        → Do NOT just navigate to a screen — actually interact with the new feature
+        → Reviewer must be able to confirm the requirement is met from the video alone
+        → If an endpoint is involved: show the API call AND the UI result
+
+      Post proof URL on the issue before continuing (one comment per FDS section).
       → TaskUpdate(<task_9_id>, status="completed")
 
 --- ADO TRANSITION (after ALL FDS sections proved working) ---
@@ -303,6 +317,18 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
             Frontend UI proof: claire domain read video_proof technical PLAYWRIGHT_PATTERNS
             Terminal/API proof: claire domain read video_proof technical BACKEND_RECORDING
             ❌ Do NOT skip this step. fivepoints ado-push will reject if no .mp4 found in issue.
+
+            VIDEO QUALITY REQUIREMENTS (enforced — same standard as dev proof):
+            - Format: MP4 only (.mp4) — no webm, no gif, no screenshots
+            - Duration: long enough to clearly show each tested feature — do NOT rush
+              → Pause on each field, show data entry, show the save action, show the result
+              → A 5-second clip is NEVER sufficient for a new feature
+            - Coverage: each video must demonstrate the COMPLETE user workflow
+              → Show start to finish as a real user would interact with the feature
+              → Show all relevant states (empty → filled, before → after, error → success)
+            - Clarity: the new functionality must be unambiguously visible
+              → Do NOT just navigate to a screen — actively interact with the new feature
+              → Reviewer must be able to confirm the FDS requirement is met from the video alone
       → TaskUpdate(<task_5_id>, status="completed")
 
 - [ ] [6/8] Post test report on the issue (MANDATORY — proof URL required):
