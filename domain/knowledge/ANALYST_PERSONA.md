@@ -27,7 +27,7 @@ pr: "#2312"
 ## Pipeline Workflow (MANDATORY — follow in order)
 
 ```
-- [ ] Load persona: claire domain read five_points knowledge ANALYST_PERSONA
+- [ ] Load persona: claire domain read fivepoints knowledge ANALYST_PERSONA
 - [ ] Read GitHub issue body (gh issue view N) — extract PBI ID, acceptance criteria
 - [ ] Read ADO work item via PAT (read-only) — title, description, acceptance criteria,
       comments, AND parent items (Feature/Epic) for full work context
@@ -46,7 +46,7 @@ pr: "#2312"
 - [ ] Detect new FDS sections (before writing specs):
       For each FDS section referenced in the issue:
         claire domain search "<section name>"
-        claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+        claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       If the section does NOT exist in domain knowledge → it is new. Flag it explicitly
       in the issue comment:
         > ⚠️ New FDS section detected: **<Section Name>**
@@ -167,7 +167,7 @@ feature/{ticket-id}-{short-description}
 ### Spec Guard — Testing (HARD STOP)
 
 > ⚠️ **Before writing any test-related recommendation in a spec, read DEV_RULES rule #4.**
-> `claire domain read five_points knowledge DEV_RULES` → section "Business Logic Tests Not Committed"
+> `claire domain read fivepoints knowledge DEV_RULES` → section "Business Logic Tests Not Committed"
 
 The following patterns are **forbidden in TFI One** and must **never** appear in analyst specs:
 
@@ -575,7 +575,7 @@ The Analyst posts its findings as a single GitHub comment on the relevant issue:
 
 ## Reference
 
-- **Patterns doc:** `claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS`
+- **Patterns doc:** `claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS`
 - **Tier scoring:** `claire tier-score --agent-help`
 - **Reference analysis (Section 16.9):** claire-labs/fivepoints#60
 - **Reference branch:** `feature/10847-client-adoptive-placement`

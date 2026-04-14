@@ -28,11 +28,11 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
 ```
 - [ ] Load domain context (MANDATORY before any testing):
       # Pipeline & project rules
-      claire domain read five_points operational PIPELINE_WORKFLOW
-      claire domain read five_points operational TESTING
-      claire domain read five_points operational SWAGGER_VERIFICATION
-      claire domain read five_points operational DEVELOPER_GATES
-      claire domain read five_points knowledge DEV_RULES
+      claire domain read fivepoints operational PIPELINE_WORKFLOW
+      claire domain read fivepoints operational TESTING
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational DEVELOPER_GATES
+      claire domain read fivepoints knowledge DEV_RULES
       # Proof recording
       claire domain read video_proof operational RECORDING_WORKFLOW
       claire domain read video_proof technical PLAYWRIGHT_PATTERNS
@@ -47,7 +47,7 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
       → TaskUpdate(<task_1_id>, status="completed")
 
 - [ ] [2/8] Swagger verification (backend gate — FAST, run before Playwright):
-      claire domain read five_points operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
       → Verify all new endpoints appear in swagger.json
       → Verify all endpoints return HTTP 200 with valid Bearer token
       ❌ If any endpoint is missing or returns 4xx → FAIL immediately
@@ -57,7 +57,7 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
 - [ ] [3/8] Verify shared login fixture exists:
       Check: e2e/global-setup.ts exists in com.tfione.web/
       If missing → create it before writing any feature tests
-      Reference credentials: claire domain read five_points operational TESTING
+      Reference credentials: claire domain read fivepoints operational TESTING
       → TaskUpdate(<task_3_id>, status="completed")
 
 - [ ] [4/8] Read the FDS/requirements referenced in the issue

@@ -65,7 +65,7 @@ are loaded when `claire start` / `claire boot` generates CLAUDE.md.
 > ⚠️ **Note:** There are no `soul-fivepoints-*.md` template files. The analyst (and all pipeline role)
 > checklists are **generated dynamically** by `generator.py` at `claire boot` time.
 > To update the analyst checklist, edit BOTH:
-> 1. `30_universe/domains/five_points/knowledge/ANALYST_PERSONA.md` — the Pipeline Workflow section
+> 1. `30_universe/domains/fivepoints/knowledge/ANALYST_PERSONA.md` — the Pipeline Workflow section
 > 2. `10_systems/claire_py/template/generator.py` → `_build_fivepoints_analyst_persona_section()`
 
 **Label detection**: `claire boot` reads issue labels via `gh issue view N --json labels`
@@ -84,11 +84,11 @@ and includes the role-specific checklist in CLAUDE.md.
 - [ ] Read issue body (PBI reference, requirements)
 - [ ] Read FDS sections referenced in the issue
       Find FDS section: claire domain search "<section name from issue>"
-      Section patterns: claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+      Section patterns: claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Detect new FDS sections (before writing specs):
       For each FDS section referenced in the issue:
         claire domain search "<section name>"
-        claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+        claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       If the section does NOT exist in domain knowledge → it is new. Flag it explicitly
       in the issue comment:
         > ⚠️ New FDS section detected: **<Section Name>**
@@ -163,7 +163,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       Gate 4: cd com.tfione.web && npm run lint → 0 errors
       Gate 5: flyway verify → clean
       Then start test environment to verify app runs:
-      → Script reference: claire domain read five_points operational TEST_ENV_START
+      → Script reference: claire domain read fivepoints operational TEST_ENV_START
       claire fivepoints test-env-start  (or ./scripts/test-env-start.sh)
       → Wait for "✅ Environment ready — API: https://localhost:58337 | UI: http://localhost:5173"
       Verify: browser loads at http://localhost:5173
@@ -199,7 +199,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       → TaskUpdate(<task_6_id>, status="completed")
 
 - [ ] [7/11] Swagger verification (backend gate — before Playwright):
-      claire domain read five_points operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
       Verify endpoints + HTTP 200 with Bearer token
       ❌ Fail → fix in dev worktree (feature branch) → push → copy to isolated worktree → retest
       → TaskUpdate(<task_7_id>, status="completed")
@@ -220,7 +220,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
          → Open Swagger UI at https://localhost:58337/swagger
          → For each new endpoint: expand it, execute it with a valid Bearer token, show HTTP 200
          → Do NOT skip this: reviewer must see each new route exists and responds correctly
-         → Reference: claire domain read five_points operational SWAGGER_VERIFICATION
+         → Reference: claire domain read fivepoints operational SWAGGER_VERIFICATION
 
       2. Application UI proof (one video per FDS section):
          → Show the complete user workflow for that FDS section
@@ -245,7 +245,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 
 - [ ] [10/11] PAT gate + push feature branch to ADO:
       🚨 MANDATORY pre-transition verification — run Gate 5b (flyway migrate) against the local SQL Server:
-      → Canonical command lives in `claire domain read five_points operational DEVELOPER_GATES` (§ Gate 5b)
+      → Canonical command lives in `claire domain read fivepoints operational DEVELOPER_GATES` (§ Gate 5b)
       ✅ Passing criteria: Flyway reports 0 errors, all pending migrations applied successfully
       ❌ FAIL → fix migration before proceeding — do NOT run `fivepoints ado-transition`
       Then:
@@ -310,11 +310,11 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
 ```
 - [ ] Load domain context (MANDATORY before any testing):
       # Pipeline & project rules
-      claire domain read five_points operational PIPELINE_WORKFLOW
-      claire domain read five_points operational TESTING
-      claire domain read five_points operational SWAGGER_VERIFICATION
-      claire domain read five_points operational DEVELOPER_GATES
-      claire domain read five_points knowledge DEV_RULES
+      claire domain read fivepoints operational PIPELINE_WORKFLOW
+      claire domain read fivepoints operational TESTING
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational DEVELOPER_GATES
+      claire domain read fivepoints knowledge DEV_RULES
       # Proof recording
       claire domain read video_proof operational RECORDING_WORKFLOW
       claire domain read video_proof technical PLAYWRIGHT_PATTERNS
@@ -329,7 +329,7 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
       → TaskUpdate(<task_1_id>, status="completed")
 
 - [ ] [2/8] Swagger verification (backend gate — run BEFORE Playwright):
-      claire domain read five_points operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
       → Verify all new endpoints appear in swagger.json
       → Verify all endpoints return HTTP 200 with valid Bearer token
       ❌ If any endpoint is missing or returns 4xx → FAIL immediately
@@ -339,7 +339,7 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
 - [ ] [3/8] Verify shared login fixture exists:
       Check: e2e/global-setup.ts exists in com.tfione.web/
       If missing → create it before writing any feature tests
-      Reference credentials: claire domain read five_points operational TESTING
+      Reference credentials: claire domain read fivepoints operational TESTING
       → TaskUpdate(<task_3_id>, status="completed")
 
 - [ ] [4/8] Run E2E tests (Playwright) — only after Swagger passed
@@ -358,7 +358,7 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
                → Open Swagger UI at https://localhost:58337/swagger
                → For each new endpoint: expand it, execute with valid Bearer token, show HTTP 200
                → Do NOT skip: reviewer must see each new route exists and responds correctly
-               → Reference: claire domain read five_points operational SWAGGER_VERIFICATION
+               → Reference: claire domain read fivepoints operational SWAGGER_VERIFICATION
 
             2. Application UI proof (one video per FDS section):
                → Show the complete user workflow for that FDS section

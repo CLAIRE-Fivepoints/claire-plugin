@@ -51,7 +51,7 @@ updated: 2026-04-13
 
 ### Key Commands
 - `./scripts/test-env-start.sh` — Start full TFI One stack (SQL Server + API + frontend)
-- `claire domain read five_points operational SWAGGER_VERIFICATION` — Swagger endpoint verification guide
+- `claire domain read fivepoints operational SWAGGER_VERIFICATION` — Swagger endpoint verification guide
 - `claire fivepoints transition --role tester --next dev --issue N` — Send back to dev (ONLY on TEST failure, never on ado-push failure)
 - `claire fivepoints ado-push --issue N` — Push to ADO + create PR (on pass, requires proof)
 - `claire domain read video_proof technical PLAYWRIGHT_PATTERNS` — Frontend proof recording (MANDATORY)

@@ -412,7 +412,7 @@ Fix locally — do not push and wait for CI to tell you.
 
 This document is referenced in:
 
-- `five_points/operational/CODE_REVIEW_WORKFLOW` — Steven Franklin checks gate compliance
+- `fivepoints/operational/CODE_REVIEW_WORKFLOW` — Steven Franklin checks gate compliance
   during PR review
 - Work checklist (prepended to spawned fivepoints tasks)
 - Session CLAUDE.md for fivepoints worktrees
@@ -421,7 +421,7 @@ This document is referenced in:
 
 ## Related Documents
 
-- Code quality tool details: `claire domain read five_points technical CODE_QUALITY_TOOLS`
-- Coding standards: `claire domain read five_points operational CODING_STANDARDS`
-- Code review process: `claire domain read five_points operational CODE_REVIEW_WORKFLOW`
-- Local test setup: `claire domain read five_points operational TESTING`
+- Code quality tool details: `claire domain read fivepoints technical CODE_QUALITY_TOOLS`
+- Coding standards: `claire domain read fivepoints operational CODING_STANDARDS`
+- Code review process: `claire domain read fivepoints operational CODE_REVIEW_WORKFLOW`
+- Local test setup: `claire domain read fivepoints operational TESTING`

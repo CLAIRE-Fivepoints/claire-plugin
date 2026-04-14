@@ -116,7 +116,7 @@ curl -s -H "Authorization: Basic ${AUTH}" \
 
 ## PAT Management
 
-See `30_universe/domains/five_points/operational/TESTING.md` → `## Azure DevOps PAT` for the 3 ways to configure the PAT (git remote URL, claire config, env var).
+See `30_universe/domains/fivepoints/operational/TESTING.md` → `## Azure DevOps PAT` for the 3 ways to configure the PAT (git remote URL, claire config, env var).
 
 PAT extraction logic: `30_universe/plugins/fivepoints/domain/scripts/ado_common.sh` — function `ado_init`.
 

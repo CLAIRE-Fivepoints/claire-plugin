@@ -107,7 +107,7 @@ looks indistinguishable from their hand-written code, the commercial case is cle
 1. **Receive materials** — request everything in the checklist above
 2. **Calibration session** — 30–45 min with Steve Franklin to walk through the codebase
    - More efficient than 2–3 rounds of misaligned output
-3. **Document patterns** — update `five_points/technical/PATTERNS.md` after the session
+3. **Document patterns** — update `fivepoints/technical/PATTERNS.md` after the session
 4. **First PBI** — generate, submit for review, calibrate based on feedback
 5. **Iterate** — the first 1–2 PBIs are calibration; speed increases after that
 
