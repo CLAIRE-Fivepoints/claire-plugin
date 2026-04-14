@@ -3,7 +3,7 @@ domain: five_points
 category: operational
 name: DEVELOPER_GATES
 title: "Five Points — Developer Gates Before Pushing to Azure DevOps"
-keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate]
+keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate, migration, fk, foreign-key, references]
 updated: 2026-04-08
 ---
 
@@ -294,6 +294,20 @@ V{major}.{minor}.{date}.{workitem}.{sequence}__{description}.sql
 
 Example: `V1.0.20260307.1234.1__add_client_education_table.sql`
 
+### Before writing a FK constraint
+
+Before writing any new FK constraint, search existing migrations to see how the target table is
+already referenced. Guessing the schema leads to wrong column names, wrong types, or missing
+indexes — and FK constraints that don't match the established pattern break on apply and are a
+common review rejection cause.
+
+1. Search existing migrations for how the target table is already referenced:
+   ```bash
+   grep -r "REFERENCES <TargetTable>" com.tfione.db/migration/
+   ```
+2. Match the column name, type, and nullability **exactly** as established in prior migrations.
+3. Never guess the schema — the existing migrations are the source of truth.
+
 ---
 
 ## Gate 6 — End-to-End (if you changed UI flows or API contracts)
@@ -329,6 +343,7 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 3  cd com.tfione.web && npm run build-gate   → 0 errors (tsc -b + vite build)
 [ ] Gate 4  cd com.tfione.web && npm run lint         → 0 errors in your files
 [ ] Gate 5  claire flyway verify     [if migrations]  → no checksum mismatches
+[ ] Gate 5  grep -r "REFERENCES <Table>" com.tfione.db/migration/  [if new FK]  → match existing column/type/nullability
 [ ] Gate 6  claire fivepoints e2e-* [if UI changed]  → flows pass
 ```
 
