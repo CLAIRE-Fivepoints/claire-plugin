@@ -164,6 +164,46 @@ See: operational/CODING_STANDARDS.md §10
 
 ---
 
+### Check 4b — Migration ↔ ORM Cross-Verification
+
+**Rule:** When reviewing a migration that creates or alters a table with FK constraints, the reviewer MUST cross-verify the migration SQL against `com.tfione.db/orm/TfiOneContext.cs` before suggesting any fix:
+
+1. **Every FK in `TfiOneContext.cs`** for the affected entity has a matching `CONSTRAINT` in the migration SQL
+2. **Every FK in the migration** has a matching `HasConstraintName()` in `TfiOneContext.cs`
+3. **Schema names** are verified by reading `entity.ToTable("TableName", "schema")` in `TfiOneContext.cs` — never assume or guess the schema name from the table name
+
+**Trigger:** A PR modifies a file under `com.tfione.db/migration/` that creates or alters a table with FK constraints (e.g., contains `CREATE TABLE` with `CONSTRAINT ... FOREIGN KEY` or `ALTER TABLE ... ADD CONSTRAINT`).
+
+**Known schema mappings** (quick reference — always verify against `TfiOneContext.cs`):
+- `AppUser` → `[sec]` (not `[security]`)
+- `Case` → `[case]`
+- Reference / lookup types → `[ref]`
+
+**Why it matters:**
+- Schema names in TFI One are abbreviated (`sec`, `ref`, `case`) and don't match the intuitive full name.
+- Suggesting incorrect SQL (wrong schema or missing/extra FK) in a review comment forces the author into an unnecessary extra commit cycle to correct the reviewer's error.
+- `TfiOneContext.cs` is the scaffolded source of truth — suggested fixes must align with it or they will desync the ORM from the database.
+
+**Violation response (when reviewer detects FK/schema mismatch):**
+```
+🚫 Migration ↔ ORM Mismatch
+
+The migration `{filename}` and `TfiOneContext.cs` disagree on {FK|schema|constraint name}:
+  - Migration: {quote from migration SQL}
+  - TfiOneContext.cs:{line}: {quote from ToTable/HasConstraintName}
+
+Fix:
+  {correct SQL — cite exact schema/constraint name from TfiOneContext.cs}
+
+Source of truth: com.tfione.db/orm/TfiOneContext.cs
+```
+
+**Reviewer self-check before posting any suggested migration fix:** open `TfiOneContext.cs`, locate the entity's `ToTable(...)` call and all `HasConstraintName(...)` calls for its FKs, and quote the exact schema and constraint names in the suggestion. Never guess.
+
+**Discovered:** fivepoints-test PR #150 — reviewer suggested `[security].[AppUser]` when the actual schema is `[sec].[AppUser]` (`TfiOneContext.cs:1206`), forcing an extra commit cycle.
+
+---
+
 ### Check 5 — `com.tfione.api.d.ts` Not Committed
 
 **Rule:** `com.tfione.api.d.ts` is a generated file that must never appear in source control.
@@ -364,6 +404,9 @@ When reviewing a PR that touches the TFI One codebase, the gatekeeper checks:
 - [ ] No `GRANT`, `DENY`, or role assignment SQL in migration files
 - [ ] No hardcoded usernames/emails in migration WHERE clauses
 - [ ] No SQL typos in migration scripts (verify table/column names match schema)
+- [ ] Every FK in migration SQL has a matching `HasConstraintName()` in `TfiOneContext.cs`
+- [ ] Every FK declared in `TfiOneContext.cs` for the affected entity has a matching `CONSTRAINT` in the migration
+- [ ] Schema names in suggested migration fixes verified against `entity.ToTable(...)` in `TfiOneContext.cs` — never guessed (e.g., `[sec]` not `[security]`)
 
 ### Backend
 - [ ] Controller is thin (2-3 lines per method, no business logic)
