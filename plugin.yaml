@@ -120,5 +120,10 @@ persona:
     analyst: fivepoints-analyst
     tester: fivepoints-tester
 
+checklists:
+  "role:analyst": "operational/CHECKLIST_ANALYST"
+  "role:tester": "operational/CHECKLIST_TESTER"
+  "role:dev": "operational/CHECKLIST_DEV_PIPELINE"
+
 config:
   api_version: "7.1"
