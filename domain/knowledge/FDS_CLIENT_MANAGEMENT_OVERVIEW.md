@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: FDS_CLIENT_MANAGEMENT_OVERVIEW
 title: "Five Points — FDS Client Management: Overview & Glossary"

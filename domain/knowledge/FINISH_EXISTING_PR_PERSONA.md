@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: FINISH_EXISTING_PR_PERSONA
 title: "FivePoints — Finish Existing PR Persona"

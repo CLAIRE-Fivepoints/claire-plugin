@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: FDS_CLIENT_MANAGEMENT_WORKFLOWS
 title: "Five Points — FDS Client Management: Workflows (Intake & Placement)"

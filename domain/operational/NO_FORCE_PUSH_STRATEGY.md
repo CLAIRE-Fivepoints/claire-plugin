@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: NO_FORCE_PUSH_STRATEGY
 title: "FivePoints — No-Force-Push Strategy for Stale PRs"

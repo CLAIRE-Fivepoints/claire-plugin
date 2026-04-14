@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: ANALYST_PERSONA
 title: "Five Points — Section Analyst Persona"

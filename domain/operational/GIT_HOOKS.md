@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: GIT_HOOKS
 title: "Five Points — TFI One Git Hooks"
