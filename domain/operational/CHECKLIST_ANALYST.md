@@ -10,9 +10,9 @@ updated: 2026-04-14
 
 ```
 - [ ] Load domain context:
-      claire domain read five_points knowledge ANALYST_PERSONA
-      claire domain read five_points operational PIPELINE_WORKFLOW
-      claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+      claire domain read fivepoints knowledge ANALYST_PERSONA
+      claire domain read fivepoints operational PIPELINE_WORKFLOW
+      claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
 - [ ] Read ADO work item (read-only) — title, description, acceptance criteria, parent items
 - [ ] Deep dive the assigned task — identify the FDS section to implement:

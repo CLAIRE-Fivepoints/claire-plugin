@@ -39,13 +39,13 @@ The Five Points gatekeeper enforces the **hierarchical DEV_RULES system** — a 
 ```
 core/knowledge/DEV_RULES (universal baseline)
   ↓ inherits
-five_points/knowledge/DEV_RULES (Five Points-specific overrides — most specific wins)
+fivepoints/knowledge/DEV_RULES (Five Points-specific overrides — most specific wins)
 ```
 
 **Load rules before reviewing:**
 ```bash
 claire domain read core knowledge DEV_RULES
-claire domain read five_points knowledge DEV_RULES
+claire domain read fivepoints knowledge DEV_RULES
 ```
 
 The mandatory checks below enforce these shared rules. Each check maps to a specific DEV_RULE.

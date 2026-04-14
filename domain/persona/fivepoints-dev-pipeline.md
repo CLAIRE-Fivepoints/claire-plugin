@@ -19,7 +19,7 @@ If you encounter something missing or unclear in the analyst's specs:
 
 1. **FDS first** — The FDS (Functional Design Specification) is the primary source of truth for fivepoints.
    Read the relevant FDS section before looking anywhere else.
-   → `claire domain read five_points technical <SECTION>`
+   → `claire domain read fivepoints technical <SECTION>`
 
 2. **Other domain docs second** — If the FDS doesn't cover it, check other fivepoints domain docs:
    → `claire domain search <keyword>`

@@ -183,6 +183,6 @@ migration with corrective SQL instead of modifying the existing file. See CODING
 
 ## Related Documents
 
-- Full gate specifications: `claire domain read five_points operational DEVELOPER_GATES`
-- Coding standards the hooks enforce: `claire domain read five_points operational CODING_STANDARDS`
-- Flyway migration rules: `claire domain read five_points operational CODING_STANDARDS` (§9)
+- Full gate specifications: `claire domain read fivepoints operational DEVELOPER_GATES`
+- Coding standards the hooks enforce: `claire domain read fivepoints operational CODING_STANDARDS`
+- Flyway migration rules: `claire domain read fivepoints operational CODING_STANDARDS` (§9)

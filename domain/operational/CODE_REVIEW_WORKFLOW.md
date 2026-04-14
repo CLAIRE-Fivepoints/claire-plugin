@@ -47,7 +47,7 @@ When `claire review --pr N` is run, Claire:
 1. **Reads domain docs** before looking at code:
    - `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA` — review checklist and standards
    - `claire domain read fivepoints knowledge REVIEWER_PERSONA` — Steven Franklin persona
-   - `claire domain read five_points operational CODING_STANDARDS`
+   - `claire domain read fivepoints operational CODING_STANDARDS`
 
 2. **Reads the PR diff** via `gh pr diff N`
 
@@ -109,5 +109,5 @@ Test: Before approving a migration, ask: "Would this script run cleanly on an em
 ## Reference
 
 - Reviewer checklist and standards: `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA`
-- Coding rules: `claire domain read five_points operational CODING_STANDARDS`
-- Code patterns: `claire domain read five_points technical CODE_PATTERNS`
+- Coding rules: `claire domain read fivepoints operational CODING_STANDARDS`
+- Code patterns: `claire domain read fivepoints technical CODE_PATTERNS`

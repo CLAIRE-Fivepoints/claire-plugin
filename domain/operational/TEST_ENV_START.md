@@ -152,6 +152,6 @@ Then run your gate (`npm run build-gate`, `npm run lint`, etc.).
 
 ## Related
 
-- `claire domain read five_points operational SWAGGER_VERIFICATION` — next step after env is ready
-- `claire domain read five_points operational TESTING` — login credentials and test patterns
-- `claire domain read five_points operational PIPELINE_WORKFLOW` — full dev/tester checklist
+- `claire domain read fivepoints operational SWAGGER_VERIFICATION` — next step after env is ready
+- `claire domain read fivepoints operational TESTING` — login credentials and test patterns
+- `claire domain read fivepoints operational PIPELINE_WORKFLOW` — full dev/tester checklist

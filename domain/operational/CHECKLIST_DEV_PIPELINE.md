@@ -30,10 +30,10 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 
 ```
 - [ ] [1/11] Load domain context, read issue, checkout branch:
-      claire domain read five_points operational PIPELINE_WORKFLOW
-      claire domain read five_points operational CODE_REVIEW_WORKFLOW
-      claire domain read five_points operational SWAGGER_VERIFICATION
-      claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+      claire domain read fivepoints operational PIPELINE_WORKFLOW
+      claire domain read fivepoints operational CODE_REVIEW_WORKFLOW
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
+      claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       claire domain read claire knowledge DEBUG_METHODOLOGY
       Read the GitHub issue — analyst has written all specs there (no ADO lookup needed)
       If specs are incomplete → follow the Gap Recovery section below before proceeding
@@ -49,7 +49,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       Gate 4: cd com.tfione.web && npm run lint → 0 errors
       Gate 5: flyway verify → clean (no checksum mismatch)
       Then start test environment to verify app runs:
-      → Script reference: claire domain read five_points operational TEST_ENV_START
+      → Script reference: claire domain read fivepoints operational TEST_ENV_START
       claire fivepoints test-env-start  (or ./scripts/test-env-start.sh)
       → Wait for "✅ Environment ready — API: https://localhost:58337 | UI: http://localhost:5173"
       → Verify the app loads in the browser (http://localhost:5173)
@@ -96,7 +96,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       → TaskUpdate(<task_6_id>, status="completed")
 
 - [ ] [7/11] Swagger verification (backend gate — run BEFORE Playwright):
-      claire domain read five_points operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational SWAGGER_VERIFICATION
       → Verify all new endpoints appear in swagger.json
       → Verify all endpoints return HTTP 200 with valid Bearer token
       ❌ If any endpoint missing or 4xx:
@@ -107,7 +107,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 - [ ] [8/11] Verify shared login fixture exists, then run E2E tests:
       Check: e2e/global-setup.ts exists in com.tfione.web/
       If missing → create it before running feature tests
-      Reference credentials: claire domain read five_points operational TESTING
+      Reference credentials: claire domain read fivepoints operational TESTING
       Run E2E tests (Playwright) — only after Swagger passed
       ❌ If tests fail:
          Fix in dev worktree (feature branch) → push fix to GitHub

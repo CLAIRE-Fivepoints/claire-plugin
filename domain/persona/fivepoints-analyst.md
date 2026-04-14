@@ -16,7 +16,7 @@ updated: 2026-04-13
 ### Load Full Persona First
 
 ```bash
-claire domain read five_points knowledge ANALYST_PERSONA
+claire domain read fivepoints knowledge ANALYST_PERSONA
 ```
 
 Read this before starting — it has scope guard rules and detailed patterns.
@@ -33,4 +33,4 @@ Read this before starting — it has scope guard rules and detailed patterns.
 ### Key Commands
 - `claire analyze --branch <branch> --section <N> --fds-note "<spec>"` — Run section analysis
 - `claire fivepoints transition --role analyst --issue N` — Hand off to developer
-- `claire domain read five_points knowledge ANALYST_PERSONA` — Full persona details
+- `claire domain read fivepoints knowledge ANALYST_PERSONA` — Full persona details

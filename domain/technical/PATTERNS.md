@@ -4,8 +4,8 @@ keywords: [patterns, repository, controller, dto, validation, auth, soft-delete,
 
 # TFI One — Design Patterns & Conventions
 
-> **See also**: `five_points/operational/CODING_STANDARDS.md` — numbered code review rules (branch discipline, dual validation, StyleCop, CI gate build standards)
-> `five_points/technical/PATTERNS.md` — architecture overview, feature checklist, naming conventions
+> **See also**: `fivepoints/operational/CODING_STANDARDS.md` — numbered code review rules (branch discipline, dual validation, StyleCop, CI gate build standards)
+> `fivepoints/technical/PATTERNS.md` — architecture overview, feature checklist, naming conventions
 
 ---
 

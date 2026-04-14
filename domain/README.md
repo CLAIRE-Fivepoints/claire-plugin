@@ -31,7 +31,7 @@ See `knowledge/CLIENT_GUIDE.md` for the full onboarding checklist.
 
 ## Documents
 
-Use `claire domain show five_points` to see all documents in this domain.
+Use `claire domain show fivepoints` to see all documents in this domain.
 
 ### knowledge/
 - `CLIENT_GUIDE.md` — Contacts, stack, PoC options, onboarding checklist
