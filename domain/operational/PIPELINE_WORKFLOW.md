@@ -244,6 +244,17 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 --- ADO TRANSITION (after ALL FDS sections proved working) ---
 
 - [ ] [10/11] PAT gate + push feature branch to ADO:
+      🚨 MANDATORY pre-transition verification — run flyway migrate against the local SQL Server:
+      ```bash
+      SA_PASS=$(docker inspect tfione-sqlserver --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SA_PASSWORD | cut -d= -f2)
+      flyway -url="jdbc:sqlserver://localhost:1433;databaseName=tfi_one;trustServerCertificate=true" \
+             -user=sa -password="$SA_PASS" \
+             -locations="filesystem:com.tfione.db/migration" \
+             -outOfOrder=true migrate
+      ```
+      ✅ Passing criteria: Flyway reports 0 errors, all pending migrations applied successfully
+      ❌ FAIL → fix migration before proceeding — do NOT run `fivepoints ado-transition`
+      Then:
       fivepoints ado-transition --issue N
       → [1/3] Verifies branch naming convention
       → [2/3] PAT gate: if AZURE_DEVOPS_WRITE_PAT is not set, posts wait comment

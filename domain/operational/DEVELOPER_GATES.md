@@ -274,9 +274,10 @@ plugin. Fix any new errors introduced by your changes.
 
 **Applies when:** You created or edited any file under `com.tfione.db/migration/`.
 
-**Command:**
+**Commands:**
 
 ```bash
+# 1. Verify checksums against base branch
 claire flyway verify
 ```
 
@@ -285,6 +286,21 @@ claire flyway verify
 Flyway stores checksums in `flyway_schema_history`. Editing an already-applied migration file
 changes its checksum and breaks incremental migration — this will fail CI. If you need to
 change a migration that was already pushed, create a new migration instead.
+
+```bash
+# 2. Apply all pending migrations against the local SQL Server container
+SA_PASS=$(docker inspect tfione-sqlserver --format '{{range .Config.Env}}{{println .}}{{end}}' | grep SA_PASSWORD | cut -d= -f2)
+flyway -url="jdbc:sqlserver://localhost:1433;databaseName=tfi_one;trustServerCertificate=true" \
+       -user=sa -password="$SA_PASS" \
+       -locations="filesystem:com.tfione.db/migration" \
+       -outOfOrder=true migrate
+```
+
+**Passing criteria:** Flyway reports 0 errors, all pending migrations applied successfully.
+
+This is the **mandatory pre-ADO-transition verification**: every migration file must apply
+cleanly against the local SQL Server container before `fivepoints ado-transition` runs.
+If Flyway fails → fix the migration before proceeding.
 
 **Migration naming convention:**
 
@@ -344,6 +360,7 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 4  cd com.tfione.web && npm run lint         → 0 errors in your files
 [ ] Gate 5  claire flyway verify     [if migrations]  → no checksum mismatches
 [ ] Gate 5  grep -r "REFERENCES <Table>" com.tfione.db/migration/  [if new FK]  → match existing column/type/nullability
+[ ] Gate 5  flyway migrate (local SQL Server) [if migrations] → 0 errors, all pending applied
 [ ] Gate 6  claire fivepoints e2e-* [if UI changed]  → flows pass
 ```
 
