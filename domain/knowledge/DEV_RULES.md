@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: DEV_RULES
 title: "Five Points — Development Rules (Overrides Core)"

@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: SWAGGER_VERIFICATION
 title: "FivePoints — Swagger Endpoint Verification (Code Gen tasks)"

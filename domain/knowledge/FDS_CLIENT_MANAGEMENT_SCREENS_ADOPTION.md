@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: FDS_CLIENT_MANAGEMENT_SCREENS_ADOPTION
 title: "Five Points — FDS Client Management: Screens — Adoption through Independent Living"

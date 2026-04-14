@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: ADO_WATCH
 title: "Five Points — ADO PR Continuous Monitor (ado-watch)"

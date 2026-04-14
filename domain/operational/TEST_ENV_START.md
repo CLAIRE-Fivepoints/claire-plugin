@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: TEST_ENV_START
 title: "FivePoints — Test Environment Start (fivepoints test-env-start)"

@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: ADO_PAT_GUIDE
 title: "FivePoints — ADO PAT Guide (read vs write)"
