@@ -15,6 +15,30 @@ updated: 2026-04-14
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
 - [ ] Read ADO work item (read-only) — title, description, acceptance criteria, parent items
+- [ ] Search for attachments on the ADO work item:
+      Look for FDS documents, spec sheets, mockups, or any linked attachments on the PBI and
+      its parent Feature/Epic. Use the PAT to fetch attachments via the ADO REST API:
+        claire domain read fivepoints operational AZURE_DEVOPS_ACCESS   ← PAT setup + API reference
+        # List attachments on the work item:
+        curl -s -u ":$AZURE_DEVOPS_PAT" \
+          "https://dev.azure.com/Fivepoints/TFIOne/_apis/wit/workItems/{PBI_ID}?$expand=relations&api-version=7.1" \
+          | jq '.relations[] | select(.rel == "AttachedFile") | .url + " — " + .attributes.name'
+      If an FDS or spec document is attached → download and read it.
+      If no attachment is found on the PBI → check the parent Feature and Epic for attachments.
+      ⚠️ Do NOT skip this step. Missing the FDS is the #1 cause of wrong specs.
+
+- [ ] Verify the request is clear enough to proceed:
+      Before writing any spec or creating a branch, confirm you have:
+        ✅ The FDS section (or equivalent spec) that covers this task
+        ✅ Enough detail to describe what the UI should show and what the API should return
+        ✅ No contradictions between the ADO description and the FDS
+      If ANY of these are missing or unclear → post a question on the GitHub issue and WAIT:
+        gh issue comment <N> --repo CLAIRE-Fivepoints/fivepoints \
+          --body "**Analyst needs clarification before proceeding:**\n\n<specific question>"
+        claire wait --issue <N>
+      ⚠️ HARD STOP: Do NOT create a branch or write specs until the request is clear.
+         It is better to ask one question than to ship wrong specs.
+
 - [ ] Deep dive the assigned task — identify the FDS section to implement:
       - Task ID from the GitHub issue title (use this for branch naming, NOT the parent PBI ID)
       - Read the ADO task description to identify which FDS section/subsection is assigned
