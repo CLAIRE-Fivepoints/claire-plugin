@@ -85,6 +85,24 @@ and includes the role-specific checklist in CLAUDE.md.
 - [ ] Read FDS sections referenced in the issue
       Find FDS section: claire domain search "<section name from issue>"
       Section patterns: claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+- [ ] Detect new FDS sections (before writing specs):
+      For each FDS section referenced in the issue:
+        claire domain search "<section name>"
+        claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+      If the section does NOT exist in domain knowledge → it is new. Flag it explicitly
+      in the issue comment:
+        > ⚠️ New FDS section detected: **<Section Name>**
+        > Not yet in domain knowledge — documenting now.
+      Then document the new section in the plugin repo:
+        - Create domain/knowledge/<SECTION_NAME>.md with:
+            • Section purpose and scope
+            • Key business rules and constraints
+            • Field-level notes (types, validations, dependencies)
+            • Any gotchas or non-obvious behavior from the FDS
+        - Update domain/technical/FACE_SHEET_SECTION_PATTERNS.md to include the new
+          section (so it is discoverable via claire context)
+      Commit BOTH files to the plugin repo via PR (follow plugin PR workflow).
+      ⚠️ Do NOT push directly to main. The new domain docs land in the plugin via PR.
 - [ ] Write all specs to the GitHub issue comment:
       - FDS sections referenced
       - Known constraints or dependencies
