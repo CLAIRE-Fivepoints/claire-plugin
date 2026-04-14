@@ -285,7 +285,7 @@ plugin. Fix any new errors introduced by your changes.
 
 **Applies when:** You created or edited any file under `com.tfione.db/migration/`.
 
-**Command:**
+### Gate 5a — Verify checksums
 
 ```bash
 claire flyway verify
@@ -296,6 +296,34 @@ claire flyway verify
 Flyway stores checksums in `flyway_schema_history`. Editing an already-applied migration file
 changes its checksum and breaks incremental migration — this will fail CI. If you need to
 change a migration that was already pushed, create a new migration instead.
+
+### Gate 5b — Apply pending migrations (mandatory pre-ADO-transition)
+
+```bash
+# Extract SA password from the SQL Server container (exact match on env key — avoids
+# substring collisions with MSSQL_SA_PASSWORD or similar)
+SA_PASS=$(docker inspect tfione-sqlserver \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  | awk -F= '$1=="SA_PASSWORD"{print $2}')
+
+# Pass the password via env var (FLYWAY_PASSWORD) — never on argv, which would
+# leak via `ps auxe` / `/proc/*/cmdline` to any other user on the host.
+FLYWAY_PASSWORD="$SA_PASS" flyway \
+  -url="jdbc:sqlserver://localhost:1433;databaseName=tfi_one;trustServerCertificate=true" \
+  -user=sa \
+  -locations="filesystem:com.tfione.db/migration" \
+  -outOfOrder=true migrate
+```
+
+**Passing criteria:** Flyway reports 0 errors, all pending migrations applied successfully.
+
+`-outOfOrder=true` is **local-only** — it lets feature branches apply a migration whose version
+sits below an already-applied one (common during rebases). CI applies migrations strictly in order;
+do not copy this flag into a CI script.
+
+This is the **mandatory pre-ADO-transition verification**: every migration file must apply
+cleanly against the local SQL Server container before `fivepoints ado-transition` runs.
+If Flyway fails → fix the migration before proceeding.
 
 **Migration naming convention:**
 
@@ -367,8 +395,9 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 3  cd com.tfione.web && npm run generate-local  → regenerate com.tfione.api.d.ts (MANDATORY before build)
 [ ] Gate 3  cd com.tfione.web && npm run build-gate   → 0 errors (tsc -b + vite build)
 [ ] Gate 4  cd com.tfione.web && npm run lint         → 0 errors in your files
-[ ] Gate 5  claire flyway verify     [if migrations]  → no checksum mismatches
+[ ] Gate 5a claire flyway verify     [if migrations]  → no checksum mismatches
 [ ] Gate 5  grep -r "REFERENCES <Table>" com.tfione.db/migration/  [if new FK]  → match existing column/type/nullability
+[ ] Gate 5b flyway migrate (local SQL Server) [if migrations] → 0 errors, all pending applied
 [ ] Gate 6  claire fivepoints e2e-* [if UI changed]  → flows pass
 ```
 

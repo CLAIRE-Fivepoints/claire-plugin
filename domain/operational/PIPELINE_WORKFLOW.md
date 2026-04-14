@@ -244,6 +244,11 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 --- ADO TRANSITION (after ALL FDS sections proved working) ---
 
 - [ ] [10/11] PAT gate + push feature branch to ADO:
+      🚨 MANDATORY pre-transition verification — run Gate 5b (flyway migrate) against the local SQL Server:
+      → Canonical command lives in `claire domain read five_points operational DEVELOPER_GATES` (§ Gate 5b)
+      ✅ Passing criteria: Flyway reports 0 errors, all pending migrations applied successfully
+      ❌ FAIL → fix migration before proceeding — do NOT run `fivepoints ado-transition`
+      Then:
       fivepoints ado-transition --issue N
       → [1/3] Verifies branch naming convention
       → [2/3] PAT gate: if AZURE_DEVOPS_WRITE_PAT is not set, posts wait comment
