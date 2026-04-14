@@ -14,38 +14,53 @@ updated: 2026-04-14
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
-- [ ] Read ADO work item (read-only) — title, description, acceptance criteria, parent items
-- [ ] Search for attachments on the ADO work item:
-      Look for FDS documents, spec sheets, mockups, or any linked attachments on the PBI and
-      its parent Feature/Epic. Use the PAT to fetch attachments via the ADO REST API:
+- [ ] Read ADO work item — ALL fields AND all attachments:
+      Read: title, description, acceptance criteria, parent items (PBI → Feature → Epic).
+      ⚠️ "Read the work item" means ALL of it — fields AND attachments. Never skip attachments.
+      If the description mentions an attached document ("see attached FDS", "latest version attached",
+      etc.) → YOU MUST download and read that attachment before continuing.
+
+      Fetch attachments via the ADO REST API:
         claire domain read fivepoints operational AZURE_DEVOPS_ACCESS   ← PAT setup + API reference
-        # List attachments on the work item:
         curl -s -u ":$AZURE_DEVOPS_PAT" \
           "https://dev.azure.com/Fivepoints/TFIOne/_apis/wit/workItems/{PBI_ID}?$expand=relations&api-version=7.1" \
-          | jq '.relations[] | select(.rel == "AttachedFile") | .url + " — " + .attributes.name'
-      If an FDS or spec document is attached → download and read it.
-      If no attachment is found on the PBI → check the parent Feature and Epic for attachments.
-      ⚠️ Do NOT skip this step. Missing the FDS is the #1 cause of wrong specs.
+          | jq '.relations[] | select(.rel == "AttachedFile") | {name: .attributes.name, url: .url}'
+      If attachment found → download and read it fully before any analysis.
+      If no attachment on PBI → check the parent Feature and Epic for attachments.
+      ⚠️ Missing the FDS is the #1 cause of wrong specs. Do not skip this step.
+
+- [ ] Identify the specific target section — NOT the parent document:
+      The ADO description often names a broad document ("Client Management FDS Chapter 10").
+      Your target is a SPECIFIC sub-section within that document, not the whole document.
+      ⚠️ "Chapter N" references may be stale — the current FDS uses section names, not chapter
+         numbers. Navigate by section NAME, not by number.
+
+      Steps:
+        1. Read the FDS (from attachment or domain doc) — scan the table of contents
+        2. Find the named section that matches the task description
+        3. Identify the EXACT sub-section you are responsible for
+           Example: target = "Client Face Sheet" (not "Client Management" which has 20+ sub-features)
+        4. Read that sub-section in full — every word, every sub-section heading
+      ⚠️ HARD STOP: Do NOT post any analysis, options, or scope until you have READ the
+         target section. The FDS is the answer. Do not speculate.
 
 - [ ] Verify the request is clear enough to proceed:
-      Before writing any spec or creating a branch, confirm you have:
-        ✅ The FDS section (or equivalent spec) that covers this task
+      After reading the FDS section, confirm you have:
+        ✅ The exact section name and its content (not just a chapter reference)
         ✅ Enough detail to describe what the UI should show and what the API should return
-        ✅ No contradictions between the ADO description and the FDS
-      If ANY of these are missing or unclear → post a question on the GitHub issue and WAIT:
+        ✅ No contradictions between the ADO description and the current FDS
+      If ANY of these are missing or unclear → post ONE focused question on the GitHub issue:
         gh issue comment <N> --repo CLAIRE-Fivepoints/fivepoints \
           --body "**Analyst needs clarification before proceeding:**\n\n<specific question>"
         claire wait --issue <N>
       ⚠️ HARD STOP: Do NOT create a branch or write specs until the request is clear.
-         It is better to ask one question than to ship wrong specs.
+         One good question beats three pages of speculation.
 
 - [ ] Deep dive the assigned task — identify the FDS section to implement:
       - Task ID from the GitHub issue title (use this for branch naming, NOT the parent PBI ID)
-      - Read the ADO task description to identify which FDS section/subsection is assigned
-      - If the section is not explicitly named in the task → read the parent PBI/Feature
-        to find which FDS section this task belongs to
-      - Scope: implement the specified FDS section entirely
-      ⚠️ HARD STOP: Do not proceed until the FDS section is clearly identified.
+      - Confirm the specific sub-section you will implement (from the step above)
+      - Scope: implement the specified sub-section entirely — nothing more, nothing less
+      ⚠️ HARD STOP: Do not proceed until the FDS sub-section is clearly identified AND read.
 - [ ] Search domain context for the section:
       claire domain search "<section name from issue>"
       Find FDS section and any existing section domain docs
