@@ -111,5 +111,14 @@ commands:
     script: "domain/commands/rebase-no-force.sh"
     description: "Rebase branch onto ADO target and push without ForcePush permission (snapshot+merge strategy)"
 
+github_orgs:
+  - CLAIRE-Fivepoints
+
+persona:
+  default: fivepoints-dev
+  roles:
+    analyst: fivepoints-analyst
+    tester: fivepoints-tester
+
 config:
   api_version: "7.1"
