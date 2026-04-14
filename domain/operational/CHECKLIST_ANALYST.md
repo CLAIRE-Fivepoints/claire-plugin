@@ -72,7 +72,9 @@ updated: 2026-04-14
         --body "**FDS Section:** 16.9 — <Title>"
       ⚠️ MANDATORY — E2E test checks for this comment before transition
 - [ ] Pull latest dev branch into TFIOneGit:
-      cd ~/TFIOneGit && git checkout dev && git pull origin dev
+      cd ~/TFIOneGit && git checkout dev && git pull origin dev && git push github dev
+      → Both remotes must agree on dev tip before pre-flight `git fetch github` lookups.
+      → See: claire domain read fivepoints operational ADO_GITHUB_SYNC
 - [ ] Pre-flight: detect existing branch + PR for {ticket-id} (BEFORE creating anything):
       ⚠️ MANDATORY — never `git checkout -b` blindly. A previous analyst session may
          have already created a branch (and possibly an associated PR) for this task.
