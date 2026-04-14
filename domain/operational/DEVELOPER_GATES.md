@@ -129,6 +129,17 @@ git diff --name-only --cached | grep "migration/" | xargs grep -il "GRANT\|DENY"
 
 Roles are managed via the UI. Never add `GRANT`, `DENY`, or role assignment SQL to a migration file.
 
+### No seed data in staged migration files
+
+```bash
+# Review every staged migration file for INSERT/UPDATE statements
+git diff --name-only --cached | grep "migration/" | xargs grep -iln "INSERT\|UPDATE" 2>/dev/null
+# For each match, confirm the rows are reference data (status types, permission types,
+# system config) — NOT seed data for local dev grids or environment-specific GUIDs.
+```
+
+See Gate 5 → **No seed data** for the full rule.
+
 ### `com.tfione.api.d.ts` not staged
 
 ```bash
@@ -308,6 +319,19 @@ common review rejection cause.
 2. Match the column name, type, and nullability **exactly** as established in prior migrations.
 3. Never guess the schema — the existing migrations are the source of truth.
 
+### No seed data
+
+A migration script may only contain:
+- DDL: CREATE TABLE, ALTER TABLE, CREATE INDEX
+- Reference data required for the application to function (e.g. status types, permission types, system config values)
+
+A migration script must never contain:
+- Seed data added to make a local dev grid look populated
+- Data tied to a hardcoded OrganizationId or any environment-specific GUID
+- Any data whose only purpose is to demonstrate the feature during development
+
+Test: Before pushing a migration, ask: "Would this script run cleanly on an empty database (tfi_one_empty) with no pre-existing org/user data?" If no → remove the data.
+
 ---
 
 ## Gate 6 — End-to-End (if you changed UI flows or API contracts)
@@ -336,6 +360,7 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 0  Branch follows feature/ or bugfix/ convention
 [ ] Gate 0  No business logic tests staged (infrastructure/external API tests only)
 [ ] Gate 0  No GRANT/DENY in staged migration files
+[ ] Gate 0  No seed data in staged migration files
 [ ] Gate 0  com.tfione.api.d.ts not staged or tracked
 [ ] Gate 1  dotnet build com.tfione.api/com.tfione.api.csproj -c Gate -WarnAsError -nowarn:nu1901,nu1902
 [ ] Gate 2  dotnet test com.tfione.service.test/com.tfione.service.test.csproj --configuration Gate

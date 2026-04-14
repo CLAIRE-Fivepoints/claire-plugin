@@ -87,6 +87,25 @@ When `claire review --pr N` is run, Claire:
 
 ---
 
+## Migrations
+
+When a PR adds or modifies any file under `com.tfione.db/migration/`, reviewers must enforce the seed data rule below. Block the PR if it fails.
+
+### No seed data
+
+A migration script may only contain:
+- DDL: CREATE TABLE, ALTER TABLE, CREATE INDEX
+- Reference data required for the application to function (e.g. status types, permission types, system config values)
+
+A migration script must never contain:
+- Seed data added to make a local dev grid look populated
+- Data tied to a hardcoded OrganizationId or any environment-specific GUID
+- Any data whose only purpose is to demonstrate the feature during development
+
+Test: Before approving a migration, ask: "Would this script run cleanly on an empty database (tfi_one_empty) with no pre-existing org/user data?" If no → request changes.
+
+---
+
 ## Reference
 
 - Reviewer checklist and standards: `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA`
