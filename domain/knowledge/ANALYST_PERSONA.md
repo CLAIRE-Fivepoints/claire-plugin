@@ -43,6 +43,24 @@ pr: "#2312"
       claire domain search "<section name from ADO work item>"
       → Identify relevant domain docs (FACE_SHEET_SECTION_PATTERNS, section-specific docs)
       → Read any existing section domain doc before analyzing code
+- [ ] Detect new FDS sections (before writing specs):
+      For each FDS section referenced in the issue:
+        claire domain search "<section name>"
+        claire domain read five_points technical FACE_SHEET_SECTION_PATTERNS
+      If the section does NOT exist in domain knowledge → it is new. Flag it explicitly
+      in the issue comment:
+        > ⚠️ New FDS section detected: **<Section Name>**
+        > Not yet in domain knowledge — documenting now.
+      Then document the new section in the plugin repo:
+        - Create domain/knowledge/<SECTION_NAME>.md with:
+            • Section purpose and scope
+            • Key business rules and constraints
+            • Field-level notes (types, validations, dependencies)
+            • Any gotchas or non-obvious behavior from the FDS
+        - Update domain/technical/FACE_SHEET_SECTION_PATTERNS.md to include the new
+          section (so it is discoverable via claire context)
+      Commit BOTH files to the plugin repo via PR (follow plugin PR workflow).
+      ⚠️ Do NOT push directly to main. The new domain docs land in the plugin via PR.
 - [ ] Identify and post the FDS section for this PBI:
       From the domain search results (or FDS source documents), identify the FDS section
       number and title that covers this task (e.g., "16.9 — Client Agreements").
