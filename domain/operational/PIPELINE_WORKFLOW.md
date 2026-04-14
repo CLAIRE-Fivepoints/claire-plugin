@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: PIPELINE_WORKFLOW
 title: "Five Points — Client Pipeline Workflow (PBI → ADO Merge)"

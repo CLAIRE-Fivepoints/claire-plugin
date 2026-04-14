@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: CODE_REVIEW_WORKFLOW
 title: "Five Points — Code Review Workflow"

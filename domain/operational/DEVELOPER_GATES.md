@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: DEVELOPER_GATES
 title: "Five Points — Developer Gates Before Pushing to Azure DevOps"

@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: AZURE_DEVOPS_ACCESS
 title: "Five Points — Azure DevOps Repo Access"

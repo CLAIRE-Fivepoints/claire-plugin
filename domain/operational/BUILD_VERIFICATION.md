@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: operational
 name: BUILD_VERIFICATION
 title: "Five Points — Gate Build Verification"

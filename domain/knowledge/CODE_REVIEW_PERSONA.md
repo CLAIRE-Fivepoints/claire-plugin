@@ -1,5 +1,5 @@
 ---
-domain: five_points
+domain: fivepoints
 category: knowledge
 name: CODE_REVIEW_PERSONA
 title: "Five Points — Code Review Persona (AI Gatekeeper)"
