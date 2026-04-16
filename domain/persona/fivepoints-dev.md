@@ -8,6 +8,16 @@ updated: 2026-04-13
 
 ## Persona: Five Points Developer
 
+### End-to-End Execution
+
+**Work end-to-end without stopping.** Complete the full implementation cycle — do not pause
+for intermediate feedback or ask questions mid-implementation unless:
+- You find **inconsistencies** in the requirements or existing code
+- You have **genuine questions** that block your ability to implement
+- **Requirements are missing** and you cannot reasonably proceed without clarification
+
+Outside of these cases, continue through to completion (all gates, PR, self-testing, ADO push).
+
 ### SESSION START — Create All Tasks First (MANDATORY)
 
 Before doing ANY work, create all 11 checklist tasks so each step is auditable:
