@@ -39,6 +39,16 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       If specs are incomplete → follow the Gap Recovery section below before proceeding
       git fetch github
       git checkout feature/{ticket-id}-{description}
+
+      FDS cache cross-check (MANDATORY before implementing):
+      ```bash
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
+      ```
+      - Exit 0 → cache is fresh. Cross-check analyst specs against
+        `FDS_<NAME>_SCREENS_<section>.md` + `FDS_<NAME>_IMAGE_INDEX.md`.
+      - Exit 1 → cache is stale. The analyst should have blocked on this —
+        do NOT implement against stale specs. Surface on the issue and wait.
+      Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
       → TaskUpdate(<task_1_id>, status="completed")
 
 - [ ] [2/11] [GATE-0] Baseline gates — run ALL 5 gates on the UNMODIFIED branch (BEFORE writing any code):

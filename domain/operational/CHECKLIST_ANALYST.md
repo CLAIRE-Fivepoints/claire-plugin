@@ -14,6 +14,15 @@ updated: 2026-04-14
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
+- [ ] FDS cache pre-flight — check domain cache is in sync with the fresh PBI attachment:
+      ```bash
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
+      ```
+      - Exit 0 → cache matches → read the existing `FDS_<NAME>_SCREENS_*.md`
+      - Exit 1 → cache is stale. Stop. Post on the issue asking for the cache
+        to be refreshed (or rerun with `--auto-issue` to file the drift issue).
+        **Do NOT write specs from stale cache or from the raw ADO docx.**
+      Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
 - [ ] Read ADO work item — ALL fields AND all attachments:
       Read: title, description, acceptance criteria, parent items (PBI → Feature → Epic).
       ⚠️ "Read the work item" means ALL of it — fields AND attachments. Never skip attachments.
