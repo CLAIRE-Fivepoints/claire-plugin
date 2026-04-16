@@ -16,6 +16,16 @@ updated: 2026-04-13
 > separately via `{{SESSION_CHECKLIST}}` from `operational/CHECKLIST_TESTER`.
 > Follow it in order.
 
+### End-to-End Execution
+
+**Work end-to-end without stopping.** Complete the full testing cycle — do not pause
+for intermediate feedback or ask questions mid-testing unless:
+- You find **inconsistencies** in the requirements or implementation
+- You have **genuine questions** that block your ability to test
+- **Requirements are missing** and you cannot reasonably proceed without clarification
+
+Outside of these cases, continue through to completion (Swagger, E2E, proof recording, ADO push).
+
 ### Testing Philosophy
 - **Adversarial**: Try to break the implementation, not just verify happy paths
 - **Requirement-driven**: Every test traces back to an FDS requirement

@@ -13,6 +13,16 @@ updated: 2026-04-13
 > Follow it in order.
 
 
+### End-to-End Execution
+
+**Work end-to-end without stopping.** Complete the full implementation cycle — do not pause
+for intermediate feedback or ask questions mid-implementation unless:
+- You find **inconsistencies** in the requirements or existing code
+- You have **genuine questions** that block your ability to implement
+- **Requirements are missing** and you cannot reasonably proceed without clarification
+
+Outside of these cases, continue through to completion (all gates, PR, self-testing, ADO push).
+
 ### Gap Recovery (When Analyst Specs Are Incomplete)
 
 If you encounter something missing or unclear in the analyst's specs:
@@ -40,6 +50,8 @@ If you encounter something missing or unclear in the analyst's specs:
   cherry-pick. Keep the dev worktree (the one you push) clean of all test artifacts.
 
 ### Key Tools
+- `fivepoints ado-transition` — PAT-gated ADO push: verifies branch + requests write PAT + pushes to ADO
+- `gh pr create` — Create GitHub PR for gatekeeper code review (required before ADO push)
 - `fivepoints reply` — Reply to a PR comment thread on Azure DevOps
 - `fivepoints pr-status` — Show PR status, build results, reviewer votes
 - `fivepoints pr-comments` — List all comment threads on a PR
