@@ -4,7 +4,7 @@ category: operational
 name: PIPELINE_WORKFLOW
 title: "Five Points — Client Pipeline Workflow (PBI → ADO Merge)"
 keywords: [five-points, pipeline, workflow, analyst, dev, tester, ado-push, ado-transition, transition, labels, checklist, pbi, role-dev, fivepoints-dev, role-tester, role-analyst]
-updated: 2026-04-06
+updated: 2026-04-16
 pr: "#2188"
 ---
 
@@ -134,28 +134,41 @@ and includes the role-specific checklist in CLAUDE.md.
 
 ### Session Start — Create All Tasks First (MANDATORY)
 
-Before doing ANY work, create all 11 checklist tasks so each step is auditable:
+Before doing ANY work, create all 12 checklist tasks so each step is auditable:
 
 ```
-TaskCreate(title="[1/11] Load context + read issue + checkout branch")
-TaskCreate(title="[2/11] [GATE-0] Baseline gates — all 5 gates pass on UNMODIFIED branch BEFORE any code")
-TaskCreate(title="[3/11] Implement requirements")
-TaskCreate(title="[4/11] Run all 5 gates + commit + push to GitHub")
-TaskCreate(title="[5/11] GitHub PR + gatekeeper code review")
-TaskCreate(title="[6/11] Copy to isolated worktree + start test environment")
-TaskCreate(title="[7/11] Swagger verification (backend gate)")
-TaskCreate(title="[8/11] Verify login fixture + run E2E tests (Playwright)")
-TaskCreate(title="[9/11] Record MP4 proof — ALL FDS sections")
-TaskCreate(title="[10/11] PAT gate + fivepoints ado-transition → push branch to ADO")
-TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task closed)")
+TaskCreate(title="[1/12] Load context + read issue + checkout branch")
+TaskCreate(title="[1.5/12] FDS Cross-Check — verify analyst specs against the FDS attached to the parent PBI")
+TaskCreate(title="[2/12] [GATE-0] Baseline gates — all 5 gates pass on UNMODIFIED branch BEFORE any code")
+TaskCreate(title="[3/12] Implement requirements")
+TaskCreate(title="[4/12] Run all 5 gates + commit + push to GitHub")
+TaskCreate(title="[5/12] GitHub PR + gatekeeper code review")
+TaskCreate(title="[6/12] Copy to isolated worktree + start test environment")
+TaskCreate(title="[7/12] Swagger verification (backend gate)")
+TaskCreate(title="[8/12] Verify login fixture + run E2E tests (Playwright)")
+TaskCreate(title="[9/12] Record MP4 proof — ALL FDS sections")
+TaskCreate(title="[10/12] PAT gate + fivepoints ado-transition → push branch to ADO")
+TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task closed)")
 ```
 
 ### Checklist
 ```
-- [ ] [1/11] Load domain context, read issue, checkout branch
+- [ ] [1/12] Load domain context, read issue, checkout branch
+      Read the GitHub issue + the analyst's FDS Read Receipt comment (required by CHECKLIST_ANALYST).
       → TaskUpdate(<task_1_id>, status="completed")
 
-- [ ] [2/11] [GATE-0] Baseline gates — run ALL 5 gates on UNMODIFIED branch (BEFORE writing any code):
+- [ ] [1.5/12] 🚨 FDS Cross-Check (MANDATORY — 10 minutes, before any code):
+      Full protocol: claire domain read fivepoints operational CHECKLIST_DEV_PIPELINE (step [1.5/12])
+      Summary:
+        1. Fetch FDS from parent PBI (curl via AZURE_DEVOPS_PAT, or claire-plugin#29 when it ships)
+        2. Read the analyst's FDS Read Receipt comment on the issue
+        3. Cross-check screens / routes / labels / sub-pages — produce delta
+        4. Post the delta as a comment on the issue
+        5. MATCH → proceed to [2/12]. DELTA DETECTED → claire wait, do NOT implement.
+      ⚠️ HARD STOP: the dev is the last line of defense against silent spec drift.
+      → TaskUpdate(<task_1.5_id>, status="completed")
+
+- [ ] [2/12] [GATE-0] Baseline gates — run ALL 5 gates on UNMODIFIED branch (BEFORE writing any code):
       ⚠️  HARD STOP: Do NOT write a single line of code until ALL baseline gates pass.
       Gate 1: dotnet build com.tfione.api/com.tfione.api.csproj -c Gate -WarnAsError -nowarn:nu1901,nu1902 → 0 errors
       Gate 2: dotnet test com.tfione.service.test/com.tfione.service.test.csproj --configuration Gate → all passing
@@ -175,15 +188,15 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       ❌ If ANY gate fails → environment issue, NOT a feature issue — fix before implementing
       → TaskUpdate(<task_2_id>, status="completed")
 
-- [ ] [3/11] Implement the requirements
+- [ ] [3/12] Implement the requirements
       → TaskUpdate(<task_3_id>, status="completed")
 
-- [ ] [4/11] Run all 5 gates, commit, push to GitHub ONLY:
+- [ ] [4/12] Run all 5 gates, commit, push to GitHub ONLY:
       git push github feature/{ticket-id}-{description}
       ⚠️ NEVER use git push origin — origin is the ADO remote
       → TaskUpdate(<task_4_id>, status="completed")
 
-- [ ] [5/11] Create GitHub PR, wait for gatekeeper review, post PR link on issue (MANDATORY — do not wait to be asked):
+- [ ] [5/12] Create GitHub PR, wait for gatekeeper review, post PR link on issue (MANDATORY — do not wait to be asked):
       gh pr create --base staging --title "feat(five-points): <description>" --body "Closes #<N>"
       # Gatekeeper review fires automatically via GitHub Actions runner (< 1s)
       Wait for gatekeeper APPROVE before continuing (arrives via claire wait)
@@ -193,24 +206,24 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 
 --- SELF-TESTING (in isolated worktree — MANDATORY) ---
 
-- [ ] [6/11] Copy feature branch to isolated worktree, start test environment:
+- [ ] [6/12] Copy feature branch to isolated worktree, start test environment:
       Copy feature branch to a new isolated worktree (not the dev worktree)
       ./scripts/test-env-start.sh → Wait for "✅ Environment ready"
       → TaskUpdate(<task_6_id>, status="completed")
 
-- [ ] [7/11] Swagger verification (backend gate — before Playwright):
+- [ ] [7/12] Swagger verification (backend gate — before Playwright):
       claire domain read fivepoints operational SWAGGER_VERIFICATION
       Verify endpoints + HTTP 200 with Bearer token
       ❌ Fail → fix in dev worktree (feature branch) → push → copy to isolated worktree → retest
       → TaskUpdate(<task_7_id>, status="completed")
 
-- [ ] [8/11] Verify login fixture + run E2E tests (Playwright):
+- [ ] [8/12] Verify login fixture + run E2E tests (Playwright):
       Check e2e/global-setup.ts exists — create if missing
       Run Playwright tests only after Swagger passed
       ❌ Fail → fix in dev worktree → push → copy to isolated worktree → retest from step 7
       → TaskUpdate(<task_8_id>, status="completed")
 
-- [ ] [9/11] 🚨 HARD STOP — Record MP4 proof for ALL FDS sections (MANDATORY):
+- [ ] [9/12] 🚨 HARD STOP — Record MP4 proof for ALL FDS sections (MANDATORY):
       Every FDS requirement must be demonstrated on video.
       ❌ fivepoints ado-transition will reject if no .mp4 found in issue.
 
@@ -243,7 +256,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 
 --- ADO TRANSITION (after ALL FDS sections proved working) ---
 
-- [ ] [10/11] PAT gate + push feature branch to ADO:
+- [ ] [10/12] PAT gate + push feature branch to ADO:
       🚨 MANDATORY pre-transition verification — run Gate 5b (flyway migrate) against the local SQL Server:
       → Canonical command lives in `claire domain read fivepoints operational DEVELOPER_GATES` (§ Gate 5b)
       ✅ Passing criteria: Flyway reports 0 errors, all pending migrations applied successfully
@@ -256,12 +269,12 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
       → [3/3] Pushes branch to ADO + creates ADO PR + monitors build
       ❌ FAIL → fix in dev worktree → copy to isolated worktree → retest → rerun ado-transition
       ✅ PASS → ADO PR created, build passed, GitHub issue closed by ADO
-      ⚠️  Do NOT proceed to [11/11] until ado-transition has FULLY COMPLETED
+      ⚠️  Do NOT proceed to [11/12] until ado-transition has FULLY COMPLETED
           and confirmed the GitHub issue is closed.
       → TaskUpdate(<task_10_id>, status="completed")
 
-- [ ] [11/11] Stop test environment + claire stop:
-      ⚠️  Only after step [10/11] is completed and ADO has closed the GitHub issue.
+- [ ] [11/12] Stop test environment + claire stop:
+      ⚠️  Only after step [10/12] is completed and ADO has closed the GitHub issue.
       kill $API_PID $VITE_PID && docker stop tfione-sqlserver
       Execute: claire stop
       → TaskUpdate(<task_11_id>, status="completed")
@@ -271,7 +284,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (after ADO task cl
 - Does not push to `origin` (ADO remote) manually — use `fivepoints ado-transition`
 - Does not test in the dev worktree — always uses an isolated copy
 - Does not merge PRs — never
-- Does not commit test code or test artifacts to the feature branch — the isolated worktree ([6/11]) is
+- Does not commit test code or test artifacts to the feature branch — the isolated worktree ([6/12]) is
   the enforcement boundary: changes in the isolated copy cannot enter the feature branch without an explicit
   cherry-pick. The dev worktree (the one that gets pushed) must stay clean of all test artifacts.
 

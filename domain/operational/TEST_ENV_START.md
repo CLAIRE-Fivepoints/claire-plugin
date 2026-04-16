@@ -21,7 +21,7 @@ claire fivepoints test-env-start [--path /path/to/TFIOneGit]
 
 ## When to Use
 
-- **Dev role** — step [6/11]: copy feature branch to isolated worktree, then run this
+- **Dev role** — step [6/12]: copy feature branch to isolated worktree, then run this
 - **Tester role** — step [1/8]: copy branch to isolated worktree, then run this
 - Any time you need the full stack running locally for manual testing
 
