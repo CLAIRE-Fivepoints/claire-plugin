@@ -22,6 +22,7 @@ from .ado_client import (
     resolve_pat,
 )
 from .cache_comparator import (
+    attachment_token,
     compare_to_cache,
     diff_sections,
     resolve_cache_path,
@@ -42,12 +43,7 @@ DEFAULT_ISSUE_REPO = "CLAIRE-Fivepoints/claire-plugin"
 
 
 def _doc_name_from_attachment(name: str) -> str:
-    """Turn '4 - Client Management(1).docx' into 'CLIENT_MANAGEMENT'."""
-    stem = Path(name).stem
-    stem = re.sub(r"\([^)]*\)", "", stem)
-    stem = re.sub(r"^\s*\d+\s*[-_]\s*", "", stem)
-    token = re.sub(r"[^A-Za-z0-9]+", "_", stem).strip("_").upper()
-    return token or "UNKNOWN"
+    return attachment_token(name) or "UNKNOWN"
 
 
 def build_parser() -> argparse.ArgumentParser:

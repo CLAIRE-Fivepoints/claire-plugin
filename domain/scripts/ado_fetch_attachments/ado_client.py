@@ -1,9 +1,14 @@
 """Azure DevOps REST client for attachment fetching.
 
-PAT resolution mirrors the chain in `ado_common.sh`:
-    AZURE_DEVOPS_WRITE_PAT → AZURE_DEVOPS_DEV_PAT → client config → .env → AZURE_DEVOPS_PAT
+PAT resolution (first non-empty wins):
+    1. AZURE_DEVOPS_WRITE_PAT env
+    2. AZURE_DEVOPS_DEV_PAT   env
+    3. AZURE_DEVOPS_PAT       env
+    4. Same three keys from ~/.config/claire/.env
 
-Read-only operations here need only the read-scoped PAT.
+Read-only operations here need only the read-scoped PAT. A richer chain (client
+config files, git-remote embedded PAT) lives in `ado_common.sh` for operations
+that need write access — this module deliberately keeps to env + env-file.
 """
 
 from __future__ import annotations

@@ -3,11 +3,26 @@
 from __future__ import annotations
 
 from ado_fetch_attachments.cache_comparator import (
+    attachment_token,
     compare_to_cache,
     diff_sections,
     md5_file,
     resolve_cache_path,
 )
+
+
+class TestAttachmentToken:
+    def test_client_management_with_numeric_prefix_and_parens(self):
+        assert attachment_token("4 - Client Management(1).docx") == "CLIENT_MANAGEMENT"
+
+    def test_plain_name(self):
+        assert attachment_token("Education.docx") == "EDUCATION"
+
+    def test_empty_stem(self):
+        assert attachment_token("   .docx") == ""
+
+    def test_non_docx_extension(self):
+        assert attachment_token("report.pdf") == "REPORT"
 
 
 class TestMd5:

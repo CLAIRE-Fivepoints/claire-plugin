@@ -41,7 +41,7 @@ map a wireframe to the exact FDS heading.
 - `--staging-dir <path>` Where to write downloads (default: ~/TFIOneGit/.fds-cache/{pbi})
 - `--org <name>`       ADO organization (default: FivePointsTechnology)
 - `--project <name>`   ADO project (default: TFIOne)
-- `--issue-repo <repo>` Drift issue target (default: claire-labs/fivepoints-plugin)
+- `--issue-repo <repo>` Drift issue target (default: CLAIRE-Fivepoints/claire-plugin)
 
 ## Exit codes
 - 0 — cache is up-to-date (or PBI has no attachments)
@@ -164,11 +164,18 @@ if [[ "$PY_EXIT" == "1" && "$AUTO_ISSUE" == "true" ]]; then
         done < <(jq -r '.labels[]?' "$action_file")
 
         echo "[gh] creating issue in $repo: $title"
+        set +e
         issue_url=$(gh issue create \
             --repo "$repo" \
             --title "$title" \
             --body-file "$body_file" \
-            "${label_args[@]+"${label_args[@]}"}")
+            "${label_args[@]+"${label_args[@]}"}" 2>&1)
+        gh_rc=$?
+        set -e
+        if [[ $gh_rc -ne 0 ]]; then
+            echo "[gh] ERROR: gh issue create failed (rc=$gh_rc): $issue_url" >&2
+            exit 2
+        fi
         echo "[gh] $issue_url"
     done
 fi

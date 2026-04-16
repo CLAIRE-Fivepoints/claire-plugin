@@ -94,23 +94,23 @@ def _heading_level(paragraph: ET.Element) -> int | None:
 def _paragraph_text(paragraph: ET.Element) -> str:
     """Extract the accepted-only text of a paragraph.
 
-    * Text inside ``<w:ins>`` (unaccepted insertion) is skipped.
-    * Text inside ``<w:del>`` (unaccepted deletion) is kept — it is still part of
-      the document until the deletion is accepted.
+    * Text inside ``<w:ins>`` (unaccepted insertion) is skipped — the walk
+      stops recursing when it enters one.
+    * Text inside ``<w:del>`` (unaccepted deletion) uses ``<w:delText>``, not
+      ``<w:t>``, so it is naturally excluded from this `<w:t>`-only walk.
     """
     chunks: list[str] = []
 
-    def walk(node: ET.Element, inside_ins: bool) -> None:
+    def walk(node: ET.Element) -> None:
         if node.tag == _INS_TAG:
             return
-        if node.tag == _T_TAG:
-            if not inside_ins and node.text:
-                chunks.append(node.text)
+        if node.tag == _T_TAG and node.text:
+            chunks.append(node.text)
             return
         for child in node:
-            walk(child, inside_ins)
+            walk(child)
 
-    walk(paragraph, inside_ins=False)
+    walk(paragraph)
     return "".join(chunks).strip()
 
 
@@ -189,12 +189,12 @@ def extract_docx(docx_path: Path) -> ExtractionResult:
             filename = f"image{image_counter:03d}{ext}"
             start = max(0, p_index - 3)
             end = min(len(paragraphs), p_index + 4)
+            forward_texts = [
+                _paragraph_text(paragraphs[i]) for i in range(p_index, end)
+            ]
             surrounding = "\n".join(
                 s for s in text_by_index[start:p_index] if s
-            ) + "\n" + "\n".join(
-                _paragraph_text(paragraphs[i]) for i in range(p_index, end)
-                if _paragraph_text(paragraphs[i])
-            )
+            ) + "\n" + "\n".join(s for s in forward_texts if s)
             result.images.append(
                 ExtractedImage(
                     filename=filename,

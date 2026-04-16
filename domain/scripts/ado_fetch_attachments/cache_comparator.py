@@ -60,6 +60,23 @@ def compare_to_cache(fresh: Path, cached: Path | None) -> CacheComparison:
     )
 
 
+def attachment_token(attachment_name: str) -> str:
+    """Turn a raw ADO attachment filename into the canonical FDS token.
+
+    Examples:
+      '4 - Client Management(1).docx' -> 'CLIENT_MANAGEMENT'
+      'Education.docx'                -> 'EDUCATION'
+
+    Returns the empty string if the name has no letters/digits to tokenize.
+    Single source of truth — both the cache path lookup and the doc-name
+    displayed in issue titles call this.
+    """
+    stem = Path(attachment_name).stem
+    stem = re.sub(r"\([^)]*\)", "", stem)
+    stem = re.sub(r"^\s*\d+\s*[-_]\s*", "", stem)
+    return re.sub(r"[^A-Za-z0-9]+", "_", stem).strip("_").upper()
+
+
 def resolve_cache_path(cache_dir: Path, attachment_name: str) -> Path | None:
     """Map an attachment filename to the canonical domain cache path.
 
@@ -69,10 +86,7 @@ def resolve_cache_path(cache_dir: Path, attachment_name: str) -> Path | None:
 
     Returns None if no cached counterpart exists.
     """
-    stem = Path(attachment_name).stem
-    stem = re.sub(r"\([^)]*\)", "", stem)
-    stem = re.sub(r"^\s*\d+\s*[-_]\s*", "", stem)
-    token = re.sub(r"[^A-Za-z0-9]+", "_", stem).strip("_").upper()
+    token = attachment_token(attachment_name)
     if not token:
         return None
     candidate = cache_dir / f"FDS_{token}.docx"
