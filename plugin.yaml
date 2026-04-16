@@ -87,6 +87,10 @@ commands:
     script: "domain/commands/reset-pipeline.sh"
     description: "Reset all pipeline issues to clean backlog state (remove assignees, labels, worktrees, branches)"
 
+  - name: "fivepoints reset-pbi"
+    script: "domain/commands/reset-pbi.sh"
+    description: "Factory reset a single PBI (branches, worktrees, PR, agent comments, labels, state, release assets) so the pipeline can replay from zero"
+
   - name: "fivepoints install-hooks"
     script: "domain/commands/install-hooks.sh"
     description: "Install TFI One pre-commit hook into TFIOneGit (branch naming, no GRANT/DENY, no d.ts, no biz logic tests)"
