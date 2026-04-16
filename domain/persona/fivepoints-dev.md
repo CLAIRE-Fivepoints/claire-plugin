@@ -65,14 +65,8 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       claire domain read claire knowledge DEBUG_METHODOLOGY
       Read the GitHub issue — analyst has written specs there.
-      ⚠️  MANDATORY CROSS-CHECK before implementing (do NOT skip — see [1.5/12] below):
-        1. Fetch the FDS attached to the parent PBI via the ADO REST API
-           (see claire domain read fivepoints operational AZURE_DEVOPS_ACCESS)
-        2. Open the FDS to the section the analyst referenced
-        3. Verify the analyst's list of screens / routes / cards / sub-pages matches the FDS exactly
-        4. If mismatch → post on the issue, claire wait, do NOT proceed on guesswork
-      The single point of failure at the analyst role was the root cause of PR #74 scope errors.
-      The dev role is the last line of defense against silent spec drift.
+      ⚠️  Do NOT skip the FDS cross-check — full protocol in [1.5/12] below.
+      The dev role is the last line of defense against silent spec drift (root cause of PR #74).
       If specs are still incomplete after cross-check → follow the Gap Recovery section below.
       git fetch github
       git checkout feature/{ticket-id}-{description}

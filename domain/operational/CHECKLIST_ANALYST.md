@@ -60,21 +60,29 @@ updated: 2026-04-16
       After reading the target FDS section, post a receipt comment on the issue.
       This is the single piece of evidence the dev role will cross-check against.
       Skipping this step = silent failure chain → wrong specs ship to prod.
+      Use a heredoc with a flush-left `EOF` terminator — a multi-line
+      double-quoted string preserves the checklist indentation and GitHub
+      markdown then renders the body as a code block instead of a list.
 
-      gh issue comment <N> --body "**FDS Read Receipt**
-      - Document: <exact docx filename as attached to the PBI>
-      - Section: <exact section number + title> (pages X-Y)
-      - Screens identified: <count>
-      - Menu items: <count>
-      - Sub-pages per screen: <exhaustive list, one line per screen>
-        Example:
-          - Client Face Sheet: Demographics, Emergency Contacts, Household Members
-          - Medical File: Allergies, Medications, Diagnoses, Immunizations
-      - Labels verbatim from FDS: <list — no renaming, no guessing>"
+gh issue comment <N> --body "$(cat <<'EOF'
+**FDS Read Receipt**
+- Document: <exact docx filename as attached to the PBI>
+- Section: <exact section number + title> (pages X-Y)
+- Screens identified: <count>
+- Menu items: <count>
+- Sub-pages per screen: <exhaustive list, one line per screen>
+  Example:
+    - Client Face Sheet: Demographics, Emergency Contacts, Household Members
+    - Medical File: Allergies, Medications, Diagnoses, Immunizations
+- Labels verbatim from FDS: <list — no renaming, no guessing>
+EOF
+)"
 
-      ⚠️ The dev role's [1.5/12] FDS Cross-Check reads this comment to verify your spec
-         matches the FDS. If the receipt is missing or incomplete, the dev will block
-         and ask for it — adding hours of delay.
+      ⚠️ The dev role's [1.5/12] FDS Cross-Check reads this comment via
+         `gh issue view <N> --json comments --jq '.comments[] | select(.body | startswith("**FDS Read Receipt**")) | .body'`
+         — the receipt body MUST start with `**FDS Read Receipt**` (no leading
+         whitespace, no prefix) for that selector to find it. If the receipt
+         is missing or incomplete, the dev will block and ask for it.
       ⚠️ HARD STOP: Do NOT write specs or create the branch until this receipt is posted.
 
 - [ ] Deep dive the assigned task — identify the FDS section to implement:

@@ -37,14 +37,8 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       claire domain read claire knowledge DEBUG_METHODOLOGY
       Read the GitHub issue — analyst has written specs there.
-      ⚠️  MANDATORY CROSS-CHECK before implementing (do NOT skip — see [1.5/12] below):
-        1. Fetch the FDS attached to the parent PBI via the ADO REST API
-           (see claire domain read fivepoints operational AZURE_DEVOPS_ACCESS)
-        2. Open the FDS to the section the analyst referenced
-        3. Verify the analyst's list of screens / routes / cards / sub-pages matches the FDS exactly
-        4. If mismatch → post on the issue, claire wait, do NOT proceed on guesswork
-      The single point of failure at the analyst role was the root cause of PR #74 scope errors.
-      The dev role is the last line of defense against silent spec drift.
+      ⚠️  Do NOT skip the FDS cross-check — full protocol in [1.5/12] below.
+      The dev role is the last line of defense against silent spec drift (root cause of PR #74).
       If specs are still incomplete after cross-check → follow the Gap Recovery section below.
       git fetch github
       git checkout feature/{ticket-id}-{description}
@@ -64,8 +58,13 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
         → For each .docx attachment → download, convert to text (python-docx or textract)
 
       Step 2 — Locate the analyst's FDS Read Receipt comment on the issue:
-        gh issue view <N> --comments | grep -A 10 "FDS Read Receipt"
+        # Anchor on body prefix — substring grep picks up reply threads that quote the phrase
+        gh issue view <N> --json comments \
+          --jq '.comments[] | select(.body | startswith("**FDS Read Receipt**")) | .body'
+        # Optional: also filter by author if your pipeline tags the analyst bot login:
+        #   --jq '.comments[] | select(.author.login == "<analyst-bot-login>" and (.body | startswith("**FDS Read Receipt**"))) | .body'
         → Note: document name, section number + title, screens count, menu items count, sub-pages
+        → If no receipt found → block; ask the analyst to post it (CHECKLIST_ANALYST requires it).
 
       Step 3 — Cross-check the analyst's spec against the FDS:
         - Screens / routes: does every screen the analyst listed appear in the FDS? Any extras? Any missing?
@@ -74,17 +73,24 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
         - Source code cross-contamination: did the analyst copy from base_menu_options.tsx (stale code)
           instead of reading the FDS? Red flag if the spec mentions routes that exist in code but not the FDS.
 
-      Step 4 — Produce and post the delta:
-        delta_comment="**FDS Cross-Check delta (dev role)**\n"
-        delta_comment+="- FDS document: <docx filename>\n"
-        delta_comment+="- FDS section: <exact section number + title>\n"
-        delta_comment+="- Analyst said: N screens, M menu items\n"
-        delta_comment+="- FDS says: N' screens, M' menu items\n"
-        delta_comment+="- Extra (analyst added, not in FDS): <list>\n"
-        delta_comment+="- Missing (in FDS, analyst omitted): <list>\n"
-        delta_comment+="- Renamed (label mismatches): <list>\n"
-        delta_comment+="- Verdict: [MATCH | DELTA DETECTED]"
-        gh issue comment <N> --body "$delta_comment"
+      Step 4 — Produce and post the delta. Use a heredoc: `\n` in a bash
+      double-quoted string is literal backslash-n, not a newline, and GitHub
+      markdown does not interpret it either. The `EOF` terminator of a
+      `<<'EOF'` heredoc must be at column 0 — the block below is shown
+      flush-left intentionally; do NOT re-indent it when executing.
+
+gh issue comment <N> --body "$(cat <<'EOF'
+**FDS Cross-Check delta (dev role)**
+- FDS document: <docx filename>
+- FDS section: <exact section number + title>
+- Analyst said: N screens, M menu items
+- FDS says: N' screens, M' menu items
+- Extra (analyst added, not in FDS): <list>
+- Missing (in FDS, analyst omitted): <list>
+- Renamed (label mismatches): <list>
+- Verdict: [MATCH | DELTA DETECTED]
+EOF
+)"
 
       Step 5 — Decide:
         ✅ MATCH → proceed to [2/12] (baseline gates)
