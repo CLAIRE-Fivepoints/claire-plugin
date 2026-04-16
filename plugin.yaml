@@ -79,6 +79,10 @@ commands:
     script: "domain/commands/ado-push.sh"
     description: "Push branch to ADO, create PR, watch for merge, close GitHub issue on completion"
 
+  - name: "fivepoints ado-fetch-attachments"
+    script: "domain/commands/ado-fetch-attachments.sh"
+    description: "Fetch FDS from ADO, MD5-diff vs domain cache, extract images linked to sections, auto-issue on drift (--pbi N [--diff-only|--auto-issue])"
+
   - name: "fivepoints ado-transition"
     script: "domain/commands/ado-transition.sh"
     description: "PAT-gated transition from dev to ADO: verify branch + request write PAT + push to ADO"
