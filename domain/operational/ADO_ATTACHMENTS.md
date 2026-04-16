@@ -58,7 +58,7 @@ claire fivepoints ado-fetch-attachments --pbi <id> [--diff-only] [--auto-issue]
 7. **Section diff** — extract headings from cached + fresh, list added/removed.
 8. **Issue body** — assemble `drift_issue_<NAME>.md` (MD5 delta, section delta, image count).
 9. **With `--auto-issue`:** bash reads `drift_action_<NAME>.json` and runs `gh issue create`
-   against `claire-labs/fivepoints-plugin`.
+   against `CLAIRE-Fivepoints/claire-plugin`.
 
 ---
 

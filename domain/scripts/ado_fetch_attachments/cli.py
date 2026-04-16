@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_ORG = "FivePointsTechnology"
 DEFAULT_PROJECT = "TFIOne"
-DEFAULT_ISSUE_REPO = "claire-labs/fivepoints-plugin"
+DEFAULT_ISSUE_REPO = "CLAIRE-Fivepoints/claire-plugin"
 
 
 def _doc_name_from_attachment(name: str) -> str:
