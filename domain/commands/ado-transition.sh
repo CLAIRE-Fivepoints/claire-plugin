@@ -65,7 +65,7 @@ claire fivepoints ado-transition --issue 2345 --branch feature/13644-adoption-hi
 ```
 
 ## When to call
-- After step [9/11] in dev checklist: all FDS sections proved working on video
+- After step [9/12] in dev checklist: all FDS sections proved working on video
 - Do NOT call before recording proof — ado_agent.py checks for .mp4 in issue
 
 ## PAT behavior

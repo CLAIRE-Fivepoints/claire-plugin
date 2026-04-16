@@ -3,7 +3,7 @@ name: CHECKLIST_ANALYST
 description: "Five Points — Pipeline role:analyst session checklist"
 type: operational
 keywords: [fivepoints, analyst, pipeline, checklist, role]
-updated: 2026-04-14
+updated: 2026-04-16
 ---
 
 ## Your Checklist (MANDATORY — follow in order)
@@ -55,6 +55,27 @@ updated: 2026-04-14
         claire wait --issue <N>
       ⚠️ HARD STOP: Do NOT create a branch or write specs until the request is clear.
          One good question beats three pages of speculation.
+
+- [ ] 🚨 Post FDS Read Receipt on the GitHub issue (MANDATORY — audit trail):
+      After reading the target FDS section, post a receipt comment on the issue.
+      This is the single piece of evidence the dev role will cross-check against.
+      Skipping this step = silent failure chain → wrong specs ship to prod.
+
+      gh issue comment <N> --body "**FDS Read Receipt**
+      - Document: <exact docx filename as attached to the PBI>
+      - Section: <exact section number + title> (pages X-Y)
+      - Screens identified: <count>
+      - Menu items: <count>
+      - Sub-pages per screen: <exhaustive list, one line per screen>
+        Example:
+          - Client Face Sheet: Demographics, Emergency Contacts, Household Members
+          - Medical File: Allergies, Medications, Diagnoses, Immunizations
+      - Labels verbatim from FDS: <list — no renaming, no guessing>"
+
+      ⚠️ The dev role's [1.5/12] FDS Cross-Check reads this comment to verify your spec
+         matches the FDS. If the receipt is missing or incomplete, the dev will block
+         and ask for it — adding hours of delay.
+      ⚠️ HARD STOP: Do NOT write specs or create the branch until this receipt is posted.
 
 - [ ] Deep dive the assigned task — identify the FDS section to implement:
       - Task ID from the GitHub issue title (use this for branch naming, NOT the parent PBI ID)
