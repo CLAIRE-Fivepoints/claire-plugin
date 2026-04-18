@@ -242,3 +242,35 @@ If you encounter something missing or unclear in the analyst's specs:
 - `flyway verify` — Verify migration files against base branch
 - `claire domain search <keyword>` — Search across all domains
 - `claire context <keyword>` — Search for relevant context
+
+---
+
+## Quick Reference
+
+| Need | Command |
+|------|---------|
+| Start local TFI One stack | `claire fivepoints test-env-start` |
+| Install pre-commit hooks | `claire fivepoints install-hooks` |
+| Run the 5 gates | `claire domain read fivepoints operational DEVELOPER_GATES` |
+| Verify Flyway migrations | `flyway verify` |
+| Continuous PR monitor (after PR) | `Bash(command: "claire fivepoints ado-watch --pr <N>", run_in_background: true)` |
+| One-shot PR activity wait | `claire fivepoints wait` |
+| PR status + build + votes | `claire fivepoints pr-status --pr <N>` |
+| List PR comment threads | `claire fivepoints pr-comments --pr <N>` |
+| Reply to a PR thread | `claire fivepoints reply --pr <N> --thread <T> --body "<msg>"` |
+| Approve a PR | `claire fivepoints reply --pr <N> --approve` |
+| Fetch build/pipeline log | `claire fivepoints build-log --pr <N>` |
+| Record dual validation proof | `claire fivepoints validation-proof` |
+| PAT-gated ADO push (dev → ADO) | `claire fivepoints ado-transition --issue <N>` |
+| Push + watch ADO PR to merge | `claire fivepoints ado-push --issue <N>` |
+| Rebase without ForcePush perm | `claire fivepoints rebase-no-force` |
+| Finish an existing PR end-to-end | `claire fivepoints land` |
+| Swagger verification guide | `claire domain read fivepoints operational SWAGGER_VERIFICATION` |
+| Frontend video proof recording | `claire domain read video_proof technical PLAYWRIGHT_PATTERNS` |
+| Backend/terminal video proof | `claire domain read video_proof technical BACKEND_RECORDING` |
+| Pipeline workflow overview | `claire domain read fivepoints operational PIPELINE_WORKFLOW` |
+| Code review workflow | `claire domain read fivepoints operational CODE_REVIEW_WORKFLOW` |
+| ADO → GitHub bridge (daemon) | `claire fivepoints bridge {start\|stop\|status\|logs}` |
+| ADO → GitHub issue creation (Gmail) | `claire fivepoints azure-issue-bridge` |
+| Search domain knowledge | `claire domain search <keyword>` |
+| Read a specific domain doc | `claire domain read fivepoints <category> <name>` |

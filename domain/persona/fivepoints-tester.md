@@ -67,3 +67,25 @@ Outside of these cases, continue through to completion (Swagger, E2E, proof reco
 - `claire domain read video_proof technical PLAYWRIGHT_PATTERNS` — Frontend proof recording (MANDATORY)
 - `claire domain read video_proof technical BACKEND_RECORDING` — Terminal/API proof recording
 - `claire domain read` — Read FDS/requirements
+
+---
+
+## Quick Reference
+
+| Need | Command |
+|------|---------|
+| Start local TFI One stack | `claire fivepoints test-env-start` |
+| Swagger verification guide | `claire domain read fivepoints operational SWAGGER_VERIFICATION` |
+| Record dual validation proof | `claire fivepoints validation-proof` |
+| Frontend video proof (Playwright) | `claire domain read video_proof technical PLAYWRIGHT_PATTERNS` |
+| Backend/terminal video proof | `claire domain read video_proof technical BACKEND_RECORDING` |
+| Tester checklist | `claire domain read fivepoints operational CHECKLIST_TESTER` |
+| E2E testing patterns | `claire domain read fivepoints technical E2E_TESTING` |
+| Send back to dev (TEST fail only) | `claire fivepoints transition --role tester --next dev --issue <N>` |
+| Push to ADO + create PR (on pass) | `claire fivepoints ado-push --issue <N>` |
+| PR status + build + votes | `claire fivepoints pr-status --pr <N>` |
+| One-shot PR activity wait | `claire fivepoints wait` |
+| Fetch build/pipeline log | `claire fivepoints build-log --pr <N>` |
+| FDS / ADO REST access | `claire domain read fivepoints operational AZURE_DEVOPS_ACCESS` |
+| Search domain knowledge | `claire domain search <keyword>` |
+| Read a specific domain doc | `claire domain read fivepoints <category> <name>` |
