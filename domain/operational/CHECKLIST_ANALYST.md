@@ -181,5 +181,16 @@ EOF
       ⚠️ This step is MANDATORY. The E2E test asserts a Tier [1-5] comment exists before transition.
 - [ ] Execute: claire fivepoints transition --role analyst --issue <N>
       ↳ Transition complete? → STOP HERE
+- [ ] Post-session retrospective — pick the correct target repo when filing improvement issues:
+      When `claire wait` returns the retrospective prompt, walk the 4-question decision flow:
+      `claire domain read claire knowledge ISSUE_REPO_ROUTING`
+      Always pass `--github-repo <owner/name>` explicitly to `claire issue create`.
+      The pre-flight warning fires if the flag disagrees with the cwd-detected repo —
+      heed it; cwd auto-detection has silently mis-routed plugin issues into core before.
+      Quick guide for analyst-side retrospectives:
+        • FDS handling, section detection, analyst persona, ADO attachment workflow,
+          fivepoints checklist content → `CLAIRE-Fivepoints/claire-plugin`
+        • TFI One application bugs (endpoints, UI, migrations) → `CLAIRE-Fivepoints/fivepoints`
+        • Claire core (bash/python architecture, generic personas, hooks) → `claire-labs/claire`
 - [ ] 🚨 Execute: claire stop   ← MANDATORY. Session ends here.
 ```

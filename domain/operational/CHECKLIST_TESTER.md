@@ -119,7 +119,21 @@ TaskCreate(title="[8/8] Stop test environment + claire stop")
       - [ ] If the cause is transient (network/ADO outage): wait and retry [7/8]
       - [ ] Do NOT run `claire stop` until ado-push succeeds
 
-- [ ] [8/8] Stop test environment, then execute claire stop:
+- [ ] [8/8] Post-session retrospective + stop test environment + execute claire stop:
+      Retrospective — pick the correct target repo when filing improvement issues:
+      When `claire wait` returns the retrospective prompt, walk the 4-question decision flow:
+      `claire domain read claire knowledge ISSUE_REPO_ROUTING`
+      Always pass `--github-repo <owner/name>` explicitly to `claire issue create`.
+      The pre-flight warning fires if the flag disagrees with the cwd-detected repo —
+      heed it; cwd auto-detection has silently mis-routed plugin issues into core before.
+      Quick guide for tester-side retrospectives:
+        • Playwright patterns for TFI One, Swagger verification, tester checklist, proof recording
+          specific to TFI One → `CLAIRE-Fivepoints/claire-plugin`
+        • TFI One application bugs uncovered by tests (endpoints, UI, migrations)
+          → `CLAIRE-Fivepoints/fivepoints`
+        • Claire core (generic Playwright helpers, video proof engine, hooks) → `claire-labs/claire`
+
+      Tear down + stop:
       kill $API_PID $VITE_PID        # PIDs printed by test-env-start.sh
       docker stop tfione-sqlserver   # stop SQL Server container
       Execute: claire stop
