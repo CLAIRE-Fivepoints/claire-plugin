@@ -67,3 +67,19 @@ Read this before starting — it has scope guard rules and detailed patterns.
 - `claire analyze --branch <branch> --section <N> --fds-note "<spec>"` — Run section analysis
 - `claire fivepoints transition --role analyst --issue N` — Hand off to developer
 - `claire domain read fivepoints knowledge ANALYST_PERSONA` — Full persona details
+
+---
+
+## Quick Reference
+
+| Need | Command |
+|------|---------|
+| Full persona details | `claire domain read fivepoints knowledge ANALYST_PERSONA` |
+| FDS access (REST API) | `claire domain read fivepoints operational AZURE_DEVOPS_ACCESS` |
+| ADO attachment fetch | `claire domain read fivepoints operational ADO_ATTACHMENTS` |
+| Section analysis | `claire analyze --branch <branch> --section <N> --fds-note "<spec>"` |
+| Face Sheet section patterns | `claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS` |
+| Hand off to developer | `claire fivepoints transition --role analyst --issue <N>` |
+| Search domain knowledge | `claire domain search <keyword>` |
+| Read a specific domain doc | `claire domain read fivepoints <category> <name>` |
+| Wait for response | `Bash(command: "claire wait --issue <N>", run_in_background: true)` |

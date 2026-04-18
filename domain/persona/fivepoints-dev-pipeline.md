@@ -77,3 +77,31 @@ If you encounter something missing or unclear in the analyst's specs:
 - `flyway verify` — Verify migration files against base branch
 - `claire domain search <keyword>` — Search across all domains
 - `claire context <keyword>` — Search for relevant context
+
+---
+
+## Quick Reference
+
+| Need | Command |
+|------|---------|
+| Start local TFI One stack | `claire fivepoints test-env-start` |
+| Install pre-commit hooks | `claire fivepoints install-hooks` |
+| Run the 5 gates | `claire domain read fivepoints operational DEVELOPER_GATES` |
+| Verify Flyway migrations | `flyway verify` |
+| Create GitHub PR (gatekeeper review) | `gh pr create --base staging --title "<title>" --body "Closes #<N>"` |
+| One-shot PR activity wait | `claire fivepoints wait` |
+| PR status + build + votes | `claire fivepoints pr-status --pr <N>` |
+| List PR comment threads | `claire fivepoints pr-comments --pr <N>` |
+| Reply to a PR thread | `claire fivepoints reply --pr <N> --thread <T> --body "<msg>"` |
+| Approve a PR | `claire fivepoints reply --pr <N> --approve` |
+| Fetch build/pipeline log | `claire fivepoints build-log --pr <N>` |
+| Record dual validation proof | `claire fivepoints validation-proof` |
+| PAT-gated ADO push (dev → ADO) | `claire fivepoints ado-transition --issue <N>` |
+| Rebase without ForcePush perm | `claire fivepoints rebase-no-force` |
+| Swagger verification guide | `claire domain read fivepoints operational SWAGGER_VERIFICATION` |
+| FDS / ADO REST access | `claire domain read fivepoints operational AZURE_DEVOPS_ACCESS` |
+| Pipeline workflow overview | `claire domain read fivepoints operational PIPELINE_WORKFLOW` |
+| Dev pipeline checklist | `claire domain read fivepoints operational CHECKLIST_DEV_PIPELINE` |
+| Code review workflow | `claire domain read fivepoints operational CODE_REVIEW_WORKFLOW` |
+| Search domain knowledge | `claire domain search <keyword>` |
+| Read a specific domain doc | `claire domain read fivepoints <category> <name>` |
