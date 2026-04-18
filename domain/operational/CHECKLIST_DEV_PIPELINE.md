@@ -207,8 +207,22 @@ EOF
           and confirmed the GitHub issue is closed.
       → TaskUpdate(<task_10_id>, status="completed")
 
-- [ ] [11/12] Stop test environment + execute claire stop:
+- [ ] [11/12] Post-session retrospective + stop test environment + execute claire stop:
       ⚠️  Only after step [10/12] is completed and ADO has closed the GitHub issue.
+
+      Retrospective — pick the correct target repo when filing improvement issues:
+      When `claire wait` returns the retrospective prompt, walk the 4-question decision flow:
+      `claire domain read claire knowledge ISSUE_REPO_ROUTING`
+      Always pass `--github-repo <owner/name>` explicitly to `claire issue create`.
+      The pre-flight warning fires if the flag disagrees with the cwd-detected repo —
+      heed it; cwd auto-detection has silently mis-routed plugin issues into core before.
+      Quick guide for dev-side retrospectives:
+        • Dev checklists, gates, FDS cross-check protocol, ADO transition, fivepoints commands
+          → `CLAIRE-Fivepoints/claire-plugin`
+        • TFI One application code (endpoints, migrations, web UI) → `CLAIRE-Fivepoints/fivepoints`
+        • Claire core (bash/python architecture, generic personas, hooks) → `claire-labs/claire`
+
+      Tear down + stop:
       kill $API_PID $VITE_PID        # PIDs printed by test-env-start.sh
       docker stop tfione-sqlserver
       Execute: claire stop
