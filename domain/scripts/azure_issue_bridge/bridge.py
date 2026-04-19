@@ -355,7 +355,7 @@ def create_github_issue(work_item: WorkItem) -> str:
         raise RuntimeError(f"gh issue create failed: {result.stderr.strip()}")
 
     issue_url = result.stdout.strip()
-    logger.info("Created GitHub issue: %s", issue_url)
+    logger.info("Created GitHub issue for PBI #%s: %s", work_item.id, issue_url)
     return issue_url
 
 
@@ -462,7 +462,12 @@ def fetch_work_item_metadata(pbi_ids: list[str]) -> dict[str, dict[str, Any]]:
 
     try:
         data = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "fetch_work_item_metadata: failed to JSON-decode ADO response (%s) — raw: %r",
+            exc,
+            result.stdout[:500],
+        )
         return {}
 
     metadata: dict[str, dict[str, Any]] = {}
@@ -658,7 +663,9 @@ def triage_emails(emails: list[Any]) -> list[TriageDecision]:
         #   - state not in _ACTIVE_STATES → unrecognised value → state_unknown
         if pbi_id not in metadata:
             logger.warning(
-                "PBI #%s — state unknown (metadata fetch failed), skipping", pbi_id
+                "PBI #%s — state unknown: metadata not returned by ADO API "
+                "(see prior warnings for fetch error), skipping",
+                pbi_id,
             )
             decisions.append(
                 TriageDecision(
@@ -673,8 +680,10 @@ def triage_emails(emails: list[Any]) -> list[TriageDecision]:
             ado_state: str = metadata[pbi_id].get("state") or ""
             if not ado_state:
                 logger.warning(
-                    "PBI #%s — state field empty (API returned no state), skipping",
+                    "PBI #%s — state field empty (state=%r, metadata=%s), skipping",
                     pbi_id,
+                    ado_state,
+                    metadata[pbi_id],
                 )
                 decisions.append(
                     TriageDecision(
@@ -714,6 +723,9 @@ def triage_emails(emails: list[Any]) -> list[TriageDecision]:
 
         # Rule 1a: skip parents whose children are also in this batch
         if not skipped and pbi_id in parents_with_children_in_batch:
+            logger.info(
+                "PBI #%s: skipped — parent of child(ren) in batch", pbi_id
+            )
             decisions.append(
                 TriageDecision(
                     pbi_id=pbi_id,

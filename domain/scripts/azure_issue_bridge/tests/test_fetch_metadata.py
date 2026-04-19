@@ -14,8 +14,11 @@ Tests cover:
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from azure_issue_bridge.bridge import fetch_work_item_metadata
 
@@ -82,6 +85,28 @@ class TestFetchWorkItemMetadata:
             result = fetch_work_item_metadata(["10856"])
 
         assert result == {}
+
+    def test_json_decode_error_logs_warning(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Bad JSON response → the failure must be logged (not swallowed silently)."""
+        with (
+            patch("subprocess.run", return_value=_mock_run("not-valid-json")),
+            patch("azure_issue_bridge.bridge._get_pat", return_value="fake"),
+            caplog.at_level(logging.WARNING, logger="azure_issue_bridge.bridge"),
+        ):
+            fetch_work_item_metadata(["10856"])
+
+        matches = [
+            r
+            for r in caplog.records
+            if "metadata" in r.getMessage().lower()
+            and ("json" in r.getMessage().lower() or "decode" in r.getMessage().lower())
+        ]
+        assert matches, (
+            "Expected a warning when JSON decoding fails. "
+            f"Got: {[r.getMessage() for r in caplog.records]}"
+        )
 
     def test_state_field_missing_returns_empty_string(self) -> None:
         """If System.State is absent from response, state defaults to ''."""

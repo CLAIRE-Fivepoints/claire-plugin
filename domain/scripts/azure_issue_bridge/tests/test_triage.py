@@ -11,6 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -696,3 +697,131 @@ class TestUnconditionalTypeGate:
         assert decisions[0].action == "skip"
         assert decisions[0].skip_reason == "non_task_type"
         mock_fetch_children.assert_not_called()
+
+
+class TestSkipDecisionLogging:
+    """Every skip decision must emit a per-PBI log line with enough detail to diagnose."""
+
+    def test_parent_has_children_logs_per_pbi(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Rule 1a skip must log per-PBI, not only the batch-level summary."""
+        emails = [
+            make_email("Product Backlog Item 10399 - parent", message_id="msg-001"),
+            make_email("Task 10852 - child", message_id="msg-002"),
+        ]
+        metadata = {
+            "10399": {
+                "type": "Product Backlog Item",
+                "parent_id": None,
+                "state": "To Do",
+            },
+            "10852": {"type": "Task", "parent_id": "10399", "state": "To Do"},
+        }
+
+        with (
+            patch(
+                "azure_issue_bridge.bridge.fetch_work_item_metadata",
+                return_value=metadata,
+            ),
+            patch(
+                "azure_issue_bridge.bridge.fetch_ado_child_ids",
+                return_value=[],
+            ),
+            patch(
+                "azure_issue_bridge.bridge.find_existing_github_issue",
+                return_value=None,
+            ),
+            caplog.at_level(logging.INFO, logger="azure_issue_bridge.bridge"),
+        ):
+            decisions = triage_emails(emails)
+
+        by_id = {d.pbi_id: d for d in decisions}
+        assert by_id["10399"].skip_reason == "parent_has_children"
+
+        # Must be the PER-PBI line, not the batch-level summary at :634-638
+        # ("Parent work items skipped (children present in batch): #10399").
+        # The per-PBI line starts with "PBI #10399" and names it as a parent skip.
+        per_pbi_log = [
+            r
+            for r in caplog.records
+            if r.getMessage().startswith("PBI #10399")
+            and "parent" in r.getMessage().lower()
+        ]
+        assert per_pbi_log, (
+            "Expected a per-PBI log line starting with 'PBI #10399' for the parent-has-children skip. "
+            f"Got: {[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_state_unknown_log_explains_cause(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """state_unknown (pbi missing from metadata) must log why — not just the pbi_id."""
+        emails = [make_email("Task 10856 - missing from metadata")]
+
+        with (
+            patch(
+                "azure_issue_bridge.bridge.fetch_work_item_metadata",
+                return_value={},
+            ),
+            patch(
+                "azure_issue_bridge.bridge.fetch_ado_child_ids",
+                return_value=[],
+            ),
+            patch(
+                "azure_issue_bridge.bridge.find_existing_github_issue",
+                return_value=None,
+            ),
+            caplog.at_level(logging.WARNING, logger="azure_issue_bridge.bridge"),
+        ):
+            triage_emails(emails)
+
+        # Must say more than "metadata fetch failed" — should point at the ADO API
+        # so ops can correlate with fetch_work_item_metadata warnings upstream.
+        matches = [
+            r
+            for r in caplog.records
+            if "10856" in r.getMessage() and "ADO API" in r.getMessage()
+        ]
+        assert matches, (
+            "Expected state_unknown log to reference the ADO API as the source of the miss. "
+            f"Got: {[r.getMessage() for r in caplog.records]}"
+        )
+
+    def test_state_empty_log_includes_value_and_metadata(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """state_empty must surface the actual returned value (empty) AND the metadata row."""
+        emails = [make_email("Task 10852 - empty state")]
+        metadata = {
+            "10852": {"type": "Task", "parent_id": "10399", "state": ""},
+        }
+
+        with (
+            patch(
+                "azure_issue_bridge.bridge.fetch_work_item_metadata",
+                return_value=metadata,
+            ),
+            patch(
+                "azure_issue_bridge.bridge.fetch_ado_child_ids",
+                return_value=[],
+            ),
+            patch(
+                "azure_issue_bridge.bridge.find_existing_github_issue",
+                return_value=None,
+            ),
+            caplog.at_level(logging.WARNING, logger="azure_issue_bridge.bridge"),
+        ):
+            triage_emails(emails)
+
+        matches = [
+            r
+            for r in caplog.records
+            if "10852" in r.getMessage()
+            and "state=" in r.getMessage()
+            and "Task" in r.getMessage()
+        ]
+        assert matches, (
+            "Expected state_empty log to include state=<value> and metadata row. "
+            f"Got: {[r.getMessage() for r in caplog.records]}"
+        )
