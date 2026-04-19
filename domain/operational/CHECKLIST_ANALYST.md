@@ -19,8 +19,9 @@ For this role, the order is:
 
 1. Heartbeat — scripted, already posted by `claire start` (nothing to do).
 2. Read the GitHub issue body + the ADO work item.
-3. **FDS fetch-on-use + manifest** ← HARD STOP before any analysis comment.
-4. Read the target FDS section in full.
+3. **FDS fetch-on-use + manifest** (`claire fivepoints ado-fetch-attachments
+   --pbi <parent-pbi> --print-manifest`) ← HARD STOP before any analysis comment.
+4. Read the target FDS section in full (`cat ~/TFIOneGit/.fds-cache/<parent-pbi>/FDS_<NAME>.md`).
 5. THEN post the analysis comment. It MUST open with
    `🤖 Started the analysis on #<N>.` and carry:
    - Understanding grounded in the FDS (section title + path + 5-10 verbatim labels)
