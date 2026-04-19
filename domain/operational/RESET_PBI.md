@@ -4,7 +4,7 @@ category: operational
 name: RESET_PBI
 title: "Five Points — Factory Reset a PBI (reset-pbi)"
 keywords: [fivepoints, reset-pbi, pbi, factory-reset, pipeline, validation, tfi-one, ado, analyst, dev, tester, worktree, release-assets, guardrails]
-updated: 2026-04-16
+updated: 2026-04-19
 ---
 
 # Five Points — Factory Reset a PBI (`reset-pbi`)
@@ -12,6 +12,11 @@ updated: 2026-04-16
 Resets a **single PBI** plus its linked GitHub issue, worktrees, branches, PR,
 agent comments, labels, github-manager state, and release assets — so a fresh
 agent session can replay the analyst → dev → tester pipeline from zero.
+
+`reset-pbi` owns the ADO/PBI side of the cleanup and **composes** on top of
+`claire issue reset --force` for the Claire side (`issue-<n>` worktree,
+branch, PR, Claire github-manager state). One responsibility per command —
+no duplication. See [Composition](#composition) below.
 
 Complements `fivepoints reset-pipeline` (bulk). Use `reset-pbi` when validating
 pipeline fixes on a specific regression target (e.g. PBI #18839 / issue #71).
@@ -54,8 +59,34 @@ Optional:
 | 5 | Agent comments | Comments authored by `claire-test-ai`, `claire-plugin-gatekeeper-ai`, `myclaire-ai`, `claire-gatekeeper-ai` are deleted via REST |
 | 6 | Issue labels | Reset to exactly `[role:analyst]` (triggers a fresh analyst spawn) |
 | 7 | Issue state | Reopened if closed |
-| 8 | github-manager state | Issue removed from `processed_issues` + `issue_assignees` in `github_manager_state_<owner>_<repo>.json` |
+| 8 | github-manager state (fivepoints repo) | Issue removed from `processed_issues` + `issue_assignees` in `github_manager_state_<owner>_<repo>.json` |
 | 9 | Release assets | Assets whose name matches `issue-<n>` (e.g. `proof-issue-71-*.mp4`, `BEFORE_issue-71.png`) are deleted |
+| 10 | Claire-side cleanup (delegated) | Final step: `GITHUB_REPO=<repo> claire issue reset <n> --force` cleans up the `issue-<n>` worktree, local + remote `issue-<n>` branch, open PR, and Claire-side github-manager state |
+
+---
+
+## Composition
+
+The Claire side of the cleanup is **not** reimplemented here. After the
+ADO-side work in steps 1-9 completes, `reset-pbi` shells out exactly once:
+
+```bash
+GITHUB_REPO=<owner/repo> claire issue reset <n> --force
+```
+
+`claire issue reset` resolves the worktree path via
+`~/.claire/github_repos.yaml` (`local_path`), so cross-repo issues work
+correctly. The composition runs in both `--dry-run` (preview only) and
+`--confirm` (execution); a non-zero exit from `claire issue reset` is
+logged as a warning rather than aborting the parent command — the
+ADO-side cleanup has already happened by then and shouldn't be rolled
+back by a Claire-side hiccup.
+
+> **Why composition?** `claire issue reset` already supports
+> `GITHUB_REPO` for cross-repo cleanup, handles uncommitted changes,
+> closes the PR, and purges the manager state. Reimplementing those
+> behaviours in `reset-pbi` would be duplicative; delegating means
+> bug fixes in `claire issue reset` automatically flow to fivepoints.
 
 ---
 
@@ -153,6 +184,9 @@ Log file:   /Users/.../.claire/logs/reset-pbi-18839-20260416-180000.log
   local branch: feature/18839-client-face-sheet
   github remote branch: feature/18839-client-face-sheet
 
+── Claire-side cleanup (delegated to 'claire issue reset')
+  [claire:issue:reset] claire issue reset 71 --force (GITHUB_REPO=CLAIRE-Fivepoints/fivepoints)
+
 === DRY RUN complete — no changes applied ===
 ```
 
@@ -161,6 +195,6 @@ Log file:   /Users/.../.claire/logs/reset-pbi-18839-20260416-180000.log
 ## See also
 
 - `claire fivepoints reset-pipeline` — bulk reset of the whole pipeline backlog
-- `claire issue reset <n>` — generic Claire issue reset (single issue, claire core)
+- `claire issue reset <n> --force` — generic Claire issue reset (composed in step 10 above)
 - `claire domain read github_manager technical STATE_MANAGEMENT`
 - `claire domain read claire operational SPAWN_TROUBLESHOOT`

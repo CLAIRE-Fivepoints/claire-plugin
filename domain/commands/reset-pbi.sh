@@ -57,6 +57,8 @@ What gets reset (when --confirm):
   6. Issue is reopened if closed
   7. github-manager state: issue purged from processed_issues / issue_assignees
   8. Release assets referencing the issue number: deleted
+  9. Claire-side cleanup (delegated to 'claire issue reset --force'):
+     issue-<n> worktree, branch, PR, and Claire github-manager state
 
 Guardrails:
   * Refuses to run if the linked PR is already merged
@@ -103,6 +105,11 @@ GITHUB_TOKEN    read from ~/.config/claire/github_manager.env or env var
 
 ## Produces
 Log file at: $HOME/.claire/logs/reset-pbi-<pbi>-<timestamp>.log
+
+## Composes
+* Final step shells out to: GITHUB_REPO=<repo> claire issue reset <n> --force
+  This delegates Claire-side cleanup (issue-<n> worktree/branch/PR/state)
+  rather than reimplementing it. See issue #54.
 
 ## Never does
 * Touch the ADO 'origin' remote (only the 'github' mirror)
@@ -364,6 +371,26 @@ else
         done
     else
         echo "  SKIP: TFIOneGit has no 'github' remote — nothing to push-delete"
+    fi
+fi
+
+# ── Compose: delegate Claire-side cleanup to `claire issue reset` ───────────
+# Owns the issue-<n> worktree + branch + PR + github-manager state on the
+# Claire side. We delegate rather than reimplement (issue #54).
+
+echo ""
+echo "── Claire-side cleanup (delegated to 'claire issue reset')"
+echo "  [claire:issue:reset] claire issue reset $ISSUE_NUM --force (GITHUB_REPO=$REPO)"
+echo "[claire:issue:reset] GITHUB_REPO=$REPO claire issue reset $ISSUE_NUM --force" >>"$LOG_FILE"
+
+if [[ "$MODE" == "confirm" ]]; then
+    set +e
+    GITHUB_REPO="$REPO" claire issue reset "$ISSUE_NUM" --force 2>&1 | tee -a "$LOG_FILE"
+    CIR_RC=${PIPESTATUS[0]}
+    set -e
+    if [[ $CIR_RC -ne 0 ]]; then
+        echo "  WARN: claire issue reset exited with code $CIR_RC (see $LOG_FILE)"
+        echo "[claire:issue:reset] WARN exit=$CIR_RC" >>"$LOG_FILE"
     fi
 fi
 

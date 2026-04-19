@@ -16,7 +16,11 @@ Scope (Python portion — HTTP + JSON only, no subprocess):
     * Delete release assets whose name references the issue/PBI
 
 Git operations (branch / worktree delete) are executed by the bash
-orchestrator (domain/commands/reset-pbi.sh) — see DEV_RULES #2.
+orchestrator (domain/commands/reset-pbi.sh) — see DEV_RULES #2. The
+bash orchestrator also delegates Claire-side cleanup (issue-<n>
+worktree, branch, PR, Claire github-manager state) to
+`claire issue reset --force` as its final step, so this Python module
+never needs to shell out (issue #54).
 """
 
 from __future__ import annotations
