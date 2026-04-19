@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -256,9 +257,6 @@ def test_purge_state_returns_false_when_absent(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # execute_plan — idempotent 404 handling on delete actions (issue #60)
 # ---------------------------------------------------------------------------
-
-
-import urllib.error  # noqa: E402
 
 
 class _FakeClient:
