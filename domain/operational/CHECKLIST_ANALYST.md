@@ -8,6 +8,14 @@ updated: 2026-04-19
 
 ## Your Checklist (MANDATORY — follow in order)
 
+> **About `$CLAIRE_WAIT_REPO`:** every spawned session receives this env var
+> (set by `claire spawn` / `claire-plugin fivepoints azure-issue-bridge`) with
+> the authoritative target repo in `owner/name` form — e.g.
+> `CLAIRE-Fivepoints/fivepoints` for a production session, or
+> `claire-labs/fivepoints-test` for the staging pipeline. Commands below use
+> it verbatim (`--repo "$CLAIRE_WAIT_REPO"`) so they resolve to the correct
+> repo at runtime without any template substitution.
+
 ```
 - [ ] Load domain context:
       claire domain read fivepoints knowledge ANALYST_PERSONA
@@ -58,7 +66,7 @@ updated: 2026-04-19
         ✅ Enough detail to describe what the UI should show and what the API should return
         ✅ No contradictions between the ADO description and the current FDS
       If ANY of these are missing or unclear → post ONE focused question on the GitHub issue:
-        gh issue comment <N> --repo CLAIRE-Fivepoints/fivepoints \
+        gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
           --body "**Analyst needs clarification before proceeding:**\n\n<specific question>"
         claire wait --issue <N>
       ⚠️ HARD STOP: Do NOT create a branch or write specs until the request is clear.
@@ -126,7 +134,7 @@ EOF
       From the extracted `FDS_<NAME>.md` in staging (not a committed cache —
       it is regenerated every fetch), identify the section title + page range
       + its sha256 from the manifest. Post it as a comment on the GitHub issue:
-      gh issue comment <N> --repo claire-labs/fivepoints-test \
+      gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
         --body "**FDS Section:** <section title> (pages X-Y, sha256 \`<short>\`)"
       ⚠️ MANDATORY — E2E test checks for this comment before transition.
       ⚠️ The section title must match the one quoted in the Read Receipt — the
@@ -141,11 +149,11 @@ EOF
          have already created a branch (and possibly an associated PR) for this task.
          Reusing that work preserves context and avoids duplicate branches.
 
-      existing_branch=$(gh api repos/CLAIRE-Fivepoints/fivepoints-test/branches \
+      existing_branch=$(gh api "repos/$CLAIRE_WAIT_REPO/branches" \
         --paginate \
         --jq ".[] | select(.name | startswith(\"feature/{ticket-id}-\")) | .name" \
         | head -1)
-      existing_pr=$(gh pr list --repo CLAIRE-Fivepoints/fivepoints-test \
+      existing_pr=$(gh pr list --repo "$CLAIRE_WAIT_REPO" \
         --search "head:feature/{ticket-id}-" --state all \
         --json number,state,headRefName -q '.[0]')
 
@@ -163,10 +171,10 @@ EOF
         IF existing_pr is non-empty → MANDATORY: read prior context before re-analyzing:
           pr_number=$(echo "$existing_pr" | jq -r .number)
           pr_state=$(echo "$existing_pr" | jq -r .state)
-          gh pr view "$pr_number" --repo CLAIRE-Fivepoints/fivepoints-test --comments
-          gh pr diff "$pr_number" --repo CLAIRE-Fivepoints/fivepoints-test
+          gh pr view "$pr_number" --repo "$CLAIRE_WAIT_REPO" --comments
+          gh pr diff "$pr_number" --repo "$CLAIRE_WAIT_REPO"
           # Post on the GitHub issue so the user knows we are not re-analyzing from scratch:
-          gh issue comment <N> --repo claire-labs/fivepoints-test \
+          gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
             --body "Found existing PR #$pr_number (state: $pr_state) — reusing branch \`$existing_branch\` instead of creating new"
           ⚠️ You MUST read the PR comments and diff before writing any new specs.
              Re-analyzing from scratch destroys the previous analyst's context.
@@ -175,17 +183,17 @@ EOF
         git checkout -b feature/{ticket-id}-{description}
         git push -u github feature/{ticket-id}-{description}
         # Verify push succeeded:
-        gh api repos/CLAIRE-Fivepoints/fivepoints-test/branches/feature/{ticket-id}-{description} --jq '.name'
+        gh api "repos/$CLAIRE_WAIT_REPO/branches/feature/{ticket-id}-{description}" --jq '.name'
         branch_was_reused=no
 
-      ⚠️ Push to fivepoints-test (GitHub), NOT to ADO
+      ⚠️ Push to the GitHub mirror (`github` remote), NOT to ADO (`origin` remote)
       ⚠️ {ticket-id} = the ADO task ID directly assigned to you (from the GitHub issue title),
          NOT the parent PBI ID.
          Example: if issue says "Task #10901 (PBI #10847)", use 10901 — not 10847.
          ✅ feature/10901-description   ❌ feature/10847-description
 - [ ] Post branch name as comment on the GitHub issue (indicate new vs reused):
       branch_name=$(git rev-parse --abbrev-ref HEAD)
-      gh issue comment <N> --repo claire-labs/fivepoints-test \
+      gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
         --body "Branch: \`$branch_name\` (reused: $branch_was_reused)"
       ⚠️ MANDATORY — transition guard requires branch name in issue comments
       ⚠️ The "(reused: yes/no)" suffix tells downstream personas whether prior work exists
