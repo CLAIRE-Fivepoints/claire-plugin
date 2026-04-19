@@ -95,6 +95,10 @@ commands:
     script: "domain/commands/reset-pbi.sh"
     description: "Factory reset a single PBI (branches, worktrees, PR, agent comments, labels, state, release assets) so the pipeline can replay from zero"
 
+  - name: "fivepoints repo-reset"
+    script: "domain/commands/repo-reset.sh"
+    description: "Factory-reset the fivepoints test mirror — wipe content (issues, PRs, branches, tags, releases, runs) and strip+rename PRs into archive tombstones; repo settings preserved"
+
   - name: "fivepoints install-hooks"
     script: "domain/commands/install-hooks.sh"
     description: "Install TFI One pre-commit hook into TFIOneGit (branch naming, no GRANT/DENY, no d.ts, no biz logic tests)"
