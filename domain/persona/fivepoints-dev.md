@@ -70,18 +70,73 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
       If specs are still incomplete after cross-check → follow the Gap Recovery section below.
       git fetch github
       git checkout feature/{ticket-id}-{description}
+
+      FDS cache cross-check (MANDATORY before implementing):
+      ```bash
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
+      ```
+      - Exit 0 → cache is fresh. Cross-check analyst specs against
+        `FDS_<NAME>_SCREENS_<section>.md` + `FDS_<NAME>_IMAGE_INDEX.md`.
+      - Exit 1 → cache is stale. The analyst should have blocked on this —
+        do NOT implement against stale specs. Surface on the issue and wait.
+      Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
       → TaskUpdate(<task_1_id>, status="completed")
 
 - [ ] [1.5/12] 🚨 FDS Cross-Check (MANDATORY — 10 minutes max, before any code):
       ⚠️  HARD STOP: Do NOT write code until this step is complete.
-      Full protocol: claire domain read fivepoints operational CHECKLIST_DEV_PIPELINE (step [1.5/12])
-      Summary:
-        1. Fetch the FDS from the parent PBI (curl via AZURE_DEVOPS_PAT, or the ado-fetch-attachments
-           tool when claire-plugin#29 ships)
-        2. Read the analyst's FDS Read Receipt comment (required by CHECKLIST_ANALYST)
-        3. Cross-check screens / routes / labels / sub-pages against the FDS
-        4. Post the delta as a comment on the issue
-        5. MATCH → proceed. DELTA DETECTED → claire wait, do NOT implement.
+      This step verifies the analyst read the FDS. The dev is the last line of defense.
+
+      Step 1 — Fetch the FDS from the parent PBI:
+        # Preferred (when claire-plugin#29 lands): claire fivepoints ado-fetch-attachments --pbi <parent-pbi-id>
+        # Manual fallback (works today):
+        claire domain read fivepoints operational AZURE_DEVOPS_ACCESS   ← PAT setup
+        curl -s -u ":$AZURE_DEVOPS_PAT" \
+          "https://dev.azure.com/Fivepoints/TFIOne/_apis/wit/workItems/{PARENT_PBI_ID}?\$expand=relations&api-version=7.1" \
+          | jq '.relations[] | select(.rel == "AttachedFile") | {name: .attributes.name, url: .url}'
+        → For each .docx attachment → download, convert to text (python-docx or textract)
+
+      Step 2 — Locate the analyst's FDS Read Receipt comment on the issue:
+        # Anchor on body prefix — substring grep picks up reply threads that quote the phrase
+        gh issue view <N> --json comments \
+          --jq '.comments[] | select(.body | startswith("**FDS Read Receipt**")) | .body'
+        # Optional: also filter by author if your pipeline tags the analyst bot login:
+        #   --jq '.comments[] | select(.author.login == "<analyst-bot-login>" and (.body | startswith("**FDS Read Receipt**"))) | .body'
+        → Note: document name, section number + title, screens count, menu items count, sub-pages
+        → If no receipt found → block; ask the analyst to post it (CHECKLIST_ANALYST requires it).
+
+      Step 3 — Cross-check the analyst's spec against the FDS:
+        - Screens / routes: does every screen the analyst listed appear in the FDS? Any extras? Any missing?
+        - Labels: does every label match exactly (e.g. "Medical File" vs "Health/Medical")?
+        - Sub-pages: did the analyst enumerate every sub-page under each screen?
+        - Source code cross-contamination: did the analyst copy from base_menu_options.tsx (stale code)
+          instead of reading the FDS? Red flag if the spec mentions routes that exist in code but not the FDS.
+
+      Step 4 — Produce and post the delta. Use a heredoc: `\n` in a bash
+      double-quoted string is literal backslash-n, not a newline, and GitHub
+      markdown does not interpret it either. The `EOF` terminator of a
+      `<<'EOF'` heredoc must be at column 0 — the block below is shown
+      flush-left intentionally; do NOT re-indent it when executing.
+
+gh issue comment <N> --body "$(cat <<'EOF'
+**FDS Cross-Check delta (dev role)**
+- FDS document: <docx filename>
+- FDS section: <exact section number + title>
+- Analyst said: N screens, M menu items
+- FDS says: N' screens, M' menu items
+- Extra (analyst added, not in FDS): <list>
+- Missing (in FDS, analyst omitted): <list>
+- Renamed (label mismatches): <list>
+- Verdict: [MATCH | DELTA DETECTED]
+EOF
+)"
+
+      Step 5 — Decide:
+        ✅ MATCH → proceed to [2/12] (baseline gates)
+        ❌ DELTA DETECTED → post the delta (already done in Step 4), then:
+           claire wait --issue <N>
+           Do NOT implement. Wait for the analyst / owner to confirm the correct scope.
+      ❌ If FDS cannot be fetched (no attachment on PBI or parent chain) → post on issue,
+         claire wait. Never assume specs without the source document.
       → TaskUpdate(<task_1.5_id>, status="completed")
 
 - [ ] [2/12] [GATE-0] Baseline gates — run ALL 5 gates on the UNMODIFIED branch (BEFORE writing any code):
@@ -180,13 +235,28 @@ TaskCreate(title="[11/12] Stop test environment + claire stop (after ADO task cl
           and confirmed the GitHub issue is closed.
       → TaskUpdate(<task_10_id>, status="completed")
 
-- [ ] [11/12] Stop test environment + execute claire stop:
+- [ ] [11/12] Post-session retrospective + stop test environment + execute claire stop:
       ⚠️  Only after step [10/12] is completed and ADO has closed the GitHub issue.
+
+      Retrospective — pick the correct target repo when filing improvement issues:
+      When `claire wait` returns the retrospective prompt, walk the 4-question decision flow:
+      `claire domain read claire knowledge ISSUE_REPO_ROUTING`
+      Always pass `--github-repo <owner/name>` explicitly to `claire issue create`.
+      The pre-flight warning fires if the flag disagrees with the cwd-detected repo —
+      heed it; cwd auto-detection has silently mis-routed plugin issues into core before.
+      Quick guide for dev-side retrospectives:
+        • Dev checklists, gates, FDS cross-check protocol, ADO transition, fivepoints commands
+          → `CLAIRE-Fivepoints/claire-plugin`
+        • TFI One application code (endpoints, migrations, web UI) → `CLAIRE-Fivepoints/fivepoints`
+        • Claire core (bash/python architecture, generic personas, hooks) → `claire-labs/claire`
+
+      Tear down + stop:
       kill $API_PID $VITE_PID        # PIDs printed by test-env-start.sh
       docker stop tfione-sqlserver
       Execute: claire stop
       → TaskUpdate(<task_11_id>, status="completed")
 ```
+
 
 ### Code Review (Auto-triggered)
 
