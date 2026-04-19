@@ -47,13 +47,17 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       git fetch github
       git checkout feature/{ticket-id}-{description}
 
-      FDS cache check (informational — drives whether [1.5/11] needs to refetch):
+      FDS fetch (fetch-on-use — always pulls the live attachment):
       ```bash
-      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --print-manifest > /tmp/fds-manifest.json
       ```
-      - Exit 0 → cache is fresh. [1.5/11] reads from the existing
-        `FDS_<NAME>_SCREENS_<section>.md`.
-      - Exit 1 → cache is stale. [1.5/11] will refresh it (no analyst to block on).
+      - Docx is extracted to `~/TFIOneGit/.fds-cache/<parent-pbi>/`
+        (gitignored; regenerated on every fetch).
+      - Read `FDS_<NAME>.md` from staging. Do NOT grep `domain/knowledge/`
+        for cached FDS — the cache-in-git model is gone.
+      - The CI gate on this dev PR (`fds-verify.yml`) will re-run the same
+        manifest and grep the receipt's verbatim labels. You no longer need
+        to re-verify the analyst's receipt by hand — the gate does it for you.
       Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
       → TaskUpdate(<task_1_id>, status="completed")
 
@@ -63,23 +67,24 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       FDS yourself** and confirm scope before implementing. There is no analyst
       Read Receipt to cross-check against.
 
-      Step 1 — Fetch the FDS from the parent PBI (single command, end-to-end):
+      Step 1 — Fetch the FDS from the parent PBI (already done in [1/11] if
+               you ran `--print-manifest` there; re-run if you skipped it):
         ```bash
-        claire fivepoints ado-fetch-attachments --pbi <parent-pbi-id>
+        claire fivepoints ado-fetch-attachments --pbi <parent-pbi-id> --print-manifest > /tmp/fds-manifest.json
         ```
-        → Downloads the .docx, splits into per-section markdown, builds the
-          image index. PAT auto-resolved from `~/.config/claire/.env`.
+        → Fresh copy goes into `~/TFIOneGit/.fds-cache/<parent-pbi>/`.
+          PAT auto-resolved from `~/.config/claire/.env`.
           Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
         → If the parent PBI has no attachment, walk up to Feature → Epic by
           re-running with their work-item IDs.
         → If after walking the chain there is still no FDS → trigger the
           **Discord Ping Protocol** (see persona top), do NOT speculate.
 
-      Step 2 — Read the target section:
-        From the issue's `**FDS Section:** N — <Title> (<exact path>)` comment
-        (posted by the analyst when the analyst pipeline is on, or by the
-        issue author when it's off), open the named cache file and read the
-        section in full — every word, every sub-section heading.
+      Step 2 — Read the target section from staging:
+        `cat ~/TFIOneGit/.fds-cache/<parent-pbi>/FDS_<NAME>.md`
+        Locate the section by the title named in the issue's
+        `**FDS Section:** <Title> (pages X-Y, sha256 ...)` comment.
+        Read every paragraph, every sub-heading.
 
       Step 3 — Identify implementation scope:
         - Screens / routes in scope (which ones the FDS asks for)
@@ -96,8 +101,9 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
 gh issue comment <N> --body "$(cat <<'EOF'
 **FDS Scope Confirmation (dev role)**
 - FDS document: <docx filename>
-- FDS section: <exact section number + title>
-- Source path: <exact/cache/path/FDS_NAME_SCREENS_sXX.md>
+- FDS section title: <exact title> (pages X-Y)
+- section_path: `<from manifest — e.g. "Client Management > Client Face Sheet">`
+- section_sha256: `<from the same section entry>`
 - Screens in scope: <count + names>
 - Sub-pages per screen: <list>
 - Labels (verbatim from FDS): <list>
