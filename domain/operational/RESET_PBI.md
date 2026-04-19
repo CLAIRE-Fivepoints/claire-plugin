@@ -124,6 +124,19 @@ $HOME/.claire/logs/reset-pbi-<pbi>-<YYYYMMDD-HHMMSS>.log
 
 ---
 
+## Idempotency
+
+Repeat resets are safe. For the two delete actions that can legitimately find
+their target already gone — **comment delete** (`gh:comment`) and
+**release-asset delete** (`gh:asset`) — a `404 Not Found` is reported as
+`SKIP ... already absent (HTTP 404)` rather than `FAIL`. The Python exit code
+stays `0`, so the bash orchestrator reaches the later stages (PR close,
+TFIOneGit worktree/branch cleanup, and the `claire issue reset --force`
+composition). Other HTTP errors (including 404 on `gh:reopen` or `gh:labels`,
+which would indicate a vanished issue) remain `FAIL` and still exit non-zero.
+
+---
+
 ## Tokens
 
 `GITHUB_TOKEN` is required for `--confirm`. Lookup order (first hit wins):

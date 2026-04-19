@@ -52,6 +52,12 @@ AGENT_LOGINS = frozenset(
 
 PBI_TITLE_RE = re.compile(r"PBI\s*#\s*(\d+)", re.IGNORECASE)
 
+# Delete actions where a 404 means the target is already in the desired state
+# (i.e. gone). For these, a 404 is SKIP, not FAIL — the repeat-reset path
+# depends on this to exit 0 so the bash orchestrator runs the remaining
+# cleanup stages (PR close, worktree cleanup, `claire issue reset`). See #60.
+IDEMPOTENT_DELETE_KINDS = frozenset({"gh:asset", "gh:comment"})
+
 
 # ---------------------------------------------------------------------------
 # Plan representation
@@ -342,10 +348,16 @@ def execute_plan(plan: Plan, client: GitHubClient, ctx: Context) -> list[str]:
                 continue
             results.append(f"OK   [{action.kind}] {action.describe}")
         except urllib.error.HTTPError as e:
-            results.append(
-                f"FAIL [{action.kind}] {action.describe}: HTTP {e.code} {e.reason}"
-            )
-            logger.warning("action failed: %s — HTTP %s", action.describe, e.code)
+            if e.code == 404 and action.kind in IDEMPOTENT_DELETE_KINDS:
+                results.append(
+                    f"SKIP [{action.kind}] {action.describe}: already absent (HTTP 404)"
+                )
+                logger.info("action skipped (already absent): %s", action.describe)
+            else:
+                results.append(
+                    f"FAIL [{action.kind}] {action.describe}: HTTP {e.code} {e.reason}"
+                )
+                logger.warning("action failed: %s — HTTP %s", action.describe, e.code)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
             results.append(
                 f"FAIL [{action.kind}] {action.describe}: {type(e).__name__}: {e}"

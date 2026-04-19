@@ -15,8 +15,10 @@ sys.path.insert(0, str(HERE.parent))
 from reset_pbi import (  # noqa: E402  (import after sys.path mutation)
     AGENT_LOGINS,
     Context,
+    Plan,
     build_plan,
     check_pr_merged,
+    execute_plan,
     is_agent_comment,
     parse_pbi_from_title,
     purge_state,
@@ -249,3 +251,107 @@ def test_purge_state_returns_false_when_absent(tmp_path: Path) -> None:
     f = tmp_path / "state.json"
     _write_state(f, {"processed_issues": {"99": "t"}})
     assert purge_state(f, 71) is False
+
+
+# ---------------------------------------------------------------------------
+# execute_plan — idempotent 404 handling on delete actions (issue #60)
+# ---------------------------------------------------------------------------
+
+
+import urllib.error  # noqa: E402
+
+
+class _FakeClient:
+    """Test double for GitHubClient. Each method can be wired to raise."""
+
+    def __init__(self, raise_code: int | None = None, raise_on: set[str] | None = None):
+        self.raise_code = raise_code
+        self.raise_on = raise_on or set()
+        self.calls: list[tuple[str, tuple]] = []
+
+    def _maybe_raise(self, op: str) -> None:
+        if self.raise_code is not None and op in self.raise_on:
+            raise urllib.error.HTTPError(
+                url="https://api.github.com/test",
+                code=self.raise_code,
+                msg="Not Found" if self.raise_code == 404 else "Server Error",
+                hdrs=None,  # type: ignore[arg-type]
+                fp=None,
+            )
+
+    def delete_release_asset(self, asset_id: int) -> None:
+        self.calls.append(("delete_release_asset", (asset_id,)))
+        self._maybe_raise("delete_release_asset")
+
+    def delete_issue_comment(self, comment_id: int) -> None:
+        self.calls.append(("delete_issue_comment", (comment_id,)))
+        self._maybe_raise("delete_issue_comment")
+
+    def set_issue_labels(self, issue_number: int, labels: list[str]) -> None:
+        self.calls.append(("set_issue_labels", (issue_number, labels)))
+        self._maybe_raise("set_issue_labels")
+
+    def reopen_issue(self, issue_number: int) -> None:
+        self.calls.append(("reopen_issue", (issue_number,)))
+        self._maybe_raise("reopen_issue")
+
+
+def _asset_plan() -> Plan:
+    plan = Plan()
+    plan.add(
+        "gh:asset",
+        "delete release asset 'proof-issue-71.mp4' from proof-issue-71-...",
+        asset_id=42,
+    )
+    return plan
+
+
+def _comment_plan() -> Plan:
+    plan = Plan()
+    plan.add(
+        "gh:comment",
+        "delete comment #12345 by claire-test-ai: 'hello'",
+        comment_id=12345,
+    )
+    return plan
+
+
+def test_execute_plan_404_on_asset_delete_is_skip() -> None:
+    """Idempotent asset delete: 404 = already gone = SKIP, not FAIL."""
+    client = _FakeClient(raise_code=404, raise_on={"delete_release_asset"})
+    ctx = _mk_ctx()
+    results = execute_plan(_asset_plan(), client, ctx)
+    assert len(results) == 1
+    assert results[0].startswith("SKIP "), f"expected SKIP, got: {results[0]}"
+    assert "already absent" in results[0] or "404" in results[0]
+
+
+def test_execute_plan_404_on_comment_delete_is_skip() -> None:
+    """Idempotent comment delete: 404 = already deleted = SKIP, not FAIL."""
+    client = _FakeClient(raise_code=404, raise_on={"delete_issue_comment"})
+    ctx = _mk_ctx()
+    results = execute_plan(_comment_plan(), client, ctx)
+    assert len(results) == 1
+    assert results[0].startswith("SKIP "), f"expected SKIP, got: {results[0]}"
+
+
+def test_execute_plan_non_404_asset_delete_still_fails() -> None:
+    """A 500 on asset delete is a real error and must stay FAIL."""
+    client = _FakeClient(raise_code=500, raise_on={"delete_release_asset"})
+    ctx = _mk_ctx()
+    results = execute_plan(_asset_plan(), client, ctx)
+    assert len(results) == 1
+    assert results[0].startswith("FAIL "), f"expected FAIL, got: {results[0]}"
+    assert "500" in results[0]
+
+
+def test_execute_plan_404_on_reopen_still_fails() -> None:
+    """Non-delete 404s (e.g. reopen on a vanished issue) stay FAIL — a 404
+    there means the target itself is gone, which is a real problem."""
+    plan = Plan()
+    plan.add("gh:reopen", "reopen issue #71")
+    client = _FakeClient(raise_code=404, raise_on={"reopen_issue"})
+    ctx = _mk_ctx(issue_state="CLOSED")
+    results = execute_plan(plan, client, ctx)
+    assert len(results) == 1
+    assert results[0].startswith("FAIL "), f"expected FAIL, got: {results[0]}"
