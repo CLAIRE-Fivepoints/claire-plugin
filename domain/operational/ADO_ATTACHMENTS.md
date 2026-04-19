@@ -2,42 +2,42 @@
 domain: fivepoints
 category: operational
 name: ADO_ATTACHMENTS
-title: "FivePoints — ADO Attachment Fetch & FDS Cache Drift Detection"
-keywords: [ado, azure-devops, attachment, fds, docx, cache, drift, image-index, claire-plugin, pbi]
-updated: 2026-04-16
+title: "FivePoints — ADO Attachment Fetch & FDS Manifest"
+keywords: [ado, azure-devops, attachment, fds, docx, fetch-on-use, manifest, sha256, claire-plugin, pbi]
+updated: 2026-04-19
 ---
 
-# FivePoints — ADO Attachment Fetch & FDS Cache Drift Detection
+# FivePoints — ADO Attachment Fetch & FDS Manifest
 
 > **Why this exists:** Issue #71 (PBI #18839 Client Face Sheet Code Gen) shipped bad specs
-> because the FDS attached to the parent PBI was never read. The cached version in
-> `fivepoints/domain/knowledge/FDS_CLIENT_MANAGEMENT.docx` was ~2 MB out of date AND did
-> not include the target chapter. This tool closes that gap: an agent can check the cache
-> against the fresh ADO attachment in one command.
+> because the FDS attached to the parent PBI was never read. The original response was to
+> cache the FDS docx in the plugin repo and hard-stop on drift, but that blocked every
+> analyst session on unrelated FDS edits and did not prevent a determined agent from
+> fabricating a Read Receipt. Issue #51 replaced the cache-in-git model with **fetch-on-use
+> + a mechanically-verified manifest**: the analyst's receipt carries hashes that a CI gate
+> on the dev PR recomputes from the live FDS. Fabricated receipts cannot pass the gate.
 
 ---
 
 ## Command
 
 ```bash
-claire fivepoints ado-fetch-attachments --pbi <id> [--diff-only] [--auto-issue]
+claire fivepoints ado-fetch-attachments --pbi <id> [--print-manifest]
 ```
 
 ### Modes
 
-| Mode | Writes | Opens issue | Use when |
-|------|--------|-------------|----------|
-| `--diff-only` | staging `.docx` only | no | pre-flight cache check (analyst/dev) |
-| (neither flag) | staging + images + index + issue body | no | inspect fresh FDS locally |
-| `--auto-issue` | staging + images + index + issue body | yes | report drift to the plugin repo |
+| Mode | Stdout | Use when |
+|------|--------|----------|
+| (no flag)          | (logs only) | you just want the extracted FDS on disk to read locally |
+| `--print-manifest` | JSON manifest | analyst posting the FDS Read Receipt, CI gate recomputing hashes |
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0`  | cache matches (or PBI has no attachments) — no action needed |
-| `1`  | drift detected — staging populated, issue body generated |
-| `2`  | error: PAT missing, API failure, or `gh issue create` failed |
+| `0`  | success (or PBI has no attachments) |
+| `2`  | error: PAT missing, ADO API failure, …   |
 
 ---
 
@@ -47,18 +47,16 @@ claire fivepoints ado-fetch-attachments --pbi <id> [--diff-only] [--auto-issue]
    `GET /_apis/wit/workitems/{pbi}?$expand=relations&api-version=7.1`
 2. **Filter** `relations[].rel == "AttachedFile"`.
 3. **Download** each attachment to `~/TFIOneGit/.fds-cache/{pbi}/`.
-4. **Compare** MD5 against `<plugin>/domain/knowledge/FDS_<NAME>.docx`.
-   - Match → print `✅ cache up-to-date` and exit `0`.
-   - Drift → proceed to extraction (never overwrite the cache).
+4. **Reuse if MD5 matches** — if the staging copy already matches the live attachment,
+   skip re-extract (the manifest is still emitted).
 5. **Extract** images with section anchors:
    - Walk `word/document.xml` in order, tracking the nearest preceding heading.
    - Skip `<w:ins>` runs (unaccepted insertions). Keep `<w:del>` content.
    - Write PNG/JPEG + per-image `.md` sidecar describing section + surrounding text.
-6. **Generate** `FDS_<NAME>_IMAGE_INDEX.md` — a table mapping every image to its section.
-7. **Section diff** — extract headings from cached + fresh, list added/removed.
-8. **Issue body** — assemble `drift_issue_<NAME>.md` (MD5 delta, section delta, image count).
-9. **With `--auto-issue`:** bash reads `drift_action_<NAME>.json` and runs `gh issue create`
-   against `CLAIRE-Fivepoints/claire-plugin`.
+6. **Write section markdown** — a single `FDS_<NAME>.md` with one heading per section,
+   each carrying a `<!-- sha256: ... | pages X-Y -->` marker.
+7. **Emit the manifest** (with `--print-manifest`) to stdout — one JSON object per
+   invocation. See structure below.
 
 ---
 
@@ -67,17 +65,61 @@ claire fivepoints ado-fetch-attachments --pbi <id> [--diff-only] [--auto-issue]
 ```
 ~/TFIOneGit/.fds-cache/{pbi}/
 ├── 4_-_Client_Management_1_.docx       # fresh attachment (as downloaded)
+├── FDS_CLIENT_MANAGEMENT.md             # full doc, section by section (with sha256 markers)
 ├── FDS_CLIENT_MANAGEMENT_images/
 │   ├── image001.png
-│   ├── image001.md                     # section + surrounding paragraphs
+│   ├── image001.md                      # section + surrounding paragraphs
 │   └── ...
-├── FDS_CLIENT_MANAGEMENT_IMAGE_INDEX.md
-├── drift_issue_CLIENT_MANAGEMENT.md    # issue body
-└── drift_action_CLIENT_MANAGEMENT.json # bash reads this for --auto-issue
+└── FDS_CLIENT_MANAGEMENT_IMAGE_INDEX.md
 ```
 
-The **domain cache is never written**. Cache updates flow through a human-reviewed PR
-against `fivepoints/domain/knowledge/`.
+Nothing is written to the plugin repo. The staging dir is gitignored — it's session-local.
+
+---
+
+## Manifest structure (`--print-manifest`)
+
+```json
+{
+  "pbi": 17113,
+  "org": "FivePointsTechnology",
+  "project": "TFIOne",
+  "fetched_at": "2026-04-19T20:45:00Z",
+  "staging_dir": "/Users/you/TFIOneGit/.fds-cache/17113",
+  "docs": [
+    {
+      "docx_filename": "4 - Client Management(1).docx",
+      "docx_md5": "f636b255be9f7e3ab3760b7d2b5f312e",
+      "docx_bytes": 6459581,
+      "doc_name": "CLIENT_MANAGEMENT",
+      "reused": false,
+      "pages_supported": true,
+      "sections": {
+        "Client Face Sheet": {
+          "sha256": "<64 hex chars of the section paragraphs>",
+          "pages": [142, 157],
+          "image_refs": ["image010.png", "image011.png"]
+        }
+      }
+    }
+  ]
+}
+```
+
+### Fields
+
+- `docx_md5` — streaming MD5 of the downloaded docx bytes. Equals the MD5 an independent
+  re-fetch would produce.
+- `docx_bytes` — size of the downloaded file.
+- `reused` — `true` if the staging copy already matched; extraction was skipped.
+- `pages_supported` — `true` if the docx carries `<w:lastRenderedPageBreak/>` markers.
+  Word emits these when rendering for print/save; if the docx was programmatically
+  generated and never opened in Word, pages will be `null`.
+- `sections[<title>].sha256` — `sha256` over `"\n".join(section.paragraphs)` (UTF-8).
+  Identical content → identical hash. Stable across re-fetches.
+- `sections[<title>].pages` — `[start, end]` or `null`.
+- `sections[<title>].image_refs` — list of extracted image filenames anchored to this
+  section.
 
 ---
 
@@ -98,33 +140,40 @@ No ADO call is attempted without a PAT.
 
 ### Analyst (`CHECKLIST_ANALYST.md`)
 
-Mandatory pre-flight before writing specs:
+Run once at session start, save the manifest, quote hashes in the FDS Read Receipt:
 
 ```bash
-claire fivepoints ado-fetch-attachments --pbi <parent> --diff-only
+claire fivepoints ado-fetch-attachments --pbi <parent> --print-manifest > /tmp/fds-manifest.json
 ```
 
-- Exit 0 → cache is fresh, proceed with `claire domain read fivepoints knowledge FDS_<NAME>_SCREENS_<section>`.
-- Exit 1 → cache is stale. Post a comment asking the plugin team to refresh the cache
-  (or run with `--auto-issue` to open the drift issue yourself). Do not write specs
-  against stale cache.
+Read the extracted markdown:
+
+```bash
+cat ~/TFIOneGit/.fds-cache/<parent>/FDS_<NAME>.md
+```
+
+Quote in the receipt:
+- `docx_md5` from `docs[].docx_md5`
+- `section_sha256` from `docs[].sections[<title>].sha256`
+- 5–10 verbatim labels copied from `FDS_<NAME>.md`
 
 ### Dev (`CHECKLIST_DEV_PIPELINE.md`)
 
-`[1.5/11]` FDS cross-check, added after `[1/11]` context load:
+Same command — but the dev reads the section to confirm scope. The dev does **not**
+manually re-verify the analyst's receipt; the `fds-verify.yml` CI gate on the PR does
+that mechanically.
 
-```bash
-claire fivepoints ado-fetch-attachments --pbi <parent> --diff-only
-```
+### CI gate (`fds-verify.yml`, `CLAIRE-Fivepoints/fivepoints`)
 
-- Exit 0 → cross-check the analyst's specs against
-  `FDS_<NAME>_SCREENS_<section>.md` + `FDS_<NAME>_IMAGE_INDEX.md`.
-- Exit 1 → the analyst should have blocked; do not implement on stale specs.
+On every push to a dev PR:
+1. Parse the analyst's `**FDS Read Receipt**` comment from the linked issue.
+2. Re-run `ado-fetch-attachments --pbi <parent-pbi> --print-manifest` using a read-only
+   PAT stored as a repo secret.
+3. Compare `docx_md5` and `section_sha256` to the receipt.
+4. `grep` each verbatim label in the fresh `FDS_<NAME>.md`. Every label must match exactly.
+5. On any mismatch → fail the check with a diff of receipt-claimed vs. live.
 
-### Gatekeeper review
-
-PR reviewers should confirm the PR description references the specific FDS section
-and image number from the IMAGE_INDEX.
+Without a passing `fds-verify` check, the dev PR cannot merge.
 
 ---
 
@@ -133,8 +182,8 @@ and image number from the IMAGE_INDEX.
 | Symptom | Fix |
 |---------|-----|
 | `No Azure DevOps PAT found` | set `AZURE_DEVOPS_PAT` in `~/.config/claire/.env` |
-| `gh issue create failed: authentication required` | run `gh auth status` and refresh if needed |
-| No cached counterpart matched | attachment name does not map to `FDS_<TOKEN>.docx` — rename, or prime the cache with a first-pass PR |
+| Section sha256 mismatch in CI | analyst fabricated or stale receipt — re-read the section and repost |
+| Verbatim label not found in fresh markdown | analyst paraphrased — copy the label verbatim from `FDS_<NAME>.md` |
 
 ---
 
@@ -142,4 +191,5 @@ and image number from the IMAGE_INDEX.
 
 - `claire domain read fivepoints operational ADO_PAT_GUIDE` — full PAT setup
 - `claire domain read fivepoints operational AZURE_DEVOPS_ACCESS` — org/project/repo identifiers
-- Issue #71 (CLAIRE-Fivepoints/fivepoints) — incident that motivated this tool
+- Issue #71 (CLAIRE-Fivepoints/fivepoints) — incident that motivated the original tool
+- Issue #51 (CLAIRE-Fivepoints/claire-plugin) — fetch-on-use + manifest redesign

@@ -32,6 +32,16 @@ pr: "#2312"
 - [ ] Read ADO work item via PAT (read-only) — title, description, acceptance criteria,
       comments, AND parent items (Feature/Epic) for full work context
       PAT loaded from: ~/.config/claire/clients/fivepoints/config.yaml (ado.pat)
+- [ ] FDS fetch-on-use + manifest — download the fresh FDS and emit the manifest:
+      ```bash
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --print-manifest > /tmp/fds-manifest.json
+      ```
+      → Extracts the docx to `~/TFIOneGit/.fds-cache/<parent-pbi>/` (gitignored).
+        Reads `FDS_<NAME>.md` from staging — NOT a committed cache.
+      → The manifest carries `docx_md5` + per-section `{sha256, pages, image_refs}`.
+        You quote these in the FDS Read Receipt; a CI gate on the dev PR
+        recomputes them. A fabricated receipt cannot pass the gate.
+      Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
 - [ ] Deep dive the assigned task — identify the FDS section to implement:
       - Task ID from the GitHub issue title (use this for branch naming, NOT the parent PBI ID)
       - Read the ADO task description to identify which FDS section/subsection is assigned

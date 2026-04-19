@@ -88,42 +88,28 @@ Read this before starting — it has scope guard rules and detailed patterns.
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
-- [ ] FDS cache pre-flight — check domain cache is in sync with the fresh PBI attachment:
+- [ ] FDS fetch-on-use + manifest — download the fresh attachment, extract
+      sections, emit the manifest you will quote in your receipt:
       ```bash
-      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
+      claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --print-manifest > /tmp/fds-manifest.json
       ```
-      - Exit 0 → cache matches → read the existing `FDS_<NAME>_SCREENS_*.md`
-      - Exit 1 → cache is stale. **Refresh it yourself** by running the same
-        command without `--diff-only`:
-        ```bash
-        claire fivepoints ado-fetch-attachments --pbi <parent-pbi>
-        ```
-        That extracts the .docx, splits it into per-section markdown
-        (`FDS_<NAME>_SCREENS_*.md`), and builds the image index — into staging
-        (`~/TFIOneGit/.fds-cache/<pbi>/`). Read the new section files from
-        staging, then commit the fresh cache to the plugin repo so subsequent
-        sessions hit a fresh `--diff-only` ✅.
-        **Do NOT write specs from stale cache or from the raw ADO docx.**
+      - No cache-in-git, no drift check. The docx is downloaded fresh into
+        `~/TFIOneGit/.fds-cache/<parent-pbi>/` (already gitignored). If the
+        local copy already matches the live attachment the extraction is
+        skipped, but the manifest is always regenerated.
+      - Inspect the extracted sections:
+        `cat ~/TFIOneGit/.fds-cache/<parent-pbi>/FDS_<NAME>.md`
+      - The manifest carries `docx_md5`, `docx_bytes`, and per-section
+        `{sha256, pages, image_refs}`. You will quote these in the receipt.
+      - If the PBI has no attachments → walk the parent Feature/Epic. If after
+        PBI → Feature → Epic there is still no FDS attachment → trigger the
+        **Discord Ping Protocol** (see persona top), do NOT speculate.
       Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
+      ⚠️ Missing the FDS is the #1 cause of wrong specs. Do not skip this step.
 - [ ] Read ADO work item — ALL fields AND all attachments:
       Read: title, description, acceptance criteria, parent items (PBI → Feature → Epic).
-      ⚠️ "Read the work item" means ALL of it — fields AND attachments. Never skip attachments.
-      If the description mentions an attached document ("see attached FDS", "latest version attached",
-      etc.) → YOU MUST download and read that attachment before continuing.
-
-      Fetch attachments + build the cache (single command, end-to-end):
-        ```bash
-        claire fivepoints ado-fetch-attachments --pbi <pbi-id>
-        ```
-        → Downloads the .docx, splits into per-section markdown, builds the
-          image index. PAT comes from `~/.config/claire/.env` automatically.
-          Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
-        → If the PBI has no attachment → re-run with the parent Feature/Epic
-          ID until you find the FDS. The script handles relations correctly.
-        → If after walking PBI → Feature → Epic there is still no FDS attachment
-          → trigger the **Discord Ping Protocol** (see persona top), do NOT
-          speculate.
-      ⚠️ Missing the FDS is the #1 cause of wrong specs. Do not skip this step.
+      The attachments are already extracted to staging by the previous step —
+      read `FDS_<NAME>.md` there, NOT the raw docx.
 
 - [ ] Identify the specific target section — NOT the parent document:
       The ADO description often names a broad document ("Client Management FDS Chapter 10").
@@ -160,17 +146,28 @@ Read this before starting — it has scope guard rules and detailed patterns.
       double-quoted string preserves the checklist indentation and GitHub
       markdown then renders the body as a code block instead of a list.
 
+      The receipt must carry the hashes from the manifest and 5-10 verbatim
+      labels copied from the extracted section markdown. A CI gate on the dev
+      PR re-runs `ado-fetch-attachments --print-manifest` and compares — any
+      mismatch fails the merge. Fabricated receipts cannot pass the gate.
+
 gh issue comment <N> --body "$(cat <<'EOF'
 **FDS Read Receipt**
 - Document: <exact docx filename as attached to the PBI>
-- Section: <exact section number + title> (pages X-Y)
+- docx_md5: `<md5 from manifest.docs[].docx_md5>`
+- Section: <exact section title as it appears in the FDS> (pages X-Y)
+- section_sha256: `<sha256 from manifest.docs[].sections[<title>].sha256>`
+- Image refs: <comma-separated list from manifest.docs[].sections[<title>].image_refs>
+- Verbatim labels (5-10, copied verbatim from the extracted section markdown —
+  field names, button text, screen titles, error copy):
+    - "<label 1>"
+    - "<label 2>"
+    - "<label 3>"
+    - ... (5 minimum, 10 max)
 - Screens identified: <count>
-- Menu items: <count>
 - Sub-pages per screen: <exhaustive list, one line per screen>
   Example:
     - Client Face Sheet: Demographics, Emergency Contacts, Household Members
-    - Medical File: Allergies, Medications, Diagnoses, Immunizations
-- Labels verbatim from FDS: <list — no renaming, no guessing>
 EOF
 )"
 
@@ -179,6 +176,9 @@ EOF
          — the receipt body MUST start with `**FDS Read Receipt**` (no leading
          whitespace, no prefix) for that selector to find it. If the receipt
          is missing or incomplete, the dev will block and ask for it.
+      ⚠️ The CI gate (`fds-verify.yml` in the app repo) re-runs the manifest
+         and greps every verbatim label in the fresh section markdown. A
+         hallucinated label → failed check → blocked merge.
       ⚠️ HARD STOP: Do NOT write specs or create the branch until this receipt is posted.
 
 - [ ] Deep dive the assigned task — identify the FDS section to implement:
@@ -190,16 +190,15 @@ EOF
       claire domain search "<section name from issue>"
       Find FDS section and any existing section domain docs
 - [ ] Identify and post the FDS section for this PBI:
-      From the domain search results (or FDS source documents), identify the FDS section
-      number, title, AND **the exact source file path** in the cache
-      (e.g., `domain/knowledge/FDS_CLIENT_SCREENS_s16.md`).
-      Then post it as a comment on the GitHub issue:
+      From the extracted `FDS_<NAME>.md` in staging (not a committed cache —
+      it is regenerated every fetch), identify the section title + page range
+      + its sha256 from the manifest. Post it as a comment on the GitHub issue:
       gh issue comment <N> --repo claire-labs/fivepoints-test \
-        --body "**FDS Section:** 16.9 — <Title> (\`<exact/cache/path/FDS_NAME_SCREENS_sXX.md>\`)"
+        --body "**FDS Section:** <section title> (pages X-Y, sha256 \`<short>\`)"
       ⚠️ MANDATORY — E2E test checks for this comment before transition.
-      ⚠️ The exact file path is mandatory — the dev's [1.5/12] FDS Cross-Check
-         opens this file directly to verify your spec. A bare section number
-         forces them to grep, which is brittle.
+      ⚠️ The section title must match the one quoted in the Read Receipt — the
+         CI gate keys on the receipt's title to look up the section in the
+         fresh manifest.
 - [ ] Pull latest dev branch into TFIOneGit:
       cd ~/TFIOneGit && git checkout dev && git pull origin dev && git push github dev
       → Both remotes must agree on dev tip before pre-flight `git fetch github` lookups.
@@ -312,9 +311,8 @@ EOF
 | Read a specific domain doc | `claire domain read fivepoints <category> <name>` |
 | Wait for response | `Bash(command: "claire wait --issue <N>", run_in_background: true)` |
 | **`claire fivepoints` commands** | |
-| Fetch ADO attachments + build cache | `claire fivepoints ado-fetch-attachments --pbi <pbi-id>` |
-| Diff cache vs fresh attachment (pre-flight) | `claire fivepoints ado-fetch-attachments --pbi <pbi-id> --diff-only` |
-| Open drift-tracking issue on cache mismatch | `claire fivepoints ado-fetch-attachments --pbi <pbi-id> --auto-issue` |
+| Fetch FDS into staging + extract sections | `claire fivepoints ado-fetch-attachments --pbi <pbi-id>` |
+| Fetch FDS + emit manifest (for Read Receipt) | `claire fivepoints ado-fetch-attachments --pbi <pbi-id> --print-manifest` |
 | One-shot PR/issue activity wait | `claire fivepoints wait` |
 | Reply to an ADO PR thread (analyst review) | `claire fivepoints reply --pr <N> --thread <T> --body "<msg>"` |
 | ADO → GitHub bridge daemon | `claire fivepoints bridge {start\|stop\|status\|logs}` |
