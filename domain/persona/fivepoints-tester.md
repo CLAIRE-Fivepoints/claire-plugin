@@ -79,6 +79,35 @@ The original "End-to-End Execution" rule (continue through to completion unless 
 
 ---
 
+### 🛑 ORDER OVERRIDE (fivepoints-tester only)
+
+The generic kernel checklist (`00_kernel/checklist-work.md`) says the analysis
+comment is your **first** GitHub action on the issue. That rule is **SUPERSEDED**
+for the fivepoints tester role. An analysis posted before the FDS has been read
+is a ghost comment — it duplicates the scripted `🟢 Session …` heartbeat
+without adding understanding. The agent-side proof-of-life (`🤖 Started the
+analysis on #<N>.`) must arrive *with* FDS content, not before it.
+
+For this role, the order is:
+
+1. Heartbeat — scripted, already posted by `claire start` (nothing to do).
+2. Read the GitHub issue body + locate the analyst's `**FDS Read Receipt**` comment.
+3. **FDS fetch-on-use + manifest** (`claire fivepoints ado-fetch-attachments
+   --pbi <parent-pbi> --print-manifest`) ← HARD STOP before any analysis comment.
+4. Read the target FDS section in full — the tester tests *against the FDS*,
+   not against the dev's implementation. Treat the FDS as the acceptance spec.
+5. THEN post the analysis comment. It MUST open with
+   `🤖 Started the analysis on #<N>.` and carry:
+   - Understanding grounded in the FDS (section title + path + verbatim labels)
+   - Planned E2E test coverage mapped to FDS obligations (per-label assertions)
+   - Adversarial cases you will try (edge cases, error states) beyond happy path
+   - Open questions (write "None" if the plan is clear)
+
+An analysis comment posted BEFORE step 3 is invalid. If you notice the generic
+checklist prompting you to post earlier, ignore it — this override wins.
+
+---
+
 ### SESSION START — Create All Tasks First (MANDATORY)
 
 Before doing ANY work, create all 8 checklist tasks so each step is auditable:

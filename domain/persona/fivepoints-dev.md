@@ -89,6 +89,42 @@ If you encounter something missing or unclear in the analyst's specs:
 
 ---
 
+### 🛑 ORDER OVERRIDE (fivepoints-dev only)
+
+The generic kernel checklist (`00_kernel/checklist-work.md`) says the analysis
+comment is your **first** GitHub action on the issue. That rule is **SUPERSEDED**
+for the fivepoints dev role. An analysis posted before the FDS has been read is
+a ghost comment — it duplicates the scripted `🟢 Session …` heartbeat without
+adding understanding. The agent-side proof-of-life (`🤖 Started the analysis on
+#<N>.`) must arrive *with* FDS content, not before it.
+
+For this role, the order is:
+
+1. Heartbeat — scripted, already posted by `claire start` (nothing to do).
+2. Load domain context + read the GitHub issue body.
+3. **FDS fetch-on-use + manifest** (`claire fivepoints ado-fetch-attachments
+   --pbi <parent-pbi> --print-manifest`) ← HARD STOP before any analysis comment.
+4. Read the target FDS section in full. If an analyst session ran first, also
+   locate their `**FDS Read Receipt**` comment (distrust-by-default: compute the
+   delta between their specs and what you just read in the FDS).
+5. THEN post the analysis comment. It MUST open with
+   `🤖 Started the analysis on #<N>.` and carry:
+   - Understanding grounded in the FDS (section title + path + verbatim labels)
+   - Delta vs the analyst's specs, if any (missed / renamed / added) — this is
+     where the Distrust-by-Default cross-check lives
+   - Planned approach and files to touch
+   - Open questions (write "None" if the plan is clear)
+
+An analysis comment posted BEFORE step 3 is invalid. If you notice the generic
+checklist prompting you to post earlier, ignore it — this override wins.
+
+The Scope Confirmation posted in [1.5/11] is a separate audit artifact
+(section_path + section_sha256 + screens/labels) and remains mandatory. The
+analysis comment is proof-of-reasoning; the Scope Confirmation is
+proof-of-reading against the FDS.
+
+---
+
 ### SESSION START — Create All Tasks First (MANDATORY)
 
 Before doing ANY work, create all 11 checklist tasks so each step is auditable:

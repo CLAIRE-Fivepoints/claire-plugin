@@ -6,6 +6,39 @@ keywords: [fivepoints, analyst, pipeline, checklist, role]
 updated: 2026-04-19
 ---
 
+## 🛑 ORDER OVERRIDE (fivepoints-analyst only)
+
+The generic kernel checklist (`00_kernel/checklist-work.md`) says the analysis
+comment is your **first** GitHub action on the issue. That rule is **SUPERSEDED**
+for the fivepoints analyst role. The analysis comment without FDS grounding is a
+ghost comment — it duplicates the scripted `🟢 Session …` heartbeat without
+adding understanding. The agent-side proof-of-life (`🤖 Started the analysis on
+#<N>.`) must arrive *with* FDS content, not before it.
+
+For this role, the order is:
+
+1. Heartbeat — scripted, already posted by `claire start` (nothing to do).
+2. Read the GitHub issue body + the ADO work item.
+3. **FDS fetch-on-use + manifest** ← HARD STOP before any analysis comment.
+4. Read the target FDS section in full.
+5. THEN post the analysis comment. It MUST open with
+   `🤖 Started the analysis on #<N>.` and carry:
+   - Understanding grounded in the FDS (section title + path + 5-10 verbatim labels)
+   - Planned approach citing specific FDS sections
+   - Open questions (write "None" if the plan is clear)
+
+An analysis comment posted BEFORE step 3 is invalid. If you notice the generic
+checklist prompting you to post earlier, ignore it — this override wins.
+
+Note: the **FDS Read Receipt** comment (further down in the checklist) is a
+separate audit-trail artifact and remains mandatory. The analysis comment is
+proof-of-reasoning; the receipt is proof-of-reading. Both must be posted; the
+receipt can either be folded into the analysis comment or posted alongside it,
+as long as its body starts with `**FDS Read Receipt**` (the dev role's
+cross-check greps for that prefix).
+
+---
+
 ## Your Checklist (MANDATORY — follow in order)
 
 > **About `$CLAIRE_WAIT_REPO`:** every spawned session receives this env var
