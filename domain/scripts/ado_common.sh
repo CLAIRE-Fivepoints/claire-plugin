@@ -61,6 +61,26 @@ _ado_client_config_get() {
     yq eval "${yq_path} // \"\"" "$config" 2>/dev/null
 }
 
+# Read a KEY=VALUE pair from a shell-sourceable .env file.
+# Tolerates an optional `export ` prefix and strips matched surrounding
+# single/double quotes, matching what `source <file>` would produce.
+# Usage: _ado_env_get <file> <key>
+# Prints the value on stdout (empty if not found).
+_ado_env_get() {
+    local file="$1"
+    local key="$2"
+    [[ -f "$file" ]] || return 0
+    local line
+    line=$(grep -E "^(export[[:space:]]+)?${key}=" "$file" 2>/dev/null | head -1 || true)
+    [[ -z "$line" ]] && return 0
+    local value="${line#*=}"
+    # Strip matched surrounding single or double quotes
+    if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
+        value="${BASH_REMATCH[1]}"
+    fi
+    printf '%s\n' "$value"
+}
+
 # Initialize Azure DevOps connection.
 # PAT priority:
 #   0. AZURE_DEVOPS_WRITE_PAT env var (write access, for ado-push)
@@ -93,7 +113,7 @@ ado_init() {
     # 0b. AZURE_DEVOPS_WRITE_PAT from ~/.config/claire/.env
     if [[ -z "$effective_pat" && -f "$config_env" ]]; then
         local write_pat
-        write_pat=$(grep -E '^AZURE_DEVOPS_WRITE_PAT=' "$config_env" 2>/dev/null | head -1 | cut -d= -f2- || true)
+        write_pat=$(_ado_env_get "$config_env" AZURE_DEVOPS_WRITE_PAT)
         if [[ -n "$write_pat" ]]; then
             effective_pat="$write_pat"
             export AZURE_DEVOPS_WRITE_PAT="$write_pat"
@@ -117,7 +137,7 @@ ado_init() {
     # 3. ~/.config/claire/.env (AZURE_DEVOPS_DEV_PAT, then AZURE_DEVOPS_PAT)
     if [[ -z "$effective_pat" && -f "$config_env" ]]; then
         local dev_pat
-        dev_pat=$(grep -E '^AZURE_DEVOPS_DEV_PAT=' "$config_env" 2>/dev/null | head -1 | cut -d= -f2-)
+        dev_pat=$(_ado_env_get "$config_env" AZURE_DEVOPS_DEV_PAT)
         if [[ -n "$dev_pat" ]]; then
             effective_pat="$dev_pat"
             export AZURE_DEVOPS_DEV_PAT="$dev_pat"
@@ -130,7 +150,7 @@ ado_init() {
 
     if [[ -z "$effective_pat" && -f "$config_env" ]]; then
         local config_pat
-        config_pat=$(grep -E '^AZURE_DEVOPS_PAT=' "$config_env" 2>/dev/null | head -1 | cut -d= -f2-)
+        config_pat=$(_ado_env_get "$config_env" AZURE_DEVOPS_PAT)
         if [[ -n "$config_pat" ]]; then
             effective_pat="$config_pat"
             export AZURE_DEVOPS_PAT="$config_pat"
