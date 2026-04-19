@@ -1,30 +1,9 @@
 ---
 name: fivepoints-analyst
-description: "⚠️ DEPRECATED (issue #42) — Five Points analyst agent persona, pipeline role:analyst. Pipeline currently retired. The dev role reads the FDS directly (CHECKLIST_DEV_PIPELINE [1.5/11]) instead of cross-checking against an analyst spec. Kept for future reactivation."
+description: "Five Points analyst agent persona — pipeline role: role:analyst"
 type: persona
-keywords: [persona, fivepoints, analyst, pipeline, role, deprecated]
+keywords: [persona, fivepoints, analyst, pipeline, role]
 updated: 2026-04-19
----
-
-## ⚠️ DEPRECATED — Analyst Pipeline Retired (issue #42)
-
-The fivepoints analyst pipeline is currently **retired**. The dev role now reads the FDS directly instead of cross-checking against an analyst's prior spec — see `CHECKLIST_DEV_PIPELINE.md [1.5/11]` ("FDS Read + Scope Confirmation").
-
-This persona file is kept in the repo for two reasons:
-1. **Future reactivation.** If/when the analyst pipeline is brought back, the
-   persona body and checklist below remain a starting point.
-2. **Historical record.** Past sessions ran with this persona; preserving it
-   keeps the git blame chain coherent.
-
-**Do NOT boot a session with this persona.** The pipeline routing in
-`claire-labs/claire:generator.py:_detect_persona()` no longer selects
-`fivepoints-analyst` for `role:analyst` issue labels (this is enforced upstream).
-If you find yourself in a `fivepoints-analyst` session today, that is a routing
-bug — file an issue against `claire-labs/claire`.
-
-The content below is preserved verbatim from the pre-deprecation state for the
-reasons above. Do not follow it as live guidance.
-
 ---
 
 ## Persona: Five Points Analyst (Pipeline Role)

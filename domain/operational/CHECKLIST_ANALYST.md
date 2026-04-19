@@ -1,26 +1,9 @@
 ---
 name: CHECKLIST_ANALYST
-description: "⚠️ DEPRECATED (issue #42) — Five Points pipeline role:analyst session checklist. Analyst pipeline currently retired; the dev role reads the FDS directly per CHECKLIST_DEV_PIPELINE [1.5/11]. Kept for future reactivation."
+description: "Five Points — Pipeline role:analyst session checklist"
 type: operational
-keywords: [fivepoints, analyst, pipeline, checklist, role, deprecated]
+keywords: [fivepoints, analyst, pipeline, checklist, role]
 updated: 2026-04-19
----
-
-# ⚠️ DEPRECATED — Analyst Pipeline Retired (issue #42)
-
-This checklist is no longer the live source of truth for any session. The
-analyst pipeline is retired — the dev role reads the FDS directly via
-`CHECKLIST_DEV_PIPELINE.md [1.5/11]` ("FDS Read + Scope Confirmation").
-
-**Do not run this checklist as live guidance.** It is preserved for two reasons:
-1. **Future reactivation.** If the analyst pipeline is brought back, this
-   checklist is the starting point.
-2. **Historical record.** Past sessions ran on this checklist; preserving it
-   keeps the audit trail coherent.
-
-When the pipeline is reactivated, restore the deprecation header to a real
-description and remove this banner.
-
 ---
 
 ## Your Checklist (MANDATORY — follow in order)
