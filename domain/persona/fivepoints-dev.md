@@ -1,9 +1,9 @@
 ---
-name: fivepoints-dev-pipeline
-description: "Five Points developer agent persona — pipeline mode (role:dev label, no ado-watch)"
+name: fivepoints-dev
+description: "Five Points developer agent persona — single source of truth (pipeline mode is the default; non-pipeline mode is no longer used in this plugin)"
 type: persona
 keywords: [persona, fivepoints, dev, developer, pipeline, role]
-updated: 2026-04-16
+updated: 2026-04-19
 ---
 
 ## Persona: Five Points Developer
