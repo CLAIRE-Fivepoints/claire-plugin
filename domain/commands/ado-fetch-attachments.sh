@@ -64,21 +64,25 @@ AZURE_DEVOPS_WRITE_PAT → AZURE_DEVOPS_DEV_PAT → AZURE_DEVOPS_PAT → ~/.conf
       "doc_name": "CLIENT_MANAGEMENT",
       "reused": false,
       "pages_supported": true,
-      "sections": {
-        "Client Face Sheet": {
+      "sections": [
+        {
+          "title": "Client Face Sheet",
+          "path": "Client Management > Client Face Sheet",
+          "level": 2,
           "sha256": "<sha256 of section paragraphs>",
           "pages": [142, 157],
           "image_refs": ["image010.png", "image011.png"]
         }
-      }
+      ]
     }
   ]
 }
 
 ## Staging reuse
-On second invocation, if the local docx already matches the live attachment
-MD5, extraction is skipped. This makes the command cheap to call repeatedly
-inside a session.
+On second invocation, if the local docx's MD5 still matches the live
+attachment, the extract step (docx parse + images + IMAGE_INDEX + section
+markdown) is skipped. The network download always happens — ADO gives no
+cheap "unchanged" signal on attachment URLs.
 HELP
 }
 

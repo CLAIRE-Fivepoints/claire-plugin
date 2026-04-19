@@ -94,13 +94,16 @@ Nothing is written to the plugin repo. The staging dir is gitignored — it's se
       "doc_name": "CLIENT_MANAGEMENT",
       "reused": false,
       "pages_supported": true,
-      "sections": {
-        "Client Face Sheet": {
+      "sections": [
+        {
+          "title": "Client Face Sheet",
+          "path": "Client Management > Client Face Sheet",
+          "level": 2,
           "sha256": "<64 hex chars of the section paragraphs>",
           "pages": [142, 157],
           "image_refs": ["image010.png", "image011.png"]
         }
-      }
+      ]
     }
   ]
 }
@@ -111,15 +114,22 @@ Nothing is written to the plugin repo. The staging dir is gitignored — it's se
 - `docx_md5` — streaming MD5 of the downloaded docx bytes. Equals the MD5 an independent
   re-fetch would produce.
 - `docx_bytes` — size of the downloaded file.
-- `reused` — `true` if the staging copy already matched; extraction was skipped.
+- `reused` — `true` when the staging copy's MD5 still matched the live download, so the
+  extract step (docx parse + images + section markdown + IMAGE_INDEX) was skipped. The
+  network download always happens — ADO does not give us a cheap "unchanged" signal.
 - `pages_supported` — `true` if the docx carries `<w:lastRenderedPageBreak/>` markers.
   Word emits these when rendering for print/save; if the docx was programmatically
   generated and never opened in Word, pages will be `null`.
-- `sections[<title>].sha256` — `sha256` over `"\n".join(section.paragraphs)` (UTF-8).
-  Identical content → identical hash. Stable across re-fetches.
-- `sections[<title>].pages` — `[start, end]` or `null`.
-- `sections[<title>].image_refs` — list of extracted image filenames anchored to this
-  section.
+- `sections` — **list** (not dict), in document order. Titles like "Field Descriptions"
+  repeat under many parents; only `path` is unique.
+- `sections[].title` — the heading text as it appears in the docx.
+- `sections[].path` — ancestor chain joined with ` > ` (e.g. "Client Management > Client
+  Face Sheet"). The CI gate keys on this to look up the section from the Read Receipt.
+- `sections[].level` — 1 = H1, 2 = H2, …
+- `sections[].sha256` — `sha256` over `"\n".join(section.paragraphs)` (UTF-8). Identical
+  content → identical hash. Stable across re-fetches.
+- `sections[].pages` — `[start, end]` or `null`.
+- `sections[].image_refs` — list of extracted image filenames anchored to this section.
 
 ---
 
@@ -154,7 +164,8 @@ cat ~/TFIOneGit/.fds-cache/<parent>/FDS_<NAME>.md
 
 Quote in the receipt:
 - `docx_md5` from `docs[].docx_md5`
-- `section_sha256` from `docs[].sections[<title>].sha256`
+- `section_path` + `section_sha256` from the target entry in `docs[].sections[]`
+  (the path is the unique key; bare titles can collide)
 - 5–10 verbatim labels copied from `FDS_<NAME>.md`
 
 ### Dev (`CHECKLIST_DEV_PIPELINE.md`)

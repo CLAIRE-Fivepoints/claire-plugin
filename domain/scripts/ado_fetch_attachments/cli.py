@@ -6,14 +6,18 @@ Fetch-on-use model (issue #51):
     python3 -m ado_fetch_attachments.cli --pbi 17113 --print-manifest
 
 Behavior:
-    * Download every ``AttachedFile`` relation on the PBI into the local staging
-      dir (``~/TFIOneGit/.fds-cache/{pbi}/``).
-    * If a staging copy already exists and its MD5 matches the live attachment,
-      skip re-extract (idempotent).
-    * Otherwise, re-extract images, IMAGE_INDEX, and the per-section markdown.
-    * ``--print-manifest`` emits a single JSON object to stdout describing every
-      docx + every section (sha256, page range, image refs). This is the contract
-      the analyst's FDS Read Receipt quotes and the CI gate recomputes.
+    * Download every ``AttachedFile`` relation on the PBI to a ``.probe`` sibling
+      in the local staging dir (``~/TFIOneGit/.fds-cache/{pbi}/``).
+    * If a staging copy already exists and its MD5 matches the probe, skip
+      **re-extract** and drop the probe. The network download still happens —
+      what's saved is the docx parse + images + section markdown + IMAGE_INDEX.
+    * Otherwise, promote the probe to the staging path and re-extract.
+    * ``--print-manifest`` emits a single JSON object to stdout listing every
+      docx + every section (title, path, sha256, page range, image refs) in
+      document order. Sections are a list, not a dict — titles can repeat under
+      different parents (e.g. "Field Descriptions" appears dozens of times in a
+      large FDS), so the unique key is ``path`` ("Parent > Child > title"). The
+      FDS Read Receipt quotes ``section_path``; the CI gate keys on that.
 """
 
 from __future__ import annotations
@@ -112,23 +116,36 @@ def _process_attachment(
     safe_name = re.sub(r"[^\w.\-]+", "_", attachment.name)
     fresh_path = pbi_staging / safe_name
 
-    # Staging-MD5 reuse: if the file already exists in staging and its MD5 still
-    # matches the live attachment, skip re-download + re-extract.
+    # Staging-MD5 reuse: always download, but skip re-extract when the staging
+    # copy is still current. Network fetch is unavoidable here — ADO does not
+    # give us a cheap "unchanged" signal (no ETag/If-None-Match on attachment
+    # URLs). The savings are the docx parse + images + section markdown +
+    # IMAGE_INDEX generation, which are the expensive steps on a 6 MB FDS.
     reused = False
     if fresh_path.is_file():
         existing_md5 = md5_file(fresh_path)
-        # Download to a sibling path first so we do not clobber the cached copy
-        # until we confirm it actually changed.
         probe_path = fresh_path.with_suffix(fresh_path.suffix + ".probe")
-        download_attachment(attachment, probe_path, pat=pat)
-        probe_md5 = md5_file(probe_path)
-        if probe_md5 == existing_md5:
+        try:
+            download_attachment(attachment, probe_path, pat=pat)
+            probe_md5 = md5_file(probe_path)
+            if probe_md5 == existing_md5:
+                reused = True
+                logger.info(
+                    "[reuse] %s staging copy still current — skipping extract (md5 %s)",
+                    attachment.name, existing_md5,
+                )
+            else:
+                probe_path.replace(fresh_path)
+                logger.info(
+                    "[refresh] %s changed (%s → %s)",
+                    attachment.name, existing_md5, probe_md5,
+                )
+        finally:
+            # Always clear the probe: on success above, either it was renamed
+            # over fresh_path (then unlink is a no-op) or we are keeping the
+            # existing copy (then probe is leftover). On exception mid-flight,
+            # the probe would be stale — drop it.
             probe_path.unlink(missing_ok=True)
-            reused = True
-            logger.info("[reuse] %s matches staging (md5 %s)", attachment.name, existing_md5)
-        else:
-            probe_path.replace(fresh_path)
-            logger.info("[refresh] %s changed (%s → %s)", attachment.name, existing_md5, probe_md5)
     else:
         logger.info("[download] %s → %s", attachment.name, fresh_path)
         download_attachment(attachment, fresh_path, pat=pat)
@@ -159,9 +176,16 @@ def _process_attachment(
             extraction.pages_supported,
         )
 
-    sections_manifest: dict[str, dict] = {}
+    # Sections are a list, not a dict — heading titles like "Field Descriptions"
+    # repeat under many parents in a large FDS. The unique lookup key is `path`
+    # ("Parent > Child > title"), which the CI gate resolves from the analyst's
+    # Read Receipt. Keying by title alone silently dropped shadowed sections.
+    sections_manifest: list[dict] = []
     for section in extraction.sections:
         entry: dict = {
+            "title": section.title,
+            "path": section.path,
+            "level": section.level,
             "sha256": section_sha256(section),
             "image_refs": list(section.image_filenames),
         }
@@ -169,7 +193,7 @@ def _process_attachment(
             entry["pages"] = [section.page_start, section.page_end]
         else:
             entry["pages"] = None
-        sections_manifest[section.title] = entry
+        sections_manifest.append(entry)
 
     return {
         "docx_filename": attachment.name,

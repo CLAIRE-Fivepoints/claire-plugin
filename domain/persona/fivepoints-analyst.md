@@ -155,9 +155,10 @@ gh issue comment <N> --body "$(cat <<'EOF'
 **FDS Read Receipt**
 - Document: <exact docx filename as attached to the PBI>
 - docx_md5: `<md5 from manifest.docs[].docx_md5>`
-- Section: <exact section title as it appears in the FDS> (pages X-Y)
-- section_sha256: `<sha256 from manifest.docs[].sections[<title>].sha256>`
-- Image refs: <comma-separated list from manifest.docs[].sections[<title>].image_refs>
+- Section title: <exact section title as it appears in the FDS> (pages X-Y)
+- section_path: `<path from manifest.docs[].sections[i].path — e.g. "Client Management > Client Face Sheet">`
+- section_sha256: `<sha256 from the same section entry>`
+- Image refs: <comma-separated list from the same section entry's image_refs>
 - Verbatim labels (5-10, copied verbatim from the extracted section markdown —
   field names, button text, screen titles, error copy):
     - "<label 1>"
@@ -170,6 +171,12 @@ gh issue comment <N> --body "$(cat <<'EOF'
     - Client Face Sheet: Demographics, Emergency Contacts, Household Members
 EOF
 )"
+
+      ⚠️ `section_path` is mandatory — sub-section titles like "Field
+         Descriptions" repeat dozens of times in a large FDS. The path
+         ("Parent > Child > title") is the unique key the CI gate uses to
+         look up the section. A bare title can collide; only the path is
+         guaranteed to resolve correctly.
 
       ⚠️ The dev role's [1.5/12] FDS Cross-Check reads this comment via
          `gh issue view <N> --json comments --jq '.comments[] | select(.body | startswith("**FDS Read Receipt**")) | .body'`

@@ -65,6 +65,7 @@ class ExtractedSection:
     level: int                                    # 1 = H1, 2 = H2, ...
     title: str
     paragraph_index: int
+    path: str = ""                                # "Parent > Child > title" — unique even when titles collide
     paragraphs: list[str] = field(default_factory=list)
     page_start: int | None = None
     page_end: int | None = None
@@ -140,7 +141,12 @@ def _paragraph_image_rids(paragraph: ET.Element) -> list[str]:
 
 
 def _paragraph_page_breaks(paragraph: ET.Element) -> int:
-    """Count ``<w:lastRenderedPageBreak/>`` markers inside a paragraph."""
+    """Count ``<w:lastRenderedPageBreak/>`` markers inside a paragraph.
+
+    A paragraph that contains the marker straddles two pages; we attribute it
+    entirely to the new page for counting purposes. Good enough for stable
+    page hints (the use case); not pixel-accurate citation.
+    """
     return sum(1 for _ in paragraph.iter(_LAST_RENDERED_PAGE_BREAK_TAG))
 
 
@@ -182,6 +188,11 @@ def extract_docx(docx_path: Path) -> ExtractionResult:
     text_by_index: list[str] = []
     current_section_name: str = ""
     current_section: ExtractedSection | None = None
+    # Heading-level stack, used to compute the unique section path. Index 0 is
+    # the current H1 title, index 1 the current H2 under that H1, etc. A deeper
+    # level reset only goes down to (level-1), so a new H2 under an existing H1
+    # does not disturb the H1 slot.
+    heading_stack: list[str] = []
     image_counter = 0
     page_counter = 1  # page 1 is where the doc starts
     total_page_breaks = 0
@@ -200,11 +211,21 @@ def extract_docx(docx_path: Path) -> ExtractionResult:
             # Close out the previous section's page_end before starting a new one.
             if current_section is not None:
                 current_section.page_end = page_counter
+            # Grow/shrink the heading stack to accommodate the new level, then
+            # set this level's slot to the new title. Parents (shallower levels)
+            # remain untouched.
+            if len(heading_stack) < level:
+                heading_stack.extend([""] * (level - len(heading_stack)))
+            else:
+                heading_stack = heading_stack[:level]
+            heading_stack[level - 1] = text
+            path = " > ".join(part for part in heading_stack if part)
             current_section_name = text
             current_section = ExtractedSection(
                 level=level,
                 title=text,
                 paragraph_index=p_index,
+                path=path,
                 page_start=page_counter,
             )
             result.sections.append(current_section)
@@ -338,7 +359,7 @@ def write_sections_markdown(result: ExtractionResult, output_path: Path, doc_nam
         )
         lines.append(f"{'#' * min(section.level + 1, 6)} {section.title}")
         lines.append("")
-        lines.append(f"<!-- sha256: {hashes} | {pages} -->")
+        lines.append(f"<!-- path: {section.path} | sha256: {hashes} | {pages} -->")
         lines.append("")
         lines.extend(section.paragraphs)
         lines.append("")

@@ -101,8 +101,9 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
 gh issue comment <N> --body "$(cat <<'EOF'
 **FDS Scope Confirmation (dev role)**
 - FDS document: <docx filename>
-- FDS section: <exact section title> (pages X-Y)
-- section_sha256: `<from manifest>`
+- FDS section title: <exact title> (pages X-Y)
+- section_path: `<from manifest — e.g. "Client Management > Client Face Sheet">`
+- section_sha256: `<from the same section entry>`
 - Screens in scope: <count + names>
 - Sub-pages per screen: <list>
 - Labels (verbatim from FDS): <list>

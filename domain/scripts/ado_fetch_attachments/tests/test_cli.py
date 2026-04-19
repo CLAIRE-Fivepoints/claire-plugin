@@ -85,8 +85,11 @@ class TestCli:
         assert len(doc["docx_md5"]) == 32
         assert doc["docx_bytes"] > 0
         assert doc["reused"] is False
-        assert "Face Sheet" in doc["sections"]
-        face_sheet = doc["sections"]["Face Sheet"]
+        # Sections is a list, ordered by document position, each with a unique path.
+        assert isinstance(doc["sections"], list)
+        face_sheet = next(s for s in doc["sections"] if s["title"] == "Face Sheet")
+        assert face_sheet["path"] == "Overview > Face Sheet"
+        assert face_sheet["level"] == 2
         assert len(face_sheet["sha256"]) == 64
         # image anchored under Face Sheet → listed in its image_refs
         assert any(ref.startswith("image") for ref in face_sheet["image_refs"])
@@ -104,11 +107,68 @@ class TestCli:
                              "--staging-dir", str(staging)])
         m1 = json.loads(buf1.getvalue())
         m2 = json.loads(buf2.getvalue())
-        s1 = m1["docs"][0]["sections"]["Face Sheet"]["sha256"]
-        s2 = m2["docs"][0]["sections"]["Face Sheet"]["sha256"]
-        assert s1 == s2
-        # Second invocation reuses the staging copy.
+        s1 = next(s for s in m1["docs"][0]["sections"] if s["title"] == "Face Sheet")
+        s2 = next(s for s in m2["docs"][0]["sections"] if s["title"] == "Face Sheet")
+        assert s1["sha256"] == s2["sha256"]
+        assert s1["path"] == s2["path"]
+        # Second invocation reuses the staging copy (skips re-extract).
         assert m2["docs"][0]["reused"] is True
+
+    def test_manifest_preserves_sections_with_duplicate_titles(
+        self, tmp_path, monkeypatch, docx_builder
+    ):
+        """Sub-section titles like 'Field Descriptions' repeat under many parents.
+        The manifest must list every occurrence with a unique `path`."""
+        source = tmp_path / "source.docx"
+        docx_builder(
+            source,
+            sections=[
+                (1, "Client Face Sheet"),
+                (2, "Field Descriptions"),
+                (1, "Medical File"),
+                (2, "Field Descriptions"),  # same title, different parent
+            ],
+            image_anchors=[],
+        )
+        monkeypatch.setattr(cli_module, "resolve_pat", lambda: "fake-pat")
+        monkeypatch.setattr(cli_module, "fetch_work_item_relations", lambda *a, **kw: [])
+        monkeypatch.setattr(
+            cli_module,
+            "filter_attachments",
+            lambda *_: [Attachment(name="4 - Client Management.docx", url="stub", size=1)],
+        )
+
+        def _download(attachment, destination, pat, session=None):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(source, destination)
+            return destination
+
+        monkeypatch.setattr(cli_module, "download_attachment", _download)
+
+        staging = tmp_path / "staging"
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            cli_module.main(["--pbi", "42", "--print-manifest",
+                             "--staging-dir", str(staging)])
+        manifest = json.loads(buf.getvalue())
+        sections = manifest["docs"][0]["sections"]
+
+        # Both colliding sections survive.
+        field_descriptions = [s for s in sections if s["title"] == "Field Descriptions"]
+        assert len(field_descriptions) == 2
+
+        # They have distinct paths.
+        paths = {s["path"] for s in field_descriptions}
+        assert paths == {
+            "Client Face Sheet > Field Descriptions",
+            "Medical File > Field Descriptions",
+        }
+
+        # The CI gate can distinguish them via path. (In this minimal fixture
+        # both sub-sections are empty, so their sha256 collides — that's fine
+        # and expected: sha256 is content-addressed. What matters is that the
+        # path key does NOT collide, so the gate never resolves the wrong
+        # section.)
 
     def test_manifest_section_hash_changes_when_content_changes(
         self, tmp_path, monkeypatch, docx_builder
@@ -152,8 +212,10 @@ class TestCli:
         m1 = json.loads(buf1.getvalue())
         m2 = json.loads(buf2.getvalue())
         # v1 had "Face Sheet"; v2 has "Face Sheet (revised)"
-        assert "Face Sheet" in m1["docs"][0]["sections"]
-        assert "Face Sheet (revised)" in m2["docs"][0]["sections"]
+        titles_v1 = {s["title"] for s in m1["docs"][0]["sections"]}
+        titles_v2 = {s["title"] for s in m2["docs"][0]["sections"]}
+        assert "Face Sheet" in titles_v1
+        assert "Face Sheet (revised)" in titles_v2
         assert m1["docs"][0]["docx_md5"] != m2["docs"][0]["docx_md5"]
         assert m2["docs"][0]["reused"] is False
 
