@@ -41,6 +41,12 @@ class Attachment:
 
 
 def _read_env_file(path: Path = _ENV_FILE) -> dict[str, str]:
+    """Parse a `.env` file that may be shell-sourceable.
+
+    Handles the `export KEY=VALUE` prefix and surrounding single/double
+    quotes on the value, matching what `source ~/.config/claire/.env`
+    would produce.
+    """
     if not path.is_file():
         return {}
     result: dict[str, str] = {}
@@ -50,7 +56,13 @@ def _read_env_file(path: Path = _ENV_FILE) -> dict[str, str]:
             if not line or line.startswith("#") or "=" not in line:
                 continue
             key, _, value = line.partition("=")
-            result[key.strip()] = value.strip()
+            key = key.strip()
+            if key.startswith("export ") or key.startswith("export\t"):
+                key = key[len("export "):].strip()
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            result[key] = value
     except OSError as e:
         logger.warning("Could not read env file %s: %s", path, e)
     return result

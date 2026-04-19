@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from .ado_client import (
+    _ENV_FILE,
     AdoConfig,
     download_attachment,
     fetch_work_item_relations,
@@ -209,8 +210,13 @@ def main(argv: list[str] | None = None) -> int:
     pat = resolve_pat()
     if not pat:
         print(
-            "ERROR: No Azure DevOps PAT found. "
-            "Set AZURE_DEVOPS_PAT or AZURE_DEVOPS_DEV_PAT.",
+            "ERROR: No Azure DevOps PAT found. Lookup order (first hit wins):\n"
+            "  1. AZURE_DEVOPS_WRITE_PAT (environment)\n"
+            "  2. AZURE_DEVOPS_DEV_PAT   (environment)\n"
+            "  3. AZURE_DEVOPS_PAT       (environment)\n"
+            f"  4. Same keys in {_ENV_FILE}\n"
+            "Set one of the environment variables or add the key to the "
+            ".env file (supports `export KEY=VALUE` and quoted values).",
             file=sys.stderr,
         )
         return 2

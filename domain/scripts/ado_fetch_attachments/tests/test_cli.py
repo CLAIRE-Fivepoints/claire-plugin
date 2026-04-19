@@ -166,3 +166,24 @@ class TestCli:
             ]
         )
         assert rc == 2
+
+    def test_missing_pat_lists_lookup_paths(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(cli_module, "resolve_pat", lambda: None)
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        cli_module.main(
+            [
+                "--pbi",
+                "1",
+                "--diff-only",
+                "--cache-dir",
+                str(cache_dir),
+                "--staging-dir",
+                str(tmp_path / "s"),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert "AZURE_DEVOPS_WRITE_PAT" in err
+        assert "AZURE_DEVOPS_DEV_PAT" in err
+        assert "AZURE_DEVOPS_PAT" in err
+        assert ".config/claire/.env" in err
