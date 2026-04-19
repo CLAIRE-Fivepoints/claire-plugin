@@ -93,8 +93,16 @@ Read this before starting — it has scope guard rules and detailed patterns.
       claire fivepoints ado-fetch-attachments --pbi <parent-pbi> --diff-only
       ```
       - Exit 0 → cache matches → read the existing `FDS_<NAME>_SCREENS_*.md`
-      - Exit 1 → cache is stale. Stop. Post on the issue asking for the cache
-        to be refreshed (or rerun with `--auto-issue` to file the drift issue).
+      - Exit 1 → cache is stale. **Refresh it yourself** by running the same
+        command without `--diff-only`:
+        ```bash
+        claire fivepoints ado-fetch-attachments --pbi <parent-pbi>
+        ```
+        That extracts the .docx, splits it into per-section markdown
+        (`FDS_<NAME>_SCREENS_*.md`), and builds the image index — into staging
+        (`~/TFIOneGit/.fds-cache/<pbi>/`). Read the new section files from
+        staging, then commit the fresh cache to the plugin repo so subsequent
+        sessions hit a fresh `--diff-only` ✅.
         **Do NOT write specs from stale cache or from the raw ADO docx.**
       Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
 - [ ] Read ADO work item — ALL fields AND all attachments:
@@ -103,13 +111,18 @@ Read this before starting — it has scope guard rules and detailed patterns.
       If the description mentions an attached document ("see attached FDS", "latest version attached",
       etc.) → YOU MUST download and read that attachment before continuing.
 
-      Fetch attachments via the ADO REST API:
-        claire domain read fivepoints operational AZURE_DEVOPS_ACCESS   ← PAT setup + API reference
-        curl -s -u ":$AZURE_DEVOPS_PAT" \
-          "https://dev.azure.com/Fivepoints/TFIOne/_apis/wit/workItems/{PBI_ID}?$expand=relations&api-version=7.1" \
-          | jq '.relations[] | select(.rel == "AttachedFile") | {name: .attributes.name, url: .url}'
-      If attachment found → download and read it fully before any analysis.
-      If no attachment on PBI → check the parent Feature and Epic for attachments.
+      Fetch attachments + build the cache (single command, end-to-end):
+        ```bash
+        claire fivepoints ado-fetch-attachments --pbi <pbi-id>
+        ```
+        → Downloads the .docx, splits into per-section markdown, builds the
+          image index. PAT comes from `~/.config/claire/.env` automatically.
+          Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
+        → If the PBI has no attachment → re-run with the parent Feature/Epic
+          ID until you find the FDS. The script handles relations correctly.
+        → If after walking PBI → Feature → Epic there is still no FDS attachment
+          → trigger the **Discord Ping Protocol** (see persona top), do NOT
+          speculate.
       ⚠️ Missing the FDS is the #1 cause of wrong specs. Do not skip this step.
 
 - [ ] Identify the specific target section — NOT the parent document:
@@ -178,11 +191,15 @@ EOF
       Find FDS section and any existing section domain docs
 - [ ] Identify and post the FDS section for this PBI:
       From the domain search results (or FDS source documents), identify the FDS section
-      number and title that covers this task (e.g., "16.9 — Client Agreements").
+      number, title, AND **the exact source file path** in the cache
+      (e.g., `domain/knowledge/FDS_CLIENT_SCREENS_s16.md`).
       Then post it as a comment on the GitHub issue:
       gh issue comment <N> --repo claire-labs/fivepoints-test \
-        --body "**FDS Section:** 16.9 — <Title>"
-      ⚠️ MANDATORY — E2E test checks for this comment before transition
+        --body "**FDS Section:** 16.9 — <Title> (\`<exact/cache/path/FDS_NAME_SCREENS_sXX.md>\`)"
+      ⚠️ MANDATORY — E2E test checks for this comment before transition.
+      ⚠️ The exact file path is mandatory — the dev's [1.5/12] FDS Cross-Check
+         opens this file directly to verify your spec. A bare section number
+         forces them to grep, which is brittle.
 - [ ] Pull latest dev branch into TFIOneGit:
       cd ~/TFIOneGit && git checkout dev && git pull origin dev && git push github dev
       → Both remotes must agree on dev tip before pre-flight `git fetch github` lookups.
@@ -248,11 +265,22 @@ EOF
       - Known constraints or dependencies
       - Implementation notes for the dev
       - Branch name (MUST be included for handoff)
-- [ ] Run claire tier-score and post result to GitHub issue:
-      claire tier-score
-      Then post to issue:
-        gh issue comment <N> --body "**Tier N — <Label>**\n<scoring rationale>"
+- [ ] Evaluate the PBI tier (1-5) yourself and post the result to the GitHub issue:
+      The tier reflects implementation complexity / risk:
+        Tier 1 — trivial (label change, copy edit, single-line config)
+        Tier 2 — small (new endpoint, single screen, no migration)
+        Tier 3 — medium (multi-screen feature, migration, business logic)
+        Tier 4 — large (cross-cutting refactor, schema redesign, new module)
+        Tier 5 — epic (multi-PBI initiative, architecture shift)
+      Decide based on what you read in the FDS and ADO description, then post:
+        gh issue comment <N> --body "**Tier N — <Label>**
+
+        <scoring rationale: what makes it this tier, not the next/previous>"
       ⚠️ This step is MANDATORY. The E2E test asserts a Tier [1-5] comment exists before transition.
+      Note: there is no `claire tier-score` command — the tier is an analyst
+      judgment, not an automated evaluation. If you're unsure between two
+      tiers, default to the higher one and explain the trade-off in the
+      rationale.
 - [ ] Execute: claire fivepoints transition --role analyst --issue <N>
       ↳ Transition complete? → STOP HERE
 - [ ] Post-session retrospective — pick the correct target repo when filing improvement issues:
@@ -268,7 +296,6 @@ EOF
         • Claire core (bash/python architecture, generic personas, hooks) → `claire-labs/claire`
 - [ ] 🚨 Execute: claire stop   ← MANDATORY. Session ends here.
 ```
-
 ---
 
 ## Quick Reference
@@ -284,6 +311,15 @@ EOF
 | Search domain knowledge | `claire domain search <keyword>` |
 | Read a specific domain doc | `claire domain read fivepoints <category> <name>` |
 | Wait for response | `Bash(command: "claire wait --issue <N>", run_in_background: true)` |
+| **`claire fivepoints` commands** | |
+| Fetch ADO attachments + build cache | `claire fivepoints ado-fetch-attachments --pbi <pbi-id>` |
+| Diff cache vs fresh attachment (pre-flight) | `claire fivepoints ado-fetch-attachments --pbi <pbi-id> --diff-only` |
+| Open drift-tracking issue on cache mismatch | `claire fivepoints ado-fetch-attachments --pbi <pbi-id> --auto-issue` |
+| One-shot PR/issue activity wait | `claire fivepoints wait` |
+| Reply to an ADO PR thread (analyst review) | `claire fivepoints reply --pr <N> --thread <T> --body "<msg>"` |
+| ADO → GitHub bridge daemon | `claire fivepoints bridge {start\|stop\|status\|logs}` |
+| ADO → GitHub issue creation (Gmail) | `claire fivepoints azure-issue-bridge` |
+| Discord ping (block protocol — see persona top) | `claire discord send "<context + what you need>"` |
 
 ---
 
