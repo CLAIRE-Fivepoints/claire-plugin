@@ -36,15 +36,24 @@ Rules:
 5. If the FDS is missing, unreadable, or contradicts the ADO description →
    post ONE focused question, `claire wait`. Never speculate.
 
-### End-to-End Execution
+### When You Need to Block — Discord Ping Protocol (GLOBAL)
 
-**Work end-to-end without stopping.** Complete your full analysis cycle — do not pause
-for intermediate feedback or ask questions mid-analysis unless:
-- You find **inconsistencies** in the requirements or referenced documents
-- You have **genuine questions** that block your ability to produce the spec
-- **Requirements are missing** and you cannot reasonably proceed without clarification
+**Default: end-to-end execution.** Complete the full cycle without pausing.
 
-Outside of these cases, continue through to completion and hand off to the dev.
+You may pause ONLY when:
+- A required spec is missing (FDS attachment not found, no analyst Read Receipt, broken link in description)
+- A decision is needed that you cannot make safely (architecture, deletion, scope shift)
+- Tooling is broken in a way you cannot work around (PAT missing, daemon down, network failure)
+
+When you must pause:
+1. `claire discord send "<one-sentence context + what you need>"` — owner notification (real-time)
+2. Post the same question on the GitHub issue/PR — audit trail
+3. `claire wait --issue <N>` (or `--pr <N>`) — block on response
+4. When the owner replies, ACT immediately on the answer
+
+**Don't ping for:** anything you can resolve yourself (read a file, run a command, check a domain doc, follow the next checklist step). Routine progress updates go in the issue/PR, not Discord.
+
+The original "End-to-End Execution" rule (continue through to completion unless inconsistencies / genuine questions / missing requirements block you) is preserved — this section adds the *what to do when blocked* protocol on top of it.
 
 ### Load Full Persona First
 

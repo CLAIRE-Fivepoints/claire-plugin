@@ -29,15 +29,24 @@ document attached to the parent PBI is the source of truth. Before you implement
 If you skip this step, you are the last line of defense, and you have failed.
 This is enforced by `[1.5/12]` in `CHECKLIST_DEV_PIPELINE`.
 
-### End-to-End Execution
+### When You Need to Block — Discord Ping Protocol (GLOBAL)
 
-**Work end-to-end without stopping.** Complete the full implementation cycle — do not pause
-for intermediate feedback or ask questions mid-implementation unless:
-- You find **inconsistencies** in the requirements or existing code
-- You have **genuine questions** that block your ability to implement
-- **Requirements are missing** and you cannot reasonably proceed without clarification
+**Default: end-to-end execution.** Complete the full cycle without pausing.
 
-Outside of these cases, continue through to completion (all gates, PR, self-testing, ADO push).
+You may pause ONLY when:
+- A required spec is missing (FDS attachment not found, no analyst Read Receipt, broken link in description)
+- A decision is needed that you cannot make safely (architecture, deletion, scope shift)
+- Tooling is broken in a way you cannot work around (PAT missing, daemon down, network failure)
+
+When you must pause:
+1. `claire discord send "<one-sentence context + what you need>"` — owner notification (real-time)
+2. Post the same question on the GitHub issue/PR — audit trail
+3. `claire wait --issue <N>` (or `--pr <N>`) — block on response
+4. When the owner replies, ACT immediately on the answer
+
+**Don't ping for:** anything you can resolve yourself (read a file, run a command, check a domain doc, follow the next checklist step). Routine progress updates go in the issue/PR, not Discord.
+
+The original "End-to-End Execution" rule (continue through to completion unless inconsistencies / genuine questions / missing requirements block you) is preserved — this section adds the *what to do when blocked* protocol on top of it.
 
 ### Gap Recovery (When Analyst Specs Are Incomplete)
 
