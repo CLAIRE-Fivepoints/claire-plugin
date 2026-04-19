@@ -59,6 +59,31 @@ class TestResolvePat:
         )
         assert resolve_pat(env={}, env_file=env_file) == "ok"
 
+    def test_env_file_handles_export_prefix(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("export AZURE_DEVOPS_PAT=shellform\n")
+        assert resolve_pat(env={}, env_file=env_file) == "shellform"
+
+    def test_env_file_handles_export_with_tabs(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("export\tAZURE_DEVOPS_PAT=tabform\n")
+        assert resolve_pat(env={}, env_file=env_file) == "tabform"
+
+    def test_env_file_strips_double_quotes(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text('AZURE_DEVOPS_PAT="quoted-value"\n')
+        assert resolve_pat(env={}, env_file=env_file) == "quoted-value"
+
+    def test_env_file_strips_single_quotes(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text("AZURE_DEVOPS_PAT='quoted-value'\n")
+        assert resolve_pat(env={}, env_file=env_file) == "quoted-value"
+
+    def test_env_file_export_with_quotes(self, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text('export AZURE_DEVOPS_DEV_PAT="write-token"\n')
+        assert resolve_pat(env={}, env_file=env_file) == "write-token"
+
 
 class TestFilterAttachments:
     def test_keeps_only_attached_files(self):
