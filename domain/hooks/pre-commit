@@ -80,6 +80,20 @@ if [[ -n "$STAGED_TESTS" ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────
+# Check 5 — .fds-cache/ must not be staged
+# Rule: local FDS cache is per-session and must never be committed.
+#       Lives in ~/TFIOneGit/.fds-cache/<parent-pbi>/ (PR #53 fetch-on-use model).
+#       The TFIOneGit .gitignore is an ADO-mirrored file and cannot be modified
+#       without a cross-team ADO PR, so the guardrail lives here instead.
+# ─────────────────────────────────────────────────────────────
+if git diff --name-only --cached | grep -q "^\.fds-cache/"; then
+    ERRORS+=(".fds-cache/ must not be committed (per-session FDS cache, PR #53).")
+    ERRORS+=("  Fix: git restore --staged .fds-cache/")
+    ERRORS+=("  Why: the cache is fetched fresh from ADO on every session;")
+    ERRORS+=("       committing would freeze a stale snapshot and pollute the ADO mirror.")
+fi
+
+# ─────────────────────────────────────────────────────────────
 # Output results
 # ─────────────────────────────────────────────────────────────
 if [[ ${#ERRORS[@]} -gt 0 ]]; then

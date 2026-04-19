@@ -18,7 +18,9 @@ set -euo pipefail
 REMOTE_NAME="$1"
 REMOTE_URL="$2"
 
-# Block any push to origin or to Azure DevOps URLs
+# ─────────────────────────────────────────────────────────────
+# Check 1 — Block any push to origin or to Azure DevOps URLs
+# ─────────────────────────────────────────────────────────────
 if [[ "$REMOTE_NAME" == "origin" ]] || \
    [[ "$REMOTE_URL" == *"visualstudio.com"* ]] || \
    [[ "$REMOTE_URL" == *"dev.azure.com"* ]]; then
@@ -38,5 +40,47 @@ if [[ "$REMOTE_NAME" == "origin" ]] || \
     echo ""
     exit 1
 fi
+
+# ─────────────────────────────────────────────────────────────
+# Check 2 — .fds-cache/ must not appear in any pushed commit
+# Rule: belt-and-suspenders for the pre-commit .fds-cache/ block. Catches
+#       commits that slipped through (hook bypassed with --no-verify, or hook
+#       missing/outdated from a bad install). PR #53 fetch-on-use model.
+# ─────────────────────────────────────────────────────────────
+ZERO="0000000000000000000000000000000000000000"
+
+while IFS=' ' read -r _local_ref local_sha _remote_ref remote_sha; do
+    # Branch deletion — nothing being pushed
+    if [[ "$local_sha" == "$ZERO" ]]; then
+        continue
+    fi
+
+    if [[ "$remote_sha" == "$ZERO" ]]; then
+        # New branch: inspect commits reachable from local_sha but not from
+        # any existing remote tracking ref (avoids re-scanning history).
+        range_args=("$local_sha" "--not" "--remotes")
+    else
+        # Existing branch: inspect the delta being pushed.
+        range_args=("$remote_sha..$local_sha")
+    fi
+
+    if git log "${range_args[@]}" --name-only --pretty=format: 2>/dev/null \
+        | grep -q "^\.fds-cache/"; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════╗"
+        echo "║  🚫  TFI One Pre-Push Check FAILED                       ║"
+        echo "╚══════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "  A commit in the push range touches .fds-cache/."
+        echo ""
+        echo "  Fix: remove the offending commit(s) before pushing."
+        echo "       Inspect with: git log ${range_args[*]} --name-only -- .fds-cache/"
+        echo ""
+        echo "  Why: .fds-cache/ is per-session (PR #53 fetch-on-use model);"
+        echo "       committing freezes a stale snapshot and pollutes the ADO mirror."
+        echo ""
+        exit 1
+    fi
+done
 
 exit 0

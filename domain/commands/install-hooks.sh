@@ -38,8 +38,10 @@ show_help() {
     echo "    2. com.tfione.api.d.ts not staged"
     echo "    3. No GRANT/DENY in Flyway migrations"
     echo "    4. No business logic tests in com.tfione.service.test"
+    echo "    5. .fds-cache/ not staged (per-session FDS cache)"
     echo "  pre-push:"
-    echo "    5. Block push to origin (ADO) — use git push github instead"
+    echo "    6. Block push to origin (ADO) — use git push github instead"
+    echo "    7. .fds-cache/ not present in pushed commits (belt-and-suspenders)"
 }
 
 show_agent_help() {
@@ -62,9 +64,12 @@ A pre-commit hook at `.git/hooks/pre-commit` that enforces:
 2. com.tfione.api.d.ts must not be staged (generated file)
 3. No GRANT/DENY/role assignments in Flyway migrations
 4. No business logic tests in com.tfione.service.test
+5. Nothing under .fds-cache/ is staged (per-session FDS cache, PR #53)
 
 A pre-push hook at `.git/hooks/pre-push` that enforces:
-5. No push to origin (ADO) — the dev must use `git push github` only
+6. No push to origin (ADO) — the dev must use `git push github` only
+7. Nothing under .fds-cache/ appears in any pushed commit
+   (belt-and-suspenders for Check 5 in pre-commit)
 
 ## Target repos (auto-discovered)
 1. claire-labs/fivepoints   → local path from `claire repo list`
@@ -209,8 +214,10 @@ echo "    1. Branch naming:  feature/{id}-* or bugfix/{id}-*"
 echo "    2. Generated file: com.tfione.api.d.ts must not be staged"
 echo "    3. Migrations:     no GRANT/DENY/role permissions"
 echo "    4. Tests:          no business logic tests in service.test"
+echo "    5. FDS cache:      nothing under .fds-cache/ may be staged"
 echo "  pre-push:"
-echo "    5. Remote guard:   push to origin (ADO) is blocked"
+echo "    6. Remote guard:   push to origin (ADO) is blocked"
+echo "    7. FDS cache:      no pushed commit may touch .fds-cache/"
 echo ""
 echo "Results: $INSTALLED installed, $SKIPPED skipped, $FAILED failed"
 
