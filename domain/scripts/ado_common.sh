@@ -74,7 +74,10 @@ _ado_env_get() {
     line=$(grep -E "^(export[[:space:]]+)?${key}=" "$file" 2>/dev/null | head -1 || true)
     [[ -z "$line" ]] && return 0
     local value="${line#*=}"
-    # Strip matched surrounding single or double quotes
+    # Trim leading/trailing whitespace, then strip matched surrounding quotes
+    # (mirrors _read_env_file in ado_client.py so both parsers share one contract).
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
     if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then
         value="${BASH_REMATCH[1]}"
     fi
