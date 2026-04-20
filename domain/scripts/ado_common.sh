@@ -319,3 +319,68 @@ ado_print_info() {
     echo "Project: ${_ADO_PROJECT}"
     echo "Repo:    ${_ADO_REPO}"
 }
+
+# Verify dev-pipeline proof gates: MP4 ([8/11]) and FDS Verification ([9/11])
+# posted as comments on the GitHub issue. Reads issue comments via gh CLI.
+#
+# Usage: check_proof_gate <issue_number> <github_repo>
+#   issue_number: e.g. 123
+#   github_repo:  e.g. CLAIRE-Fivepoints/claire-plugin
+#
+# Returns 0 if both gates pass, 1 otherwise. Rejection text names the
+# specific skipped checklist step (per issue #74) and references the
+# Discord Ping Protocol so the dev does not invent a static-analysis fallback.
+check_proof_gate() {
+    local issue_number="$1"
+    local gh_repo="$2"
+
+    if [[ -z "$issue_number" || -z "$gh_repo" ]]; then
+        echo "ERROR: check_proof_gate requires <issue_number> <github_repo>" >&2
+        return 2
+    fi
+
+    local mp4_found=false
+    local fds_found=false
+
+    local mp4_match
+    mp4_match=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
+        --jq '[.comments[].body | select(contains(".mp4"))] | first // ""' \
+        2>/dev/null || echo "")
+    [[ -n "$mp4_match" ]] && mp4_found=true
+
+    # FDS Verification must be the first line of the comment (not a quoted
+    # reference inside an analysis/discussion comment) — per the dev checklist's
+    # documented format: `gh issue comment <N> --body "**FDS Verification (screenshot + AI)**\n..."`.
+    local fds_match
+    fds_match=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
+        --jq '[.comments[].body | select(startswith("**FDS Verification (screenshot + AI)**"))] | first // ""' \
+        2>/dev/null || echo "")
+    [[ -n "$fds_match" ]] && fds_found=true
+
+    if [[ "$mp4_found" == "true" && "$fds_found" == "true" ]]; then
+        echo "✅ Proof gate: MP4 ([8/11]) + FDS Verification ([9/11]) both posted on issue #${issue_number}"
+        return 0
+    fi
+
+    {
+        echo ""
+        echo "❌ Proof gate failed for issue #${issue_number} (${gh_repo}):"
+        if [[ "$mp4_found" != "true" ]]; then
+            echo "   ❌ [8/11] MP4 missing: no 'MP4 URL/path' line ('.mp4') found on issue #${issue_number}."
+            echo "      Record an MP4 with Playwright (claire domain read video_proof technical PLAYWRIGHT_PATTERNS),"
+            echo "      then post the path:"
+            echo "        gh issue comment ${issue_number} --body 'MP4: /path/to/proof.mp4'"
+        fi
+        if [[ "$fds_found" != "true" ]]; then
+            echo "   ❌ [9/11] FDS Verification missing: no '**FDS Verification (screenshot + AI)**' comment on issue #${issue_number}."
+            echo "      Capture a final-state screenshot, AI-verify it against the FDS labels, then post:"
+            echo "        gh issue comment ${issue_number} --body '**FDS Verification (screenshot + AI)**'..."
+        fi
+        echo ""
+        echo "   These are HARD STOPs in the dev checklist. Static code analysis is NOT a substitute."
+        echo "   If test-env cannot be brought up, escalate via the Discord Ping Protocol"
+        echo "   (claire discord send + GitHub comment + claire wait) — do NOT skip these steps."
+    } >&2
+
+    return 1
+}

@@ -141,26 +141,59 @@ echo "[3/4] Starting frontend..."
 (cd com.tfione.web && npm run dev > /tmp/tfione-vite.log 2>&1) &
 VITE_PID=$!
 
-echo "[4/4] Waiting for services..."
+echo "[4/4] Waiting for services (heartbeat every 15s)..."
+# Heartbeat loop: poll all three services at 2s intervals, print a status line
+# every 15s. Silence for >30s previously looked identical to "script crashed" —
+# the heartbeat makes booting vs. hung vs. failed unambiguous.
 API_READY=false
-for i in $(seq 1 30); do
-    if curl -sk "https://localhost:58337/swagger/index.html" > /dev/null 2>&1; then
-        API_READY=true
-        break
-    fi
-    sleep 2
-done
-[[ "$API_READY" != "true" ]] && echo "⚠️  API not ready after 60s — check /tmp/tfione-api.log"
-
 VITE_READY=false
-for i in $(seq 1 15); do
-    if curl -sk "https://localhost:5173" > /dev/null 2>&1 || curl -sk "http://localhost:5173" > /dev/null 2>&1; then
-        VITE_READY=true
+SQL_READY=false
+WAIT_DEADLINE=60   # seconds — same as previous max for the API
+START_TS=$(date +%s)
+LAST_HEARTBEAT=$START_TS
+
+probe_sql() {
+    docker ps --filter 'name=^tfione-sqlserver$' --filter 'status=running' --format '{{.Names}}' \
+        | grep -q '^tfione-sqlserver$'
+}
+probe_api() {
+    curl -sk "https://localhost:58337/swagger/index.html" > /dev/null 2>&1
+}
+probe_vite() {
+    curl -sk "https://localhost:5173" > /dev/null 2>&1 \
+        || curl -sk "http://localhost:5173" > /dev/null 2>&1
+}
+
+status_word() { [[ "$1" == "true" ]] && echo up || echo down; }
+
+while :; do
+    NOW=$(date +%s)
+    ELAPSED=$((NOW - START_TS))
+
+    if probe_sql; then SQL_READY=true; else SQL_READY=false; fi
+    if [[ "$API_READY" != "true" ]] && probe_api; then API_READY=true; fi
+    if [[ "$VITE_READY" != "true" ]] && probe_vite; then VITE_READY=true; fi
+
+    if [[ "$API_READY" == "true" && "$VITE_READY" == "true" ]]; then
         break
+    fi
+    if [[ $ELAPSED -ge $WAIT_DEADLINE ]]; then
+        break
+    fi
+
+    if (( NOW - LAST_HEARTBEAT >= 15 )); then
+        printf '  [%ds] booting: sqlserver=%s api=%s vite=%s\n' \
+            "$ELAPSED" \
+            "$(status_word "$SQL_READY")" \
+            "$(status_word "$API_READY")" \
+            "$(status_word "$VITE_READY")"
+        LAST_HEARTBEAT=$NOW
     fi
     sleep 2
 done
-[[ "$VITE_READY" != "true" ]] && echo "⚠️  Vite not ready after 30s — check /tmp/tfione-vite.log"
+
+[[ "$API_READY" != "true" ]] && echo "⚠️  API not ready after ${WAIT_DEADLINE}s — check /tmp/tfione-api.log"
+[[ "$VITE_READY" != "true" ]] && echo "⚠️  Vite not ready after ${WAIT_DEADLINE}s — check /tmp/tfione-vite.log"
 
 echo ""
 echo "✅ Environment ready"

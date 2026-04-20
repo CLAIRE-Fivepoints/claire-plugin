@@ -4,9 +4,10 @@ set -euo pipefail
 # fivepoints ado-transition — PAT-gated ADO push for dev role
 #
 # Bash orchestration:
-#   [1/3] Verify feature branch (naming convention)
-#   [2/3] PAT gate — request AZURE_DEVOPS_WRITE_PAT if not set
-#   [3/3] Set up ADO remote + git push, then call ado_agent.py (build agent)
+#   [1/4] Verify feature branch (naming convention)
+#   [2/4] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11]) on the issue
+#   [3/4] PAT gate — request AZURE_DEVOPS_WRITE_PAT if not set
+#   [4/4] Set up ADO remote + git push, then call ado_agent.py (build agent)
 #
 # Usage:
 #   claire fivepoints ado-transition --issue <N> [--branch <name>] [--target <branch>]
@@ -25,9 +26,10 @@ Usage: claire fivepoints ado-transition --issue <N> [--branch <name>] [--target 
 
 PAT-gated transition from dev to ADO. Bash orchestration + Python build agent.
 
-  [1/3] Verify feature branch (feature/XXXXX-description or bugfix/XXXXX-description)
-  [2/3] PAT gate — pause and wait for AZURE_DEVOPS_WRITE_PAT if not set
-  [3/3] Set up ADO remote + git push + call ado_agent.py (build verification agent)
+  [1/4] Verify feature branch (feature/XXXXX-description or bugfix/XXXXX-description)
+  [2/4] Proof gate — verify MP4 ([8/11]) and FDS Verification ([9/11]) comments on the issue
+  [3/4] PAT gate — pause and wait for AZURE_DEVOPS_WRITE_PAT if not set
+  [4/4] Set up ADO remote + git push + call ado_agent.py (build verification agent)
 
 Options:
   --issue <N>       GitHub issue number (required)
@@ -55,8 +57,9 @@ after ALL FDS sections are tested and proved on video.
 
 ## Checklist (printed at runtime)
 1. Verify branch naming convention
-2. PAT gate: request AZURE_DEVOPS_WRITE_PAT if not set (posts wait comment on issue)
-3. Initialize ADO connection + git push + call ado_agent.py agent
+2. Proof gate: verify MP4 + FDS Verification comments on the issue (HARD STOPs from dev checklist)
+3. PAT gate: request AZURE_DEVOPS_WRITE_PAT if not set (posts wait comment on issue)
+4. Initialize ADO connection + git push + call ado_agent.py agent
 
 ## Usage
 ```bash
@@ -105,9 +108,9 @@ echo "╚═══════════════════════�
 echo ""
 
 # ─────────────────────────────────────────────
-# [1/3] Verify feature branch
+# [1/4] Verify feature branch
 # ─────────────────────────────────────────────
-echo "[1/3] Verifying feature branch..."
+echo "[1/4] Verifying feature branch..."
 echo "      Branch: $BRANCH"
 
 if ! echo "$BRANCH" | grep -qE '^(feature|bugfix)/[0-9]+-'; then
@@ -124,10 +127,27 @@ fi
 echo "✅  Branch OK: $BRANCH"
 
 # ─────────────────────────────────────────────
-# [2/3] PAT gate
+# [2/4] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11])
 # ─────────────────────────────────────────────
 echo ""
-echo "[2/3] PAT gate (checking AZURE_DEVOPS_WRITE_PAT)..."
+echo "[2/4] Proof gate (MP4 + FDS Verification comments on issue #${ISSUE_NUMBER})..."
+
+GH_REPO="${CLAIRE_WAIT_REPO:-$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || echo "")}"
+if [[ -z "$GH_REPO" ]]; then
+    echo "❌  Cannot determine GitHub repo for proof gate." >&2
+    echo "    Set CLAIRE_WAIT_REPO=<owner/name> or run from inside the GitHub repo clone." >&2
+    exit 1
+fi
+
+if ! check_proof_gate "$ISSUE_NUMBER" "$GH_REPO"; then
+    exit 1
+fi
+
+# ─────────────────────────────────────────────
+# [3/4] PAT gate
+# ─────────────────────────────────────────────
+echo ""
+echo "[3/4] PAT gate (checking AZURE_DEVOPS_WRITE_PAT)..."
 
 if [[ -z "${AZURE_DEVOPS_WRITE_PAT:-}" ]]; then
     echo ""
@@ -156,10 +176,10 @@ fi
 echo "✅  AZURE_DEVOPS_WRITE_PAT set."
 
 # ─────────────────────────────────────────────
-# [3/3] ADO remote setup + git push + transition agent
+# [4/4] ADO remote setup + git push + transition agent
 # ─────────────────────────────────────────────
 echo ""
-echo "[3/3] Setting up ADO remote and pushing branch..."
+echo "[4/4] Setting up ADO remote and pushing branch..."
 
 # Initialize ADO connection (must run from TFIOneGit clone)
 CLIENT_REPO_PATH="${FIVEPOINTS_REPO_PATH:-/Users/andreperez/TFIOneGit}"

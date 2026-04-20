@@ -32,7 +32,18 @@ claire fivepoints test-env-start [--path /path/to/TFIOneGit]
 | [1/4] | Start `tfione-sqlserver` Docker container (creates if missing) |
 | [2/4] | Start .NET API: `dotnet run --urls "https://localhost:58337"` (background) |
 | [3/4] | Start Vite frontend: `npm run dev` (background) |
-| [4/4] | Wait for health checks on both services |
+| [4/4] | Wait for health checks on both services (heartbeat every 15s) |
+
+The wait loop emits a heartbeat line every 15 seconds:
+
+```
+  [15s] booting: sqlserver=up api=down vite=down
+  [30s] booting: sqlserver=up api=up vite=down
+```
+
+Silence for >30s is now unambiguous — if no heartbeat appears, the script
+itself has crashed (not the boot). Previously a silent `for i in seq 1 30; do
+sleep 2; done` made boot-in-progress indistinguishable from script-died-with-no-output.
 
 On success, prints:
 ```
