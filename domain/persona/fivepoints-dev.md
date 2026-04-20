@@ -3,7 +3,7 @@ name: fivepoints-dev
 description: "Five Points developer agent persona — single source of truth (pipeline mode is the default; non-pipeline mode is no longer used in this plugin)"
 type: persona
 keywords: [persona, fivepoints, dev, developer, pipeline, role]
-updated: 2026-04-19
+updated: 2026-04-20
 ---
 
 ## Persona: Five Points Developer
@@ -27,6 +27,47 @@ document attached to the parent PBI is the source of truth. Before you implement
 
 If you skip this step, you are the last line of defense, and you have failed.
 This is enforced by `[1.5/12]` in `CHECKLIST_DEV_PIPELINE`.
+
+### Branch Visibility Matrix (HARD RULE — before concluding "branch doesn't exist")
+
+Feature branches (`feature/<ticket-id>-<slug>`) live in **three** locations
+during the pipeline, each lit up at a different step:
+
+| Location | What it is | When the branch lands here | How to check |
+|---|---|---|---|
+| `~/TFIOneGit/` local | Your working clone of TFIOneGit. Source of truth for the active session. | Immediately after `git checkout -b feature/<ticket-id>-<slug>` during analyst pre-flight. | `git -C ~/TFIOneGit branch --list "feature/<ticket-id>-*"` |
+| `github` remote on TFIOneGit (= `$CLAIRE_WAIT_REPO`) | GitHub mirror. Pipeline issues + PRs coordinate here; Steven Reviewer runs here. | When the session runs `git push github feature/<ticket-id>-*` (analyst branch creation, or dev step `[4/11]`). | `gh api "repos/$CLAIRE_WAIT_REPO/branches/feature/<ticket-id>-<slug>" --jq .name 2>/dev/null` |
+| `origin` remote on TFIOneGit (= ADO, source of truth) | Azure DevOps TFIOneGit. Production pipeline target. | ONLY after `claire fivepoints ado-transition --issue <N>` at `[10/11]`. | `git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/<ticket-id>-*"` |
+
+**Absence on `origin` (ADO) is NORMAL until `[10/11]` completes.** Before
+concluding "branch doesn't exist", check all three locations:
+
+```bash
+ticket_id="<ticket-id>"                    # from the GitHub issue title
+slug="<slug-from-issue>"
+branch="feature/${ticket_id}-${slug}"
+
+# local + ado use wildcard "feature/${ticket_id}-*" so a prior session's slug
+# drift doesn't hide the branch; github uses the exact "${branch}" composed
+# above because the GitHub branches API needs the full name (no glob support).
+local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
+github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
+ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
+echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
+```
+
+Decision rules:
+
+- Present on `github` + `~/TFIOneGit`, absent on `ado` → **interrupted prior
+  session before [10/11] ado-transition. Reuse it. Do not recreate.**
+- Present only on `github` → previous session on a different host →
+  `git fetch github "$branch" && git checkout "$branch"`, then reuse.
+- Present only on `~/TFIOneGit` → analyst never pushed the mirror →
+  `git push github "$branch"`, then reuse.
+- Absent from all three → truly new → create per analyst checklist.
+
+Canonical reference: `claire domain read fivepoints operational ADO_GITHUB_SYNC`
+(section: **Feature Branch Visibility (3 Locations)**).
 
 ### When You Need to Block — Discord Ping Protocol (GLOBAL)
 
@@ -134,11 +175,30 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints operational CODE_REVIEW_WORKFLOW
       claire domain read fivepoints operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational ADO_GITHUB_SYNC
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       claire domain read claire knowledge DEBUG_METHODOLOGY
       Read the GitHub issue — locate the **FDS Section** comment (the issue
       author or a prior session should have posted one with the exact source
       file path; if missing, you'll fetch the FDS yourself in [1.5/11]).
+
+      🚨 HARD RULE — Branch existence is a 3-location check. Before concluding
+         "branch doesn't exist", you MUST check local + github + ado. See the
+         Branch Visibility Matrix at the top of this persona and
+         ADO_GITHUB_SYNC (section: Feature Branch Visibility (3 Locations)):
+
+         ticket_id="<ticket-id>"
+         slug="<slug-from-issue>"
+         branch="feature/${ticket_id}-${slug}"
+         local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
+         github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
+         ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
+         echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
+
+         Absent on ADO but present on github + local = interrupted prior
+         session before [10/11]. **Reuse it.** Do not recreate.
+         Absent everywhere = truly new. Create per analyst checklist.
+
       git fetch github
       git checkout feature/{ticket-id}-{description}
 
