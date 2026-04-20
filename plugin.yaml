@@ -99,6 +99,10 @@ commands:
     script: "domain/commands/repo-reset.sh"
     description: "Factory-reset the fivepoints test mirror — wipe content (issues, PRs, branches, tags, releases, runs) and strip+rename PRs into archive tombstones; repo settings preserved"
 
+  - name: "fivepoints sync-main"
+    script: "domain/commands/sync-main.sh"
+    description: "Force-sync fivepoints test mirror main branch to ADO dev tip (no issues/PRs/branches touched)"
+
   - name: "fivepoints install-hooks"
     script: "domain/commands/install-hooks.sh"
     description: "Install TFI One pre-commit hook into TFIOneGit (branch naming, no GRANT/DENY, no d.ts, no biz logic tests)"
