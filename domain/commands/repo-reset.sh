@@ -217,32 +217,49 @@ echo "[repo-reset] mode=$MODE repo=$REPO ado_ref=$ADO_REF keep_prs=$KEEP_PRS" >>
 
 echo "── Collecting inventories via gh..."
 
+# All inventory fetches: die loud on failure. Silent `|| echo "[]"` is
+# contradictory under `set -euo pipefail` — it would let network outages,
+# expired tokens, scope drops, or rate limits masquerade as a clean repo
+# and lead to a "no actions" plan that actually hides missed data.
+
 # Branches (non-main)
-BRANCHES_JSON=$(gh api --paginate "/repos/${REPO}/branches" \
-    --jq '[.[] | .name | select(. != "main")]' 2>/dev/null || echo "[]")
+if ! BRANCHES_JSON=$(gh api --paginate "/repos/${REPO}/branches" \
+    --jq '[.[] | .name | select(. != "main")]' 2>&1); then
+    die "branches inventory fetch failed: $BRANCHES_JSON"
+fi
 
 # Tags
-TAGS_JSON=$(gh api --paginate "/repos/${REPO}/tags" \
-    --jq '[.[] | .name]' 2>/dev/null || echo "[]")
+if ! TAGS_JSON=$(gh api --paginate "/repos/${REPO}/tags" \
+    --jq '[.[] | .name]' 2>&1); then
+    die "tags inventory fetch failed: $TAGS_JSON"
+fi
 
 # Issues (all states, PRs excluded)
-ISSUES_JSON=$(gh api --paginate "/repos/${REPO}/issues?state=all" \
+if ! ISSUES_JSON=$(gh api --paginate "/repos/${REPO}/issues?state=all" \
     --jq '[.[] | select(.pull_request == null) | {number: .number, node_id: .node_id, title: .title}]' \
-    2>/dev/null || echo "[]")
+    2>&1); then
+    die "issues inventory fetch failed: $ISSUES_JSON"
+fi
 
 # PRs (all states)
-PRS_JSON=$(gh pr list --repo "$REPO" --state all --limit 500 \
+if ! PRS_JSON=$(gh pr list --repo "$REPO" --state all --limit 500 \
     --json number,state,title \
     --jq '[.[] | {number: .number, state: .state, title: .title}]' \
-    2>/dev/null || echo "[]")
+    2>&1); then
+    die "PR inventory fetch failed: $PRS_JSON"
+fi
 
 # Releases
-RELEASES_JSON=$(gh api --paginate "/repos/${REPO}/releases" \
-    --jq '[.[] | {id: .id, tag_name: .tag_name}]' 2>/dev/null || echo "[]")
+if ! RELEASES_JSON=$(gh api --paginate "/repos/${REPO}/releases" \
+    --jq '[.[] | {id: .id, tag_name: .tag_name}]' 2>&1); then
+    die "releases inventory fetch failed: $RELEASES_JSON"
+fi
 
 # Workflow runs
-RUNS_JSON=$(gh api --paginate "/repos/${REPO}/actions/runs?per_page=100" \
-    --jq '[.workflow_runs[]?.id]' 2>/dev/null || echo "[]")
+if ! RUNS_JSON=$(gh api --paginate "/repos/${REPO}/actions/runs?per_page=100" \
+    --jq '[.workflow_runs[]?.id]' 2>&1); then
+    die "workflow runs inventory fetch failed: $RUNS_JSON"
+fi
 
 # PR issue-comments (discussion comments), filtered to agent-authored
 # in Python. We fetch per-PR and concatenate.
@@ -251,10 +268,12 @@ if [[ "$KEEP_PRS" == false ]]; then
     PR_NUMBERS=$(jq -r '.[].number' <<<"$PRS_JSON")
     accum="[]"
     for pr in $PR_NUMBERS; do
-        pr_comments=$(gh api --paginate \
+        if ! pr_comments=$(gh api --paginate \
             "/repos/${REPO}/issues/${pr}/comments" \
             --jq "[.[] | {id: .id, pr_number: ${pr}, author_login: .user.login}]" \
-            2>/dev/null || echo "[]")
+            2>&1); then
+            die "PR #${pr} comments fetch failed: $pr_comments"
+        fi
         accum=$(jq -s '.[0] + .[1]' <(echo "$accum") <(echo "$pr_comments"))
     done
     PR_COMMENTS_JSON="$accum"

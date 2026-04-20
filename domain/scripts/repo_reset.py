@@ -164,10 +164,20 @@ class GitHubClient:
         payload = json.loads(raw) if raw else {}
         if payload.get("errors"):
             # Surface GraphQL errors as HTTPError-like so the executor can
-            # classify them alongside REST failures.
-            messages = "; ".join(
-                e.get("message", "?") for e in payload["errors"]
-            )
+            # classify them alongside REST failures. GitHub returns 200 with
+            # errors[].type == "NOT_FOUND" when a node is already gone — map
+            # that to HTTPError(404) so IDEMPOTENT_DELETE_KINDS catches it
+            # the same way REST 404s are caught (rerun-friendly contract).
+            errors = payload["errors"]
+            messages = "; ".join(e.get("message", "?") for e in errors)
+            if any(e.get("type") == "NOT_FOUND" for e in errors):
+                raise urllib.error.HTTPError(
+                    url=url,
+                    code=404,
+                    msg=messages,
+                    hdrs=None,  # type: ignore[arg-type]
+                    fp=None,
+                )
             raise urllib.error.HTTPError(
                 url=url,
                 code=422,

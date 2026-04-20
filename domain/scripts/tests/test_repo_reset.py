@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import urllib.error
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +17,7 @@ from repo_reset import (  # noqa: E402
     AGENT_LOGINS,
     TOMBSTONE_BODY,
     Context,
+    GitHubClient,
     Plan,
     build_plan,
     execute_plan,
@@ -356,3 +359,131 @@ def test_execute_plan_unknown_kind_is_skip_not_fail() -> None:
     results = execute_plan(plan, client)  # type: ignore[arg-type]
     assert results[0].startswith("SKIP ")
     assert "unknown kind" in results[0]
+
+
+# ---------------------------------------------------------------------------
+# GraphQL NOT_FOUND idempotency — issue delete path
+#
+# The _FakeClient path above proves the executor classifies 404 as SKIP, but
+# it shortcuts past the real GitHubClient._graphql mapping. These tests
+# drive the real _graphql with a urlopen stub so the NOT_FOUND -> 404
+# contract is exercised end-to-end.
+# ---------------------------------------------------------------------------
+
+
+class _FakeUrlopen:
+    """Context-manager stub for urllib.request.urlopen.
+
+    Yields a response whose .read() returns the given body. The body is a
+    pre-serialized JSON string so tests can simulate any GitHub response.
+    """
+
+    def __init__(self, body: str):
+        self._body = body.encode()
+
+    def __call__(self, req, timeout=None):  # noqa: ARG002
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def _graphql_not_found_payload() -> str:
+    """A GitHub GraphQL response for a node that no longer exists.
+
+    Real shape from the API — `errors[].type == "NOT_FOUND"` and HTTP 200.
+    """
+    return json.dumps(
+        {
+            "data": None,
+            "errors": [
+                {
+                    "type": "NOT_FOUND",
+                    "path": ["deleteIssue"],
+                    "message": "Could not resolve to a node with the global id of 'I_kwDOxxxxx'.",
+                }
+            ],
+        }
+    )
+
+
+def _graphql_other_error_payload() -> str:
+    """A GitHub GraphQL response for a non-idempotency error (e.g. bad scope)."""
+    return json.dumps(
+        {
+            "errors": [
+                {
+                    "type": "FORBIDDEN",
+                    "message": "Resource not accessible by integration",
+                }
+            ]
+        }
+    )
+
+
+def test_graphql_maps_not_found_to_http_404() -> None:
+    """NOT_FOUND -> HTTPError(404) so IDEMPOTENT_DELETE_KINDS catches it."""
+    client = GitHubClient("test-token", "owner/repo")
+    fake = _FakeUrlopen(_graphql_not_found_payload())
+    with patch("urllib.request.urlopen", fake):
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            client.delete_issue("I_kwDOxxxxx")
+    assert exc_info.value.code == 404, (
+        f"expected 404 (idempotent), got {exc_info.value.code}"
+    )
+
+
+def test_graphql_maps_other_errors_to_http_422() -> None:
+    """Non-NOT_FOUND GraphQL errors stay as 422 (real failure)."""
+    client = GitHubClient("test-token", "owner/repo")
+    fake = _FakeUrlopen(_graphql_other_error_payload())
+    with patch("urllib.request.urlopen", fake):
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            client.delete_issue("I_kwDOxxxxx")
+    assert exc_info.value.code == 422
+
+
+def test_execute_plan_graphql_not_found_on_issue_delete_is_skip() -> None:
+    """End-to-end: GraphQL NOT_FOUND on gh:issue-delete -> SKIP in execute_plan.
+
+    This is the test that would have caught the gatekeeper-flagged bug: the
+    _FakeClient version skipped the _graphql layer entirely.
+    """
+    client = GitHubClient("test-token", "owner/repo")
+    fake = _FakeUrlopen(_graphql_not_found_payload())
+    plan = Plan()
+    plan.add(
+        "gh:issue-delete",
+        "delete issue #42: 'gone'",
+        node_id="I_kwDOxxxxx",
+    )
+    with patch("urllib.request.urlopen", fake):
+        results = execute_plan(plan, client)
+    assert len(results) == 1
+    assert results[0].startswith("SKIP "), (
+        f"expected SKIP (idempotent rerun), got: {results[0]}"
+    )
+
+
+def test_execute_plan_graphql_forbidden_on_issue_delete_stays_fail() -> None:
+    """End-to-end: GraphQL FORBIDDEN stays FAIL (not a delete-idempotency case)."""
+    client = GitHubClient("test-token", "owner/repo")
+    fake = _FakeUrlopen(_graphql_other_error_payload())
+    plan = Plan()
+    plan.add(
+        "gh:issue-delete",
+        "delete issue #42: 'scope error'",
+        node_id="I_kwDOxxxxx",
+    )
+    with patch("urllib.request.urlopen", fake):
+        results = execute_plan(plan, client)
+    assert len(results) == 1
+    assert results[0].startswith("FAIL "), (
+        f"expected FAIL (real error), got: {results[0]}"
+    )
