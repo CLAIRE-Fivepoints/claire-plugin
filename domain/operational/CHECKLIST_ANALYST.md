@@ -23,6 +23,11 @@ updated: 2026-04-19
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
 - [ ] 🎯 Directive Interpretation (MANDATORY — before FDS fetch, before any surface check):
+      <!-- SYNC: this block is mirrored in `domain/persona/fivepoints-analyst.md`
+           § Directive Interpretation. When editing either copy, update BOTH. The
+           fat-persona architecture means readers may load this via the checklist
+           or via the persona — drift between the two is the same failure mode this
+           step was written to prevent. -->
       Scan the PBI / issue body for **directive phrases** that constrain HOW the
       work must be done. Triggers (non-exhaustive):
         - "use X as your template"
@@ -55,7 +60,9 @@ updated: 2026-04-19
         5. **Verification plan** — the concrete grep/structural command that
            proves match or divergence for each attribute
 
-      Use a heredoc with a flush-left `EOF` terminator:
+      Use a heredoc with a flush-left `EOF` terminator. ⚠️ Paste the whole
+      block at column 0 — do NOT re-indent to match the surrounding bullet,
+      or the heredoc terminator will not close and the command will hang.
 
 gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" --body "$(cat <<'EOF'
 **Directive Interpretation**

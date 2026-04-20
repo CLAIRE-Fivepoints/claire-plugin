@@ -63,14 +63,20 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       → TaskUpdate(<task_1_id>, status="completed")
 
 - [ ] [1.25/11] 🎯 Directive Interpretation (MANDATORY — before [1.5/11] FDS fetch, before any surface check):
+      <!-- SYNC: this block is mirrored in `domain/persona/fivepoints-dev.md`
+           § [1.25/11] Directive Interpretation. When editing either copy, update
+           BOTH. The fat-persona architecture means readers may load this via the
+           checklist or via the persona — drift between the two is the same
+           failure mode this step was written to prevent. -->
       ⚠️  HARD STOP: Do NOT fetch the FDS, read the FDS, `ls`, or `grep` any
           source file until this step is complete. Existence ≠ conformity —
           a file that exists + a label that matches is NOT proof the work is
           done if the PBI contained a directive asking for structural
           conformity with a sibling module.
 
-      Why this step exists: on issue #71 the dev agent ran `ls face_sheet/*.tsx`
-      + `grep FDS labels` → found matches → concluded "nothing to do", and
+      Why this step exists: on `CLAIRE-Fivepoints/fivepoints` issue #71 the dev
+      agent ran `ls face_sheet/*.tsx` + `grep FDS labels` → found matches →
+      concluded "nothing to do", and
       missed 7 structural divergences between Client and Provider face sheets
       (PermissionCode gate, Redux dispatch, skipToken, super-user bypass,
       matchPath conditional, Alert fallback, pending-documents banner). The
@@ -109,7 +115,9 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
         5. **Verification plan** — the concrete grep/structural command that
            proves match or divergence for each attribute
 
-      Use a heredoc with a flush-left `EOF` terminator:
+      Use a heredoc with a flush-left `EOF` terminator. ⚠️ Paste the whole
+      block at column 0 — do NOT re-indent to match the surrounding bullet,
+      or the heredoc terminator will not close and the command will hang.
 
 gh issue comment <N> --body "$(cat <<'EOF'
 **Directive Interpretation (dev role)**
@@ -127,6 +135,11 @@ gh issue comment <N> --body "$(cat <<'EOF'
     - ...
 EOF
 )"
+
+      ℹ️ The dev role runs inside a TFIOneGit worktree, so `gh` auto-detects the
+         target repo from `git remote` — no `--repo "$CLAIRE_WAIT_REPO"` needed
+         here. The analyst step DOES require `--repo "$CLAIRE_WAIT_REPO"` because
+         the analyst session may run outside a worktree (see `CHECKLIST_ANALYST`).
 
       ⚠️ Ambiguity gate (ask, don't assume):
         If a directive is present but you cannot confidently fill all 5 fields
