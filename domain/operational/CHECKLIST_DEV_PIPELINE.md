@@ -431,6 +431,22 @@ EOF
           image support) — block on Discord Ping Protocol (see persona top),
           do not fabricate.
 
+      ⚠️ **Env-blocked FDS label? Stage test data first — do not ship a
+         partial proof.** Before marking any label `⚠️ env-blocked` /
+         "code correct, data missing", read
+         `claire domain read fivepoints operational TEST_DATA_STAGING`.
+         That doc covers the one-time pattern (prime.user's live
+         `currentOrganizationId` from `/auth/login` + a minimum seed set
+         under the right Organization + FK-check toggle) that turns most
+         env-blocked labels into a 5-minute SQL-only task. Re-screenshot
+         after seeding and flip the label from ⚠️ to ✅. Only fall back
+         to "env-blocked" commentary if the staging doc does not cover
+         your case — and when that happens, file a follow-up issue so the
+         doc is extended.
+         ⚠️ Keep the seed SQL in `~/.claire/scratch/tests/issue-<N>/` —
+         never committed to the feature branch (Steven Reviewer rejects
+         seed SQL in the PR diff).
+
       ❌ `fivepoints ado-transition` rejects if either MP4 or this FDS
          Verification comment is missing. The rejection message names which
          step was skipped.
