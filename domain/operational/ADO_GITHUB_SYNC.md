@@ -3,8 +3,8 @@ domain: fivepoints
 category: operational
 name: ADO_GITHUB_SYNC
 title: "FivePoints — ADO ↔ GitHub Sync (TFIOneGit mirror)"
-keywords: [five-points, fivepoints, ado, github, sync, ado-github-sync, tfionegit, mirror, dev-branch, remote, origin, review-repo, analyst]
-updated: 2026-04-14
+keywords: [five-points, fivepoints, ado, github, sync, ado-github-sync, tfionegit, mirror, dev-branch, feature-branch, branch-visibility, 3-location, remote, origin, review-repo, analyst, dev]
+updated: 2026-04-20
 pr: "#24"
 ---
 
@@ -89,8 +89,65 @@ The analyst session should never ask "should I push dev to GitHub?" — the answ
 
 ---
 
+## Feature Branch Visibility (3 Locations)
+
+`dev` is not the only branch that lives in multiple places. **Feature
+branches** (`feature/<ticket-id>-<slug>`) also move through three distinct
+locations during the pipeline, and each one lights up at a different step.
+Checking only one location and concluding "branch doesn't exist" is the
+failure mode this section prevents.
+
+| Location | What it is | When the branch lands here | How to check |
+|---|---|---|---|
+| `~/TFIOneGit/` local | The agent's working clone. Source of truth for the active session. | Immediately after `git checkout -b feature/<ticket-id>-<slug>` during analyst pre-flight. | `git -C ~/TFIOneGit branch --list "feature/<ticket-id>-*"` |
+| `github` remote on TFIOneGit (review repo — `$CLAIRE_WAIT_REPO`) | GitHub mirror. Pipeline issues + PRs coordinate here; this is where Steven Reviewer runs. | When the session runs `git push github feature/<ticket-id>-*` (analyst branch creation, or dev step [4/11]). | `gh api "repos/$CLAIRE_WAIT_REPO/branches/feature/<ticket-id>-<slug>" --jq .name 2>/dev/null` |
+| `origin` remote on TFIOneGit (ADO — source of truth) | Azure DevOps TFIOneGit. Production pipeline target. | ONLY after `claire fivepoints ado-transition --issue <N>` at dev step [10/11]. | `git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/<ticket-id>-*"` |
+
+**Absence on `origin` (ADO) is NORMAL until dev step [10/11].** Do not
+conclude "branch doesn't exist" from `origin` alone.
+
+### Pre-flight snippet — run at the top of every `[1/11]`-equivalent step
+
+```bash
+# Expect the ticket ID from the GitHub issue title (e.g. "Task #18842 (PBI #18840)" → 18842)
+ticket_id="<ticket-id>"                    # example: 18842
+slug="<slug-from-issue>"                   # example: service-provider-face-sheet
+branch="feature/${ticket_id}-${slug}"
+
+local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
+github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
+ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
+
+echo "local=${local:-absent}"
+echo "github=${github:-absent}"
+echo "ado=${ado:-absent}"
+```
+
+### Interpretation
+
+| local | github | ado | Meaning | Action |
+|---|---|---|---|---|
+| present | present | present | Branch already merged to ADO (or previously transitioned). | Investigate — this ticket may already be done. Do not recreate. |
+| present | present | absent | **Normal pre-transition state.** Interrupted or in-progress pipeline. | **Reuse it.** Check out the existing branch. Do not recreate. |
+| present | absent  | absent | Analyst started locally but never pushed to `github`. | `git push github "$branch"` — then reuse. |
+| absent  | present | absent | Previous session on a different host. | `git fetch github "$branch" && git checkout "$branch"` — then reuse. |
+| absent  | absent  | absent | **Truly new** — no prior session exists for this ticket. | Create the branch per the analyst checklist. |
+| absent  | absent  | present | ADO has a branch but local + github have been wiped. | Re-mirror: `git fetch origin "$branch" && git push github "$branch"` — then reuse. |
+
+The rule of thumb:
+
+> A branch ABSENT from `origin` (ADO) but PRESENT on `github` + `~/TFIOneGit`
+> means a prior session was interrupted before `[10/11] ado-transition`.
+> **Reuse it.** Do not recreate.
+>
+> A branch absent from all three locations → truly new → create per the
+> analyst checklist.
+
+---
+
 ## Related Docs
 
-- `claire domain read fivepoints operational CHECKLIST_ANALYST` — analyst pipeline (uses this sync)
+- `claire domain read fivepoints operational CHECKLIST_ANALYST` — analyst pipeline (uses this sync; cites the 3-location matrix at pre-flight)
+- `claire domain read fivepoints operational CHECKLIST_DEV_PIPELINE` — dev pipeline (cites the 3-location matrix at `[1/11]`)
 - `claire domain read fivepoints operational PIPELINE_WORKFLOW` — full client pipeline
 - `claire domain read fivepoints operational ADO_PAT_GUIDE` — PAT scopes for `git push origin`

@@ -3,7 +3,7 @@ name: CHECKLIST_ANALYST
 description: "Five Points — Pipeline role:analyst session checklist"
 type: operational
 keywords: [fivepoints, analyst, pipeline, checklist, role]
-updated: 2026-04-19
+updated: 2026-04-20
 ---
 
 ## Your Checklist (MANDATORY — follow in order)
@@ -238,10 +238,23 @@ EOF
          have already created a branch (and possibly an associated PR) for this task.
          Reusing that work preserves context and avoids duplicate branches.
 
-      existing_branch=$(gh api "repos/$CLAIRE_WAIT_REPO/branches" \
+      🚨 HARD RULE — check all 3 locations before deciding. Absence on GitHub
+         alone is NOT proof the branch doesn't exist. Reference:
+         claire domain read fivepoints operational ADO_GITHUB_SYNC
+         (section: Feature Branch Visibility (3 Locations)).
+
+      local=$(git -C ~/TFIOneGit branch --list "feature/{ticket-id}-*" | awk '{print $NF}' | head -1)
+      github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches" \
         --paginate \
         --jq ".[] | select(.name | startswith(\"feature/{ticket-id}-\")) | .name" \
         | head -1)
+      ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/{ticket-id}-*" | awk '{print $2}' | head -1)
+      echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
+
+      # existing_branch is the authoritative value for the branch step below.
+      # Prefer github, fall back to local, then ado.
+      existing_branch="${github:-${local:-$(echo "$ado" | sed 's|refs/heads/||')}}"
+
       existing_pr=$(gh pr list --repo "$CLAIRE_WAIT_REPO" \
         --search "head:feature/{ticket-id}-" --state all \
         --json number,state,headRefName -q '.[0]')

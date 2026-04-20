@@ -3,7 +3,7 @@ name: CHECKLIST_DEV_PIPELINE
 description: "Five Points — Pipeline role:dev session checklist"
 type: operational
 keywords: [fivepoints, dev, developer, pipeline, checklist, role]
-updated: 2026-04-16
+updated: 2026-04-20
 ---
 
 ### SESSION START — Create All Tasks First (MANDATORY)
@@ -40,11 +40,34 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints operational CODE_REVIEW_WORKFLOW
       claire domain read fivepoints operational SWAGGER_VERIFICATION
+      claire domain read fivepoints operational ADO_GITHUB_SYNC
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
       claire domain read claire knowledge DEBUG_METHODOLOGY
       Read the GitHub issue — locate the **FDS Section** comment (the issue
       author or a prior session should have posted one with the exact source
       file path; if missing, you'll fetch the FDS yourself in [1.5/11]).
+
+      🚨 HARD RULE — Branch existence is a 3-location check. Feature branches
+         live in ~/TFIOneGit/ local + github mirror + ado origin; each
+         location lights up at a different pipeline step (ado = only after
+         [10/11]). See the Branch Visibility Matrix in fivepoints-dev persona
+         and ADO_GITHUB_SYNC (section: Feature Branch Visibility (3 Locations)).
+
+         ticket_id="<ticket-id>"                    # from the GitHub issue title
+         slug="<slug-from-issue>"
+         branch="feature/${ticket_id}-${slug}"
+         local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
+         github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
+         ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
+         echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
+
+         - Present on github + local, absent on ado → interrupted prior
+           session before [10/11] → reuse the branch. Do not recreate.
+         - Present only on github → git fetch github "$branch" && git
+           checkout "$branch" → reuse.
+         - Present only on local → git push github "$branch" → reuse.
+         - Absent everywhere → truly new → create per analyst checklist.
+
       git fetch github
       git checkout feature/{ticket-id}-{description}
 
