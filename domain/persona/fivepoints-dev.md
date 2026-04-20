@@ -406,24 +406,58 @@ EOF
       Post MP4 URL/path on the issue before continuing.
       → TaskUpdate(<task_8_id>, status="completed")
 
-- [ ] [9/11] 🚨 HARD STOP — Screenshot + AI verification against FDS obligations (MANDATORY):
-      For each implemented feature, capture a screenshot of the **final state**:
+- [ ] [9/11] 🚨 HARD STOP — Visual verification of EVERY screenshot (MANDATORY):
+      For each screenshot produced in [8/11], perform **actual visual inspection**.
+      DOM `pageContains` / regex checks do NOT count as verification — they prove
+      presence in markup, not correctness of the rendered output.
+
+      Capture screenshots of the **final state** of each implemented view:
       → After the happy-path interaction completes (form submitted, page saved)
       → Before any cleanup / navigation away
       Store the screenshots alongside the MP4 (scratch path, not committed).
 
-      Then AI-verify each screenshot against the FDS section obligations:
-        - Open the FDS section file (from [1.5/11] Step 2)
-        - For each labeled field / button / section in the FDS → grep the
-          screenshot's OCR text or visually inspect → confirm presence + label match
-        - Note any missing / renamed / extra elements vs the FDS
+      Then, for every screenshot (no skipping, no "I already looked at the similar one"):
 
-      Post the verification result on the issue:
-        gh issue comment <N> --body "**FDS Verification (screenshot + AI)**
+        1. **Open the PNG file** with the Read tool on the image path.
+        2. **Describe what is rendered** in 2–4 sentences per screenshot:
+           - Layout / structure observed
+           - Presence and position of each FDS-mandated element
+             (labels, buttons, banners, permission states)
+           - Any visual anomaly (overlapping text, missing images, wrong
+             colors, broken alignment)
+        3. **Cross-reference against the FDS** (the section file from [1.5/11] Step 2):
+           - Enumerate the FDS obligations that apply to that view
+           - For each obligation mark ✅ visible / ❌ missing / ⚠️ present-but-wrong
+             (with specifics — location, what's off)
+        4. **Post the verification on the issue** in this exact shape:
 
-        <per-feature: screenshot path + pass/fail + notes>"
+        gh issue comment <N> --body "**Visual Verification ([9/11])**
+        For each screenshot, a rendered-state description and per-obligation pass/fail:
 
-      ❌ fivepoints ado-push will reject if no MP4 AND no FDS Verification comment is posted.
+        ### 01-<name>.png
+        - Rendered: <2–4 sentences>
+        - FDS obligations checked:
+          - <obligation A>: ✅ visible at <location>
+          - <obligation B>: ❌ missing
+          - <obligation C>: ⚠️ present but <issue>
+        ### 02-<name>.png
+        ... (repeat for every screenshot, no skipping)"
+
+      ⚠️ HARD RULES:
+        - **DOM `pageContains` / regex checks do NOT count as verification.**
+          They prove presence in markup, not correctness of the rendered
+          output. Do not use them as a substitute for reading the image.
+        - **You MUST open every screenshot.** A shortcut of "I already looked
+          at the similar one" is not acceptable — each screen has its own
+          obligations.
+        - **Silent pass is a failure.** If you post "✅ all verified" without
+          the per-screenshot descriptions above, [10/11] (ADO transition)
+          rejects the run.
+        - **If the tool cannot read PNGs** (e.g. sandboxed environment without
+          image support) — block on Discord Ping Protocol (see persona top),
+          do not fabricate.
+
+      ❌ fivepoints ado-push will reject if no MP4 AND no Visual Verification comment is posted.
       → TaskUpdate(<task_9_id>, status="completed")
 
 --- ADO TRANSITION (after scoped MP4 + screenshot verification posted) ---
