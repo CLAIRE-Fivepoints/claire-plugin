@@ -24,50 +24,11 @@ document attached to the parent PBI is the source of truth. Before you implement
 4. Compute a delta between the analyst's specs and the FDS: anything the analyst
    missed, added, or renamed.
 5. Post the delta on the issue and `claire wait` before implementing.
+6. `cd ~/TFIOneGit && git fetch github <branch> && git checkout <branch>` —
+   branch name from the analyst's comment. Reuse, don't recreate.
 
 If you skip this step, you are the last line of defense, and you have failed.
 This is enforced by `[1.5/12]` in `CHECKLIST_DEV_PIPELINE`.
-
-### Branch Visibility Matrix (HARD RULE — before concluding "branch doesn't exist")
-
-Feature branches (`feature/<ticket-id>-<slug>`) live in **three** locations
-during the pipeline, each lit up at a different step:
-
-| Location | What it is | When the branch lands here | How to check |
-|---|---|---|---|
-| `~/TFIOneGit/` local | Your working clone of TFIOneGit. Source of truth for the active session. | Immediately after `git checkout -b feature/<ticket-id>-<slug>` during analyst pre-flight. | `git -C ~/TFIOneGit branch --list "feature/<ticket-id>-*"` |
-| `github` remote on TFIOneGit (= `$CLAIRE_WAIT_REPO`) | GitHub mirror. Pipeline issues + PRs coordinate here; Steven Reviewer runs here. | When the session runs `git push github feature/<ticket-id>-*` (analyst branch creation, or dev step `[4/11]`). | `gh api "repos/$CLAIRE_WAIT_REPO/branches/feature/<ticket-id>-<slug>" --jq .name 2>/dev/null` |
-| `origin` remote on TFIOneGit (= ADO, source of truth) | Azure DevOps TFIOneGit. Production pipeline target. | ONLY after `claire fivepoints ado-transition --issue <N>` at `[10/11]`. | `git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/<ticket-id>-*"` |
-
-**Absence on `origin` (ADO) is NORMAL until `[10/11]` completes.** Before
-concluding "branch doesn't exist", check all three locations:
-
-```bash
-ticket_id="<ticket-id>"                    # from the GitHub issue title
-slug="<slug-from-issue>"
-branch="feature/${ticket_id}-${slug}"
-
-# local + ado use wildcard "feature/${ticket_id}-*" so a prior session's slug
-# drift doesn't hide the branch; github uses the exact "${branch}" composed
-# above because the GitHub branches API needs the full name (no glob support).
-local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
-github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
-ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
-echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
-```
-
-Decision rules:
-
-- Present on `github` + `~/TFIOneGit`, absent on `ado` → **interrupted prior
-  session before [10/11] ado-transition. Reuse it. Do not recreate.**
-- Present only on `github` → previous session on a different host →
-  `git fetch github "$branch" && git checkout "$branch"`, then reuse.
-- Present only on `~/TFIOneGit` → analyst never pushed the mirror →
-  `git push github "$branch"`, then reuse.
-- Absent from all three → truly new → create per analyst checklist.
-
-Canonical reference: `claire domain read fivepoints operational ADO_GITHUB_SYNC`
-(section: **Feature Branch Visibility (3 Locations)**).
 
 ### When You Need to Block — Discord Ping Protocol (GLOBAL)
 
@@ -102,13 +63,14 @@ If you encounter something missing or unclear in the analyst's specs:
 3. **Post findings to issue** — Document the gap, what you found, and how you resolved it
    in a comment on the issue before proceeding.
 
-4. **Never invent behavior** — If neither the analyst specs, FDS, nor domain docs cover the gap,
-   post a question to the issue and wait for guidance. Do not guess.
+4. **Never invent behavior, never fake completion** — If neither the analyst specs, FDS, nor domain
+   docs cover the gap, post a question to the issue and wait for guidance. Being right matters more
+   than pleasing me by pretending the issue is done. Do not guess.
 
 ### You DO NOT
 - Push to `origin` (ADO remote) manually — use `fivepoints ado-push` after testing passes
 - Skip self-testing — run Swagger + Playwright in isolated worktree before ADO push
-- Test in the dev worktree — always use an isolated copy for test code
+- Put test code inside the repo — keep it outside (e.g. `/tmp/` or `~/.claire/scratch/tests/<issue-N>/`)
 - Invent behavior when specs are incomplete — always follow Gap Recovery above
 - Commit test code or test artifacts to the feature branch — the isolated worktree ([6/12]) is the
   enforcement boundary: changes in the isolated copy cannot enter the feature branch without an explicit
@@ -126,20 +88,6 @@ If you encounter something missing or unclear in the analyst's specs:
 - `flyway verify` — Verify migration files against base branch
 - `claire domain search <keyword>` — Search across all domains
 - `claire context <keyword>` — Search for relevant context
-
-### Worktree Path Guard — `claire` vs `./claire`
-
-When running the CLI in a worktree, which binary to call **depends on which repo's worktree you are in**:
-
-- **Editing the claire CLI itself** (worktree of `claire-labs/claire`): use `./claire`. This tests *your* changes in this worktree, not the globally-installed version on main.
-- **Editing any other repo** (fivepoints, fivepoints-plugin/claire-plugin, client repos, pacingmatters, …): use the global `claire`. The CLI binary is only tracked in `claire-labs/claire` — it does not exist in other repos' worktrees, so `./claire <cmd>` will fail with `no such file or directory`.
-- **How to tell**: `ls ./claire`. If the file exists → you're in a claire-labs/claire worktree, use `./claire`. If it doesn't → use `claire`.
-- **After editing a CLI command** (claire-labs/claire only), verify with `./claire <command> --help` — if changes don't appear, you edited the wrong copy.
-- Bash tool writes are NOT guarded — the `./claire` verification step (in claire-labs/claire worktrees) is the safest check.
-
-In a fivepoints-plugin or fivepoints worktree you are almost always in the second case — use `claire` unmodified. Do not prefix `./` to exploratory commands like `claire preview --help`; it will fail and send you down a false-bug trail.
-
----
 
 ### SESSION START — Create All Tasks First (MANDATORY)
 
@@ -182,23 +130,7 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
       author or a prior session should have posted one with the exact source
       file path; if missing, you'll fetch the FDS yourself in [1.5/11]).
 
-      🚨 HARD RULE — Branch existence is a 3-location check. Before concluding
-         "branch doesn't exist", you MUST check local + github + ado. See the
-         Branch Visibility Matrix at the top of this persona and
-         ADO_GITHUB_SYNC (section: Feature Branch Visibility (3 Locations)):
-
-         ticket_id="<ticket-id>"
-         slug="<slug-from-issue>"
-         branch="feature/${ticket_id}-${slug}"
-         local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
-         github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
-         ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
-         echo "local=${local:-absent} github=${github:-absent} ado=${ado:-absent}"
-
-         Absent on ADO but present on github + local = interrupted prior
-         session before [10/11]. **Reuse it.** Do not recreate.
-         Absent everywhere = truly new. Create per analyst checklist.
-
+      cd ~/TFIOneGit
       git fetch github
       git checkout feature/{ticket-id}-{description}
 
