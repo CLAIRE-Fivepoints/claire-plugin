@@ -13,8 +13,7 @@ updated: 2026-04-13
 > You work in an ISOLATED copy of the branch.
 
 > **Your session checklist is embedded below** (canonical content from
-> `operational/CHECKLIST_TESTER`). Follow it in order — this fat persona is
-> self-contained, the generator no longer needs to substitute `{{SESSION_CHECKLIST}}` separately.
+> `operational/CHECKLIST_TESTER`). Follow it in order.
 
 ### When You Need to Block — Discord Ping Protocol (GLOBAL)
 
