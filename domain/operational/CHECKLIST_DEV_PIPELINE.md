@@ -293,12 +293,25 @@ EOF
          Test in the same worktree you implemented in. Steven Reviewer rejects
          PRs containing test artifacts, which is the guard against test
          pollution (previously achieved by the isolated-worktree boundary).
-      ./scripts/test-env-start.sh
+      claire fivepoints test-env-start  (or ./scripts/test-env-start.sh)
+      → Heartbeat fires every 15s during boot:
+        `[15s] booting: sqlserver=up api=down vite=down`
+        Silence for >30s means the script crashed (no heartbeat = no progress).
       → Wait for "✅ Environment ready — API: https://localhost:58337 | UI: http://localhost:5173"
       → If script missing: start SQL Server, dotnet run, and npm run dev manually
       ⚠️ Any test code you write (e2e specs, fixtures, Playwright projects)
          must live OUTSIDE the feature branch. Use `~/.claire/scratch/tests/<issue-N>/`
          or a `.gitignored` local path — NEVER commit them to the feature branch.
+
+      🚨 If test-env fails or times out (heartbeat shows api/vite stuck on `down`,
+         or no heartbeat = script crashed): you may NOT skip [8/11] or [9/11] as
+         a workaround. Static code analysis is NOT a substitute for a running
+         browser screenshot against FDS labels (issue #74). Apply the persona-top
+         **Discord Ping Protocol**:
+           1. claire discord send "test-env-start failed for #<N>: <symptom>"
+           2. gh issue comment <N> with the same symptom
+           3. claire wait --issue <N> and block
+         Only the user can authorize a fallback — the dev agent cannot self-authorize one.
       → TaskUpdate(<task_6_id>, status="completed")
 
 - [ ] [7/11] Swagger verification (backend gate — run BEFORE Playwright):
@@ -309,7 +322,19 @@ EOF
          Fix in the current worktree (feature branch) → push fix to GitHub → retest from this step
       → TaskUpdate(<task_7_id>, status="completed")
 
-- [ ] [8/11] Verify shared login fixture exists, then run E2E tests + record MP4:
+- [ ] [8/11] 🚨 HARD STOP — Verify shared login fixture, run E2E tests, record MP4 (MANDATORY):
+      ⚠️ This step is NOT optional and NOT substitutable. Static code analysis,
+         grep on the source tree, or "the file exists so the feature works"
+         are NOT acceptable substitutes for an MP4 produced by a real browser
+         interacting with the running app. Issue #74 (and #71 / PR #76 before
+         it) document the failure mode of self-authorizing a static-analysis
+         fallback when test-env felt hard — the gate at [10/11] now rejects
+         this with a step-named message naming `[8/11] MP4 missing`.
+
+      📖 Read FIRST (before writing the spec — past sessions tâtonnaient 3+
+         times on the login dance because they skipped this):
+         claire domain read video_proof technical PLAYWRIGHT_PATTERNS
+
       Check: e2e/global-setup.ts exists in com.tfione.web/
       If missing → create it before writing feature tests (put in scratch path if not yet merged).
       Reference credentials: claire domain read fivepoints operational TESTING
@@ -321,20 +346,31 @@ EOF
          issue's FDS Section comment (per analyst/author scoping).
       ❌ Do NOT use ffmpeg or screencapture — use Playwright proof recording.
       ❌ If tests fail: fix in current worktree → push fix → retest from step 7.
+      ❌ If test-env cannot be brought up: Discord Ping Protocol (see [6/11]).
+         Do NOT fall back to static analysis. Only the user can authorize a fallback.
       Post MP4 URL/path on the issue before continuing.
       → TaskUpdate(<task_8_id>, status="completed")
 
-- [ ] [9/11] 🚨 HARD STOP — Visual verification of EVERY screenshot (MANDATORY):
-      For each screenshot produced in [8/11], perform **actual visual inspection**.
-      DOM `pageContains` / regex checks do NOT count as verification — they prove
-      presence in markup, not correctness of the rendered output.
+- [ ] [9/11] 🚨 HARD STOP — Screenshot + visual verification against FDS obligations (MANDATORY):
+      ⚠️ This step is NOT optional and NOT substitutable. The screenshot must
+         come from a running browser rendering the actual UI — not a `cat` of
+         a JSX file, not a structural grep, not "the labels are in the source
+         so the screen renders them". DOM `pageContains` / regex checks do
+         NOT count as verification — they prove presence in markup, not
+         correctness of the rendered output. Issue #74 documents the failure
+         mode of skipping this step when test-env was hard to bring up;
+         issue #77 documents the failure mode of substituting DOM-regex for
+         actual visual inspection on the remaining screenshots once 2 of 9
+         were opened. The gate at [10/11] rejects this step-by-name with
+         `[9/11] FDS Verification missing` when the sentinel is absent.
 
       Capture screenshots of the **final state** of each implemented view:
       → After the happy-path interaction completes (form submitted, page saved)
       → Before any cleanup / navigation away
       Store the screenshots alongside the MP4 (scratch path, not committed).
 
-      Then, for every screenshot (no skipping, no "I already looked at the similar one"):
+      Then, for every screenshot captured above (no skipping, no "I already
+      looked at the similar one" — each screen has its own obligations):
 
         1. **Open the PNG file** with the Read tool on the image path.
         2. **Describe what is rendered** in 2–4 sentences per screenshot:
@@ -347,9 +383,14 @@ EOF
            - Enumerate the FDS obligations that apply to that view
            - For each obligation mark ✅ visible / ❌ missing / ⚠️ present-but-wrong
              (with specifics — location, what's off)
-        4. **Post the verification on the issue** in this exact shape:
+        4. **Post the verification on the issue.** The comment MUST start with
+           the exact sentinel `**FDS Verification (screenshot + AI)**` on its
+           own first line — this is what `claire fivepoints ado-transition`'s
+           [2/4] proof gate (`check_proof_gate` in `domain/scripts/ado_common.sh`)
+           greps for via `startswith(...)`. A discussion comment that merely
+           mentions the phrase in prose will NOT satisfy the gate. Shape:
 
-        gh issue comment <N> --body "**Visual Verification ([9/11])**
+        gh issue comment <N> --body "**FDS Verification (screenshot + AI)**
         For each screenshot, a rendered-state description and per-obligation pass/fail:
 
         ### 01-<name>.png
@@ -368,24 +409,34 @@ EOF
         - **You MUST open every screenshot.** A shortcut of "I already looked
           at the similar one" is not acceptable — each screen has its own
           obligations.
-        - **Silent pass is a failure.** If you post "✅ all verified" without
-          the per-screenshot descriptions above, [10/11] (ADO transition)
-          rejects the run.
+        - **Silent pass is a failure.** If you post the sentinel without the
+          per-screenshot `### NN-<name>.png` / `- Rendered:` / `- FDS
+          obligations checked:` blocks above, [10/11] (ADO transition) still
+          accepts the sentinel but a reviewer following
+          `fivepoints-reviewer.md` will reject the PR for incomplete proof.
         - **If the tool cannot read PNGs** (e.g. sandboxed environment without
           image support) — block on Discord Ping Protocol (see persona top),
           do not fabricate.
 
-      ❌ fivepoints ado-push will reject if no MP4 AND no Visual Verification comment is posted.
+      ❌ `fivepoints ado-transition` rejects if either MP4 or this FDS
+         Verification comment is missing. The rejection message names which
+         step was skipped.
+      ❌ If test-env cannot be brought up: Discord Ping Protocol (see [6/11]).
+         Do NOT post a static-analysis-based "verification" — the screenshot
+         must be a real browser screenshot AND each PNG must be opened.
       → TaskUpdate(<task_9_id>, status="completed")
 
 --- ADO TRANSITION (after scoped MP4 + screenshot verification posted) ---
 
 - [ ] [10/11] PAT gate + push feature branch to ADO:
       claire fivepoints ado-transition --issue <N>
-      → [1/3] Verifies branch naming convention
-      → [2/3] PAT gate: if AZURE_DEVOPS_WRITE_PAT is not set, posts wait comment
+      → [1/4] Verifies branch naming convention
+      → [2/4] Proof gate: rejects if no MP4 ([8/11]) or no FDS Verification ([9/11])
+              comment is posted on the issue. Rejection text names the skipped
+              step explicitly so you cannot accidentally bypass it.
+      → [3/4] PAT gate: if AZURE_DEVOPS_WRITE_PAT is not set, posts wait comment
               on the GitHub issue and pauses until user provides the write PAT
-      → [3/3] Pushes branch to ADO + creates ADO PR + monitors build
+      → [4/4] Pushes branch to ADO + creates ADO PR + monitors build
       ❌ FAIL → fix in current worktree → retest → rerun ado-transition
       ✅ PASS → ADO PR created, build passed.
       ℹ️ Pipeline shape change (issue #42): the GitHub issue **stays open**
