@@ -433,42 +433,92 @@ EOF
       Post MP4 URL/path on the issue before continuing.
       → TaskUpdate(<task_8_id>, status="completed")
 
-- [ ] [9/11] 🚨 HARD STOP — Screenshot + AI verification against FDS obligations (MANDATORY):
+- [ ] [9/11] 🚨 HARD STOP — Screenshot + visual verification against FDS obligations (MANDATORY):
       ⚠️ This step is NOT optional and NOT substitutable. The screenshot must
          come from a running browser rendering the actual UI — not a `cat` of
          a JSX file, not a structural grep, not "the labels are in the source
-         so the screen renders them". Issue #74 documents the failure mode of
-         skipping this step when test-env was hard to bring up. The gate at
-         [10/11] now rejects this with a step-named message naming
-         `[9/11] FDS Verification missing`.
+         so the screen renders them". DOM `pageContains` / regex checks do
+         NOT count as verification — they prove presence in markup, not
+         correctness of the rendered output. Issue #74 documents the failure
+         mode of skipping this step when test-env was hard to bring up;
+         issue #77 documents the failure mode of substituting DOM-regex for
+         actual visual inspection on the remaining screenshots once 2 of 9
+         were opened. The gate at [10/11] rejects this step-by-name with
+         `[9/11] FDS Verification missing` when the sentinel is absent.
 
-      For each implemented feature, capture a screenshot of the **final state**:
+      Capture screenshots of the **final state** of each implemented view:
       → After the happy-path interaction completes (form submitted, page saved)
       → Before any cleanup / navigation away
       Store the screenshots alongside the MP4 (scratch path, not committed).
 
-      Then AI-verify each screenshot against the FDS section obligations:
-        - Open the FDS section file (from [1.5/11] Step 2)
-        - For each labeled field / button / section in the FDS → grep the
-          screenshot's OCR text or visually inspect → confirm presence + label match
-        - Note any missing / renamed / extra elements vs the FDS
+      Then, for every screenshot captured above (no skipping, no "I already
+      looked at the similar one" — each screen has its own obligations):
 
-      Post the verification result on the issue. The comment MUST start with the
-      exact sentinel `**FDS Verification (screenshot + AI)**` on its own first
-      line — this is what `claire fivepoints ado-transition`'s [2/4] proof gate
-      greps for. A discussion comment that merely mentions the phrase in prose
-      will NOT satisfy the gate.
+        1. **Open the PNG file** with the Read tool on the image path.
+        2. **Describe what is rendered** in 2–4 sentences per screenshot:
+           - Layout / structure observed
+           - Presence and position of each FDS-mandated element
+             (labels, buttons, banners, permission states)
+           - Any visual anomaly (overlapping text, missing images, wrong
+             colors, broken alignment)
+        3. **Cross-reference against the FDS** (the section file from [1.5/11] Step 2):
+           - Enumerate **EVERY** FDS obligation that applies to that view —
+             no omission, no "I'll check the important ones", no "the
+             obvious labels are there". If the FDS section defines N
+             obligations for this view, the verification MUST show N
+             entries for this screenshot. Coverage is counted.
+           - For each obligation mark ✅ visible / ❌ missing / ⚠️ present-but-wrong
+             (with specifics — location, what's off).
+           - A missing obligation entry IS a silent-pass failure: a reviewer
+             following `fivepoints-reviewer.md` counts the enumerated entries
+             against the FDS section and rejects the PR if the count does
+             not match.
+        4. **Post the verification on the issue.** The comment MUST start with
+           the exact sentinel `**FDS Verification (screenshot + AI)**` on its
+           own first line — this is what `claire fivepoints ado-transition`'s
+           [2/4] proof gate (`check_proof_gate` in `domain/scripts/ado_common.sh`)
+           greps for via `startswith(...)`. A discussion comment that merely
+           mentions the phrase in prose will NOT satisfy the gate. Shape:
 
         gh issue comment <N> --body "**FDS Verification (screenshot + AI)**
+        For each screenshot, a rendered-state description and per-obligation pass/fail:
 
-        <per-feature: screenshot path + pass/fail + notes>"
+        ### 01-<name>.png
+        - Rendered: <2–4 sentences>
+        - FDS obligations checked:
+          - <obligation A>: ✅ visible at <location>
+          - <obligation B>: ❌ missing
+          - <obligation C>: ⚠️ present but <issue>
+        ### 02-<name>.png
+        ... (repeat for every screenshot, no skipping)"
 
-      ❌ `fivepoints ado-transition` and `fivepoints ado-push` will both reject
-         if either MP4 or this FDS Verification comment is missing. The
-         rejection message names which step was skipped.
+      ⚠️ HARD RULES:
+        - **DOM `pageContains` / regex checks do NOT count as verification.**
+          They prove presence in markup, not correctness of the rendered
+          output. Do not use them as a substitute for reading the image.
+        - **You MUST open every screenshot.** A shortcut of "I already looked
+          at the similar one" is not acceptable — each screen has its own
+          obligations.
+        - **Partial coverage is a failure.** The verification MUST enumerate
+          EVERY FDS obligation for each view — not a subset, not "the
+          important ones". If the FDS section lists N obligations for a
+          view, the comment MUST show N checked entries for that
+          screenshot. Missing entries are treated identically to a skip.
+        - **Silent pass is a failure.** If you post the sentinel without the
+          per-screenshot `### NN-<name>.png` / `- Rendered:` / `- FDS
+          obligations checked:` blocks above, [10/11] (ADO transition) still
+          accepts the sentinel but a reviewer following
+          `fivepoints-reviewer.md` will reject the PR for incomplete proof.
+        - **If the tool cannot read PNGs** (e.g. sandboxed environment without
+          image support) — block on Discord Ping Protocol (see persona top),
+          do not fabricate.
+
+      ❌ `fivepoints ado-transition` rejects if either MP4 or this FDS
+         Verification comment is missing. The rejection message names which
+         step was skipped.
       ❌ If test-env cannot be brought up: Discord Ping Protocol (see [6/11]).
          Do NOT post a static-analysis-based "verification" — the screenshot
-         must be a real browser screenshot.
+         must be a real browser screenshot AND each PNG must be opened.
       → TaskUpdate(<task_9_id>, status="completed")
 
 --- ADO TRANSITION (after scoped MP4 + screenshot verification posted) ---
