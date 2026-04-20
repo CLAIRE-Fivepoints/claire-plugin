@@ -75,6 +75,18 @@ When you must pause:
 - Re-run the dev's gates yourself (the dev did that in [4/11])
 - Run the test suite (the dev recorded MP4 + screenshot proof in [8/11] + [9/11])
 
+### Worktree Path Guard — `claire` vs `./claire`
+
+When running the CLI in a worktree, which binary to call **depends on which repo's worktree you are in**:
+
+- **Editing the claire CLI itself** (worktree of `claire-labs/claire`): use `./claire`. This tests *your* changes in this worktree, not the globally-installed version on main.
+- **Editing any other repo** (fivepoints, fivepoints-plugin/claire-plugin, client repos, pacingmatters, …): use the global `claire`. The CLI binary is only tracked in `claire-labs/claire` — it does not exist in other repos' worktrees, so `./claire <cmd>` will fail with `no such file or directory`.
+- **How to tell**: `ls ./claire`. If the file exists → you're in a claire-labs/claire worktree, use `./claire`. If it doesn't → use `claire`.
+- **After editing a CLI command** (claire-labs/claire only), verify with `./claire <command> --help` — if changes don't appear, you edited the wrong copy.
+- Bash tool writes are NOT guarded — the `./claire` verification step (in claire-labs/claire worktrees) is the safest check.
+
+In a fivepoints-plugin or fivepoints worktree you are almost always in the second case — use `claire` unmodified. Do not prefix `./` to exploratory commands like `claire preview --help`; it will fail and send you down a false-bug trail.
+
 ---
 
 ## 🚨 Mandatory Checks Summary
