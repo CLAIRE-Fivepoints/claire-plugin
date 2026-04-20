@@ -471,7 +471,15 @@ verify_branch_synced_with_ado_dev() {
 
     local ado_tip merge_base
     ado_tip=$(git rev-parse "origin/$target")
-    merge_base=$(git merge-base "$branch" "origin/$target")
+    # `git merge-base` returns exit=1 for disjoint histories. Without this
+    # guard, an empty merge_base would resolve to HEAD in the log command
+    # below, hiding the real problem behind a misleading "merge-base" line.
+    if ! merge_base=$(git merge-base "$branch" "origin/$target" 2>/dev/null) \
+        || [[ -z "$merge_base" ]]; then
+        echo "ERROR: no common ancestor between '$branch' and 'origin/$target' (disjoint histories?)" >&2
+        popd > /dev/null || true
+        return 2
+    fi
 
     if [[ "$merge_base" == "$ado_tip" ]]; then
         echo "✅ Branch is fast-forward with origin/$target (merge-base = ADO $target tip)"

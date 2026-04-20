@@ -266,12 +266,15 @@ def create_pr(branch: str, target: str, issue: int, pat: str) -> tuple[int, str]
     mp4_path = extract_mp4_path(comment_bodies)
     fds_text = extract_fds_verification(comment_bodies)
 
+    # Skeleton body omits the MP4 section entirely. If the PATCH below fails,
+    # the description is incomplete but accurate — the reviewer sees "no MP4
+    # listed" instead of a misleading "Upload in progress..." stuck forever.
     skeleton_body = build_pr_body(
         branch,
         issue,
         fds_verification=fds_text,
         mp4_attachment_url=None,
-        mp4_skip_reason="Upload in progress..." if mp4_path else None,
+        mp4_skip_reason=None,
     )
 
     response = ado_post(
@@ -299,7 +302,16 @@ def create_pr(branch: str, target: str, issue: int, pat: str) -> tuple[int, str]
         mp4_skip_reason=skip_reason,
     )
     if final_body != skeleton_body:
-        ado_patch_pr_description(pr_id, final_body, pat)
+        if not ado_patch_pr_description(pr_id, final_body, pat):
+            # Attachment may already be uploaded to ADO (visible in the "Files"
+            # tab), but the PR body won't reference it. Surface the mismatch
+            # prominently so the dev can retry the PATCH or patch by hand.
+            print(
+                f"⚠️  ADO PR #{pr_id} description PATCH failed — body missing "
+                f"MP4 link / FDS text. See agent stderr log; retry manually "
+                f"if needed.",
+                file=sys.stderr,
+            )
 
     return pr_id, pr_url
 
