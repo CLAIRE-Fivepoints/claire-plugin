@@ -126,6 +126,13 @@ If none found: `ERROR: AZURE_DEVOPS_PAT not set`
 | Test Client ID | `10000000-0000-0000-0000-000000000001` |
 | Test Organization | `07e2433e-f36b-1410-8662-0056d94c4b2e` |
 
+> ⚠️ **Seeding test data for FDS verification?** `RestrictedQueryProvider`
+> filters every read by `OrganizationId == GetCurrentOrganizationId()`.
+> Seeded rows under the wrong org return zero results even with super-user
+> bypass. Use **prime.user's live `currentOrganizationId` from `/auth/login`**
+> — never "the first org in the list". Full pattern + SQL skeleton:
+> `claire domain read fivepoints operational TEST_DATA_STAGING`.
+
 ---
 
 ## Common Issues
