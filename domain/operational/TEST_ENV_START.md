@@ -45,6 +45,14 @@ Silence for >30s is now unambiguous — if no heartbeat appears, the script
 itself has crashed (not the boot). Previously a silent `for i in seq 1 30; do
 sleep 2; done` made boot-in-progress indistinguishable from script-died-with-no-output.
 
+**Deadline semantics change (2026-04-20, issue #74):** the wait loop now uses a
+single `WAIT_DEADLINE=60s` covering API + Vite *in parallel*, instead of the
+prior sequential 60s API + 30s Vite (~90s wall clock). Both services boot
+concurrently in practice, so the new ceiling is rarely hit, but Vite no longer
+has its own dedicated 30s budget after the API completes. If you see a Vite
+timeout warning that wasn't there before, raise `WAIT_DEADLINE` in
+`test-env-start.sh` or pre-warm Vite separately.
+
 On success, prints:
 ```
 ✅ Environment ready

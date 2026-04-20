@@ -176,8 +176,13 @@ if [[ ! "$BRANCH" =~ ^(feature|bugfix)/[0-9]+-. ]]; then
 fi
 
 # Detect repo for GitHub issue operations (must be defined before the proof gate).
-# Override by setting CLAIRE_WAIT_REPO in the environment.
-GH_REPO="${CLAIRE_WAIT_REPO:-CLAIRE-Fivepoints/fivepoints-test}"
+# Single source of truth shared with ado-transition.sh — see resolve_gh_repo
+# in ado_common.sh. Override by setting CLAIRE_WAIT_REPO.
+GH_REPO=$(resolve_gh_repo "CLAIRE-Fivepoints/fivepoints-test") || {
+    echo "❌  Cannot determine GitHub repo for proof gate." >&2
+    echo "    Set CLAIRE_WAIT_REPO=<owner/name> or run from inside the GitHub repo clone." >&2
+    exit 1
+}
 
 # HARD GATE: Both [8/11] MP4 and [9/11] FDS Verification proof must be posted on
 # the issue before ADO push. Shared check_proof_gate (in ado_common.sh) emits

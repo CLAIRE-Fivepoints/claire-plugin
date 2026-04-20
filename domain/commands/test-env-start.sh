@@ -192,7 +192,8 @@ while :; do
     sleep 2
 done
 
-[[ "$API_READY" != "true" ]] && echo "⚠️  API not ready after ${WAIT_DEADLINE}s — check /tmp/tfione-api.log"
+[[ "$SQL_READY"  != "true" ]] && echo "⚠️  SQL Server not ready after ${WAIT_DEADLINE}s — docker container did not reach 'running' state"
+[[ "$API_READY"  != "true" ]] && echo "⚠️  API not ready after ${WAIT_DEADLINE}s — check /tmp/tfione-api.log"
 [[ "$VITE_READY" != "true" ]] && echo "⚠️  Vite not ready after ${WAIT_DEADLINE}s — check /tmp/tfione-vite.log"
 
 echo ""

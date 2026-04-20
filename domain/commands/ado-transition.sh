@@ -132,12 +132,11 @@ echo "✅  Branch OK: $BRANCH"
 echo ""
 echo "[2/4] Proof gate (MP4 + FDS Verification comments on issue #${ISSUE_NUMBER})..."
 
-GH_REPO="${CLAIRE_WAIT_REPO:-$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || echo "")}"
-if [[ -z "$GH_REPO" ]]; then
+GH_REPO=$(resolve_gh_repo "CLAIRE-Fivepoints/fivepoints-test") || {
     echo "❌  Cannot determine GitHub repo for proof gate." >&2
     echo "    Set CLAIRE_WAIT_REPO=<owner/name> or run from inside the GitHub repo clone." >&2
     exit 1
-fi
+}
 
 if ! check_proof_gate "$ISSUE_NUMBER" "$GH_REPO"; then
     exit 1

@@ -320,6 +320,35 @@ ado_print_info() {
     echo "Repo:    ${_ADO_REPO}"
 }
 
+# Resolve the GitHub repo for proof-gate operations.
+# Single source of truth for both ado-push and ado-transition so they always
+# verify proof against the same issue tracker (PR #78 review point 1).
+#
+# Priority:
+#   1. CLAIRE_WAIT_REPO env var
+#   2. `gh repo view` autodetect from current directory
+#   3. caller-supplied default (e.g. "CLAIRE-Fivepoints/fivepoints-test")
+#
+# Returns 0 + prints repo on stdout, or 1 if no repo can be resolved.
+resolve_gh_repo() {
+    local default_repo="${1:-}"
+    if [[ -n "${CLAIRE_WAIT_REPO:-}" ]]; then
+        printf '%s\n' "$CLAIRE_WAIT_REPO"
+        return 0
+    fi
+    local detected
+    detected=$(gh repo view --json nameWithOwner -q '.nameWithOwner' 2>/dev/null || echo "")
+    if [[ -n "$detected" ]]; then
+        printf '%s\n' "$detected"
+        return 0
+    fi
+    if [[ -n "$default_repo" ]]; then
+        printf '%s\n' "$default_repo"
+        return 0
+    fi
+    return 1
+}
+
 # Verify dev-pipeline proof gates: MP4 ([8/11]) and FDS Verification ([9/11])
 # posted as comments on the GitHub issue. Reads issue comments via gh CLI.
 #
@@ -330,6 +359,16 @@ ado_print_info() {
 # Returns 0 if both gates pass, 1 otherwise. Rejection text names the
 # specific skipped checklist step (per issue #74) and references the
 # Discord Ping Protocol so the dev does not invent a static-analysis fallback.
+#
+# Matchers:
+#   MP4: line starting with `MP4:` / `Proof:` / `Recording:` / `Video:`
+#        (case-insensitive, multiline) followed by content ending in `.mp4`.
+#        Tighter than `contains(".mp4")` to avoid false positives from
+#        discussion comments that mention `.mp4` in prose (PR #78 review point 2).
+#   FDS: comment whose body STARTS with `**FDS Verification (screenshot + AI)**`
+#        (per the dev checklist's documented heredoc format).
+#
+# Both gates are evaluated in a single `gh issue view` call (PR #78 review point 3).
 check_proof_gate() {
     local issue_number="$1"
     local gh_repo="$2"
@@ -339,23 +378,17 @@ check_proof_gate() {
         return 2
     fi
 
-    local mp4_found=false
-    local fds_found=false
+    local result_json
+    result_json=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
+        --jq '{
+            mp4: any(.comments[].body; test("(?im)^(MP4|Proof|Recording|Video)[: ].*\\.mp4")),
+            fds: any(.comments[].body; startswith("**FDS Verification (screenshot + AI)**"))
+        }' \
+        2>/dev/null || echo '{"mp4":false,"fds":false}')
 
-    local mp4_match
-    mp4_match=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
-        --jq '[.comments[].body | select(contains(".mp4"))] | first // ""' \
-        2>/dev/null || echo "")
-    [[ -n "$mp4_match" ]] && mp4_found=true
-
-    # FDS Verification must be the first line of the comment (not a quoted
-    # reference inside an analysis/discussion comment) — per the dev checklist's
-    # documented format: `gh issue comment <N> --body "**FDS Verification (screenshot + AI)**\n..."`.
-    local fds_match
-    fds_match=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
-        --jq '[.comments[].body | select(startswith("**FDS Verification (screenshot + AI)**"))] | first // ""' \
-        2>/dev/null || echo "")
-    [[ -n "$fds_match" ]] && fds_found=true
+    local mp4_found fds_found
+    mp4_found=$(jq -r '.mp4' <<<"$result_json" 2>/dev/null || echo "false")
+    fds_found=$(jq -r '.fds' <<<"$result_json" 2>/dev/null || echo "false")
 
     if [[ "$mp4_found" == "true" && "$fds_found" == "true" ]]; then
         echo "✅ Proof gate: MP4 ([8/11]) + FDS Verification ([9/11]) both posted on issue #${issue_number}"
@@ -366,9 +399,9 @@ check_proof_gate() {
         echo ""
         echo "❌ Proof gate failed for issue #${issue_number} (${gh_repo}):"
         if [[ "$mp4_found" != "true" ]]; then
-            echo "   ❌ [8/11] MP4 missing: no 'MP4 URL/path' line ('.mp4') found on issue #${issue_number}."
+            echo "   ❌ [8/11] MP4 missing: no 'MP4 URL/path' line found on issue #${issue_number}."
             echo "      Record an MP4 with Playwright (claire domain read video_proof technical PLAYWRIGHT_PATTERNS),"
-            echo "      then post the path:"
+            echo "      then post the path with one of the recognised prefixes (MP4:/Proof:/Recording:/Video:):"
             echo "        gh issue comment ${issue_number} --body 'MP4: /path/to/proof.mp4'"
         fi
         if [[ "$fds_found" != "true" ]]; then
