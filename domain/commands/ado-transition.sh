@@ -4,10 +4,11 @@ set -euo pipefail
 # fivepoints ado-transition — PAT-gated ADO push for dev role
 #
 # Bash orchestration:
-#   [1/4] Verify feature branch (naming convention)
-#   [2/4] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11]) on the issue
-#   [3/4] PAT gate — request AZURE_DEVOPS_WRITE_PAT if not set
-#   [4/4] Set up ADO remote + git push, then call ado_agent.py (build agent)
+#   [1/5] Verify feature branch (naming convention)
+#   [2/5] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11]) on the issue
+#   [3/5] PAT gate — request AZURE_DEVOPS_WRITE_PAT if not set
+#   [4/5] Sync check — fail fast if branch is not fast-forward with ADO $target
+#   [5/5] Set up ADO remote + git push, then call ado_agent.py (build agent)
 #
 # Usage:
 #   claire fivepoints ado-transition --issue <N> [--branch <name>] [--target <branch>]
@@ -19,6 +20,8 @@ source "$PLUGIN_ROOT/domain/scripts/ado_common.sh"
 ISSUE_NUMBER=""
 BRANCH=""
 TARGET_BRANCH="dev"
+AUTO_SYNC=1
+MIRROR_REMOTE="${ADO_TRANSITION_MIRROR_REMOTE:-github}"
 
 show_help() {
     cat <<'HELP'
@@ -26,20 +29,29 @@ Usage: claire fivepoints ado-transition --issue <N> [--branch <name>] [--target 
 
 PAT-gated transition from dev to ADO. Bash orchestration + Python build agent.
 
-  [1/4] Verify feature branch (feature/XXXXX-description or bugfix/XXXXX-description)
-  [2/4] Proof gate — verify MP4 ([8/11]) and FDS Verification ([9/11]) comments on the issue
-  [3/4] PAT gate — pause and wait for AZURE_DEVOPS_WRITE_PAT if not set
-  [4/4] Set up ADO remote + git push + call ado_agent.py (build verification agent)
+  [1/5] Verify feature branch (feature/XXXXX-description or bugfix/XXXXX-description)
+  [2/5] Proof gate — verify MP4 ([8/11]) and FDS Verification ([9/11]) comments on the issue
+  [3/5] PAT gate — pause and wait for AZURE_DEVOPS_WRITE_PAT if not set
+  [4/5] Sync check — verify branch is fast-forward with ADO target (prevents chaotic PRs)
+  [5/5] Set up ADO remote + git push + call ado_agent.py (build verification agent)
 
 Options:
   --issue <N>       GitHub issue number (required)
   --branch <name>   Branch to push (default: current branch)
   --target <branch> Target branch for ADO PR (default: dev)
+  --no-auto-sync    Skip auto-rebase on divergence — print manual resolution and exit 1
 
 Prerequisites:
   - All tests passed and MP4 proof recorded + posted on issue
   - Branch follows: feature/XXXXX-description or bugfix/XXXXX-description
   - FIVEPOINTS_REPO_PATH set (or default: /Users/andreperez/TFIOneGit)
+
+Auto-sync:
+  When the branch is not fast-forward with ADO <target>, the script attempts
+  git rebase --onto origin/<target> <mirror-base> <branch> (where mirror-base
+  is the merge-base with the GitHub mirror). Clean rebase → push proceeds.
+  Conflict → rebase aborted, manual resolution printed, exit 1.
+  Pass --no-auto-sync to skip the attempt entirely.
 HELP
 }
 
@@ -59,7 +71,8 @@ after ALL FDS sections are tested and proved on video.
 1. Verify branch naming convention
 2. Proof gate: verify MP4 + FDS Verification comments on the issue (HARD STOPs from dev checklist)
 3. PAT gate: request AZURE_DEVOPS_WRITE_PAT if not set (posts wait comment on issue)
-4. Initialize ADO connection + git push + call ado_agent.py agent
+4. Sync check: auto-rebase onto ADO target when safe; fail with resolution on conflict
+5. Initialize ADO connection + git push + call ado_agent.py agent
 
 ## Usage
 ```bash
@@ -83,12 +96,13 @@ AGENT_HELP
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --issue)       ISSUE_NUMBER="$2"; shift 2 ;;
-        --branch)      BRANCH="$2"; shift 2 ;;
-        --target)      TARGET_BRANCH="$2"; shift 2 ;;
-        --help|-h)     show_help; exit 0 ;;
-        --agent-help)  show_agent_help; exit 0 ;;
-        *)             echo "Unknown argument: $1"; show_help; exit 1 ;;
+        --issue)          ISSUE_NUMBER="$2"; shift 2 ;;
+        --branch)         BRANCH="$2"; shift 2 ;;
+        --target)         TARGET_BRANCH="$2"; shift 2 ;;
+        --no-auto-sync)   AUTO_SYNC=0; shift ;;
+        --help|-h)        show_help; exit 0 ;;
+        --agent-help)     show_agent_help; exit 0 ;;
+        *)                echo "Unknown argument: $1"; show_help; exit 1 ;;
     esac
 done
 
@@ -108,9 +122,9 @@ echo "╚═══════════════════════�
 echo ""
 
 # ─────────────────────────────────────────────
-# [1/4] Verify feature branch
+# [1/5] Verify feature branch
 # ─────────────────────────────────────────────
-echo "[1/4] Verifying feature branch..."
+echo "[1/5] Verifying feature branch..."
 echo "      Branch: $BRANCH"
 
 if ! echo "$BRANCH" | grep -qE '^(feature|bugfix)/[0-9]+-'; then
@@ -127,10 +141,10 @@ fi
 echo "✅  Branch OK: $BRANCH"
 
 # ─────────────────────────────────────────────
-# [2/4] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11])
+# [2/5] Proof gate — MP4 ([8/11]) + FDS Verification ([9/11])
 # ─────────────────────────────────────────────
 echo ""
-echo "[2/4] Proof gate (MP4 + FDS Verification comments on issue #${ISSUE_NUMBER})..."
+echo "[2/5] Proof gate (MP4 + FDS Verification comments on issue #${ISSUE_NUMBER})..."
 
 GH_REPO=$(resolve_gh_repo "CLAIRE-Fivepoints/fivepoints-test") || {
     echo "❌  Cannot determine GitHub repo for proof gate." >&2
@@ -143,10 +157,10 @@ if ! check_proof_gate "$ISSUE_NUMBER" "$GH_REPO"; then
 fi
 
 # ─────────────────────────────────────────────
-# [3/4] PAT gate
+# [3/5] PAT gate
 # ─────────────────────────────────────────────
 echo ""
-echo "[3/4] PAT gate (checking AZURE_DEVOPS_WRITE_PAT)..."
+echo "[3/5] PAT gate (checking AZURE_DEVOPS_WRITE_PAT)..."
 
 if [[ -z "${AZURE_DEVOPS_WRITE_PAT:-}" ]]; then
     echo ""
@@ -174,19 +188,50 @@ fi
 
 echo "✅  AZURE_DEVOPS_WRITE_PAT set."
 
-# ─────────────────────────────────────────────
-# [4/4] ADO remote setup + git push + transition agent
-# ─────────────────────────────────────────────
-echo ""
-echo "[4/4] Setting up ADO remote and pushing branch..."
-
-# Initialize ADO connection (must run from TFIOneGit clone)
+# Resolve the ADO clone path once — shared by [4/5] sync check and [5/5] push.
 CLIENT_REPO_PATH="${FIVEPOINTS_REPO_PATH:-/Users/andreperez/TFIOneGit}"
 if [[ ! -d "$CLIENT_REPO_PATH/.git" ]]; then
     echo "❌  Client repo not found at $CLIENT_REPO_PATH"
     echo "    Set FIVEPOINTS_REPO_PATH to the local clone of TFIOneGit"
     exit 1
 fi
+
+# ─────────────────────────────────────────────
+# [4/5] Sync check — branch must be fast-forward with ADO target.
+#        On divergence, auto-rebase unless --no-auto-sync was passed.
+# ─────────────────────────────────────────────
+echo ""
+echo "[4/5] Sync check (branch must be fast-forward with ADO ${TARGET_BRANCH})..."
+
+if verify_branch_synced_with_ado_dev "$BRANCH" "$TARGET_BRANCH" "$CLIENT_REPO_PATH"; then
+    :  # already synced
+elif [[ "$AUTO_SYNC" == "1" ]]; then
+    echo ""
+    echo "      Attempting auto-rebase onto origin/${TARGET_BRANCH}..."
+    if attempt_auto_rebase_onto_ado "$BRANCH" "$TARGET_BRANCH" "$CLIENT_REPO_PATH" "$MIRROR_REMOTE"; then
+        echo ""
+        echo "      Re-running sync check after auto-rebase..."
+        if ! verify_branch_synced_with_ado_dev "$BRANCH" "$TARGET_BRANCH" "$CLIENT_REPO_PATH"; then
+            echo "❌  Post-rebase sync check still failed — aborting push." >&2
+            exit 1
+        fi
+    else
+        echo "" >&2
+        echo "❌  Auto-rebase aborted due to conflict — manual resolution required." >&2
+        echo "    See the resolution options printed above, or pass --no-auto-sync to skip" >&2
+        echo "    the rebase attempt on future runs." >&2
+        exit 1
+    fi
+else
+    echo "❌  --no-auto-sync set — skipping rebase attempt. Resolve manually." >&2
+    exit 1
+fi
+
+# ─────────────────────────────────────────────
+# [5/5] ADO remote setup + git push + transition agent
+# ─────────────────────────────────────────────
+echo ""
+echo "[5/5] Setting up ADO remote and pushing branch..."
 
 pushd "$CLIENT_REPO_PATH" > /dev/null
 ado_init
