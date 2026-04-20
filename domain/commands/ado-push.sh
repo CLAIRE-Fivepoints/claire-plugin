@@ -176,39 +176,23 @@ if [[ ! "$BRANCH" =~ ^(feature|bugfix)/[0-9]+-. ]]; then
 fi
 
 # Detect repo for GitHub issue operations (must be defined before the proof gate).
-# Override by setting CLAIRE_WAIT_REPO in the environment.
-GH_REPO="${CLAIRE_WAIT_REPO:-CLAIRE-Fivepoints/fivepoints-test}"
+# Single source of truth shared with ado-transition.sh — see resolve_gh_repo
+# in ado_common.sh. Override by setting CLAIRE_WAIT_REPO.
+GH_REPO=$(resolve_gh_repo "CLAIRE-Fivepoints/fivepoints-test") || {
+    echo "❌  Cannot determine GitHub repo for proof gate." >&2
+    echo "    Set CLAIRE_WAIT_REPO=<owner/name> or run from inside the GitHub repo clone." >&2
+    exit 1
+}
 
-# HARD GATE: Proof must be posted in the GitHub issue before ADO push.
-# Tester must have run `claire proof record --project fivepoints` AND posted
-# the .mp4 path in the GitHub issue comment. This is verified by checking
-# the issue comments for a .mp4 link — tying proof to this specific issue.
+# HARD GATE: Both [8/11] MP4 and [9/11] FDS Verification proof must be posted on
+# the issue before ADO push. Shared check_proof_gate (in ado_common.sh) emits
+# step-named rejection messages so the dev sees exactly which checklist step
+# was skipped, and references the Discord Ping Protocol as the correct fallback.
 echo "Checking proof evidence in GitHub issue #${ISSUE_NUMBER}..."
 
-PROOF_FOUND=false
-PROOF_COMMENT=$(gh issue view "$ISSUE_NUMBER" --repo "$GH_REPO" --json comments \
-    --jq '[.comments[].body | select(contains(".mp4"))] | first // ""' \
-    2>/dev/null || echo "")
-
-if [[ -n "$PROOF_COMMENT" ]]; then
-    PROOF_FOUND=true
-fi
-
-if [[ "$PROOF_FOUND" != "true" ]]; then
-    echo "❌ HARD GATE: No MP4 proof found in GitHub issue #${ISSUE_NUMBER}." >&2
-    echo "" >&2
-    echo "The tester must record proof AND post the .mp4 path in the issue:" >&2
-    echo "" >&2
-    echo "  1. Record proof: claire domain search video mp4  (see recording instructions)" >&2
-    echo "  2. Post the .mp4 path in the issue (this is a real gh command):" >&2
-    echo "       gh issue comment ${ISSUE_NUMBER} --repo ${GH_REPO} --body 'Proof: /path/to/proof.mp4'" >&2
-    echo "  3. Re-run: claire fivepoints ado-push --issue ${ISSUE_NUMBER}" >&2
-    echo "" >&2
-    echo "❌ fivepoints ado-push requires .mp4 proof posted in issue #${ISSUE_NUMBER}." >&2
+if ! check_proof_gate "$ISSUE_NUMBER" "$GH_REPO"; then
     exit 1
 fi
-
-echo "✅ Proof verified: .mp4 evidence found in issue #${ISSUE_NUMBER} comments"
 echo ""
 
 # Install ERR trap now that ISSUE_NUMBER and GH_REPO are both known.
