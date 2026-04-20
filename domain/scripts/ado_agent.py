@@ -134,8 +134,7 @@ def build_pr_body(
     if mp4_attachment_url:
         sections.append(
             "## MP4 Proof\n"
-            f"[Download MP4 proof]({mp4_attachment_url})\n\n"
-            "Attached directly to this PR — no GitHub access required."
+            f"[Download MP4 proof]({mp4_attachment_url})"
         )
     elif mp4_skip_reason:
         sections.append(f"## MP4 Proof\n⚠️ {mp4_skip_reason}")
