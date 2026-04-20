@@ -133,6 +133,13 @@ echo "ado=${ado:-absent}"
 | absent  | present | absent | Previous session on a different host. | `git fetch github "$branch" && git checkout "$branch"` — then reuse. |
 | absent  | absent  | absent | **Truly new** — no prior session exists for this ticket. | Create the branch per the analyst checklist. |
 | absent  | absent  | present | ADO has a branch but local + github have been wiped. | Re-mirror: `git fetch origin "$branch" && git push github "$branch"` — then reuse. |
+| present | absent  | present | Post-transition but github mirror was wiped. | Re-mirror to github: `git push github "$branch"` — then reuse. |
+| absent  | present | present | Post-transition but local working clone is missing. | Re-clone locally: `git fetch github "$branch" && git checkout "$branch"` — then reuse. |
+
+The last two rows cover every remaining `local/github/ado` combination. They
+are uncommon (typically a post-merge state where one of the mirrors has been
+wiped) and both resolve to the same pattern: re-mirror the missing location
+from whichever one still holds the branch, then reuse.
 
 The rule of thumb:
 

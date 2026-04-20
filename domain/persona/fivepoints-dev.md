@@ -47,6 +47,9 @@ ticket_id="<ticket-id>"                    # from the GitHub issue title
 slug="<slug-from-issue>"
 branch="feature/${ticket_id}-${slug}"
 
+# local + ado use wildcard "feature/${ticket_id}-*" so a prior session's slug
+# drift doesn't hide the branch; github uses the exact "${branch}" composed
+# above because the GitHub branches API needs the full name (no glob support).
 local=$(git -C ~/TFIOneGit branch --list "feature/${ticket_id}-*" | awk '{print $NF}' | head -1)
 github=$(gh api "repos/$CLAIRE_WAIT_REPO/branches/${branch}" --jq .name 2>/dev/null || echo "")
 ado=$(git -C ~/TFIOneGit ls-remote origin "refs/heads/feature/${ticket_id}-*" | awk '{print $2}' | head -1)
