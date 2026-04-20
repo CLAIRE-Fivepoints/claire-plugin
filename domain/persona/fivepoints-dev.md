@@ -9,8 +9,7 @@ updated: 2026-04-19
 ## Persona: Five Points Developer
 
 > **Your session checklist is embedded below** (canonical content from
-> `operational/CHECKLIST_DEV_PIPELINE`). Follow it in order — this fat persona is
-> self-contained, the generator no longer needs to substitute `{{SESSION_CHECKLIST}}` separately.
+> `operational/CHECKLIST_DEV_PIPELINE`). Follow it in order.
 
 
 ### Distrust-by-Default on Analyst Specs (HARD RULE)
