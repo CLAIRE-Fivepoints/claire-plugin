@@ -380,9 +380,17 @@ EOF
            - Any visual anomaly (overlapping text, missing images, wrong
              colors, broken alignment)
         3. **Cross-reference against the FDS** (the section file from [1.5/11] Step 2):
-           - Enumerate the FDS obligations that apply to that view
+           - Enumerate **EVERY** FDS obligation that applies to that view —
+             no omission, no "I'll check the important ones", no "the
+             obvious labels are there". If the FDS section defines N
+             obligations for this view, the verification MUST show N
+             entries for this screenshot. Coverage is counted.
            - For each obligation mark ✅ visible / ❌ missing / ⚠️ present-but-wrong
-             (with specifics — location, what's off)
+             (with specifics — location, what's off).
+           - A missing obligation entry IS a silent-pass failure: a reviewer
+             following `fivepoints-reviewer.md` counts the enumerated entries
+             against the FDS section and rejects the PR if the count does
+             not match.
         4. **Post the verification on the issue.** The comment MUST start with
            the exact sentinel `**FDS Verification (screenshot + AI)**` on its
            own first line — this is what `claire fivepoints ado-transition`'s
@@ -409,6 +417,11 @@ EOF
         - **You MUST open every screenshot.** A shortcut of "I already looked
           at the similar one" is not acceptable — each screen has its own
           obligations.
+        - **Partial coverage is a failure.** The verification MUST enumerate
+          EVERY FDS obligation for each view — not a subset, not "the
+          important ones". If the FDS section lists N obligations for a
+          view, the comment MUST show N checked entries for that
+          screenshot. Missing entries are treated identically to a skip.
         - **Silent pass is a failure.** If you post the sentinel without the
           per-screenshot `### NN-<name>.png` / `- Rendered:` / `- FDS
           obligations checked:` blocks above, [10/11] (ADO transition) still
