@@ -22,6 +22,95 @@ updated: 2026-04-19
       claire domain read fivepoints operational PIPELINE_WORKFLOW
       claire domain read fivepoints technical FACE_SHEET_SECTION_PATTERNS
 - [ ] Read issue body (PBI reference, requirements)
+- [ ] 🎯 Directive Interpretation (MANDATORY — before FDS fetch, before any surface check):
+      Scan the PBI / issue body for **directive phrases** that constrain HOW the
+      work must be done. Triggers (non-exhaustive):
+        - "use X as your template"
+        - "follow the pattern of Y"
+        - "mirror the Z implementation"
+        - "align with the existing W module"
+        - "same structure as V"
+        - "inspired by Q"
+        - any reference to an existing sibling module/component/feature the PBI
+          points you at as a reference point
+
+      For each directive found, post an interpretation comment on the GitHub
+      issue BEFORE the FDS fetch, containing all 5 fields:
+
+        1. **Literal meaning** — the phrase, word-for-word
+        2. **Operational meaning** — what it means for code (structure? API shape?
+           file layout? lifecycle? permission gates? error handling?)
+        3. **Comparison target** — the exact file(s)/module(s) the directive
+           points at (`ls`, `git ls-tree`, or `claire reveal` output)
+        4. **Mandatory attributes** — 3–7 specific patterns from the comparison
+           target that MUST appear in the current work. Example for "use Provider
+           face sheet as template":
+             - `PermissionCode.<X>` permission gate on the root component
+             - Redux `set<Entity>` dispatch on successful load
+             - `skipToken` wrapping when permission denied
+             - Super-user bypass chain (`SUPER_USER_ROLE_CODE` + `permissionCheckBypass`)
+             - `matchPath` + `on<Entity>FaceSheetRoot` conditional render
+             - Fallback `<Alert severity="warning">` on permission denied
+             - Inline pending-documents banner (FDS rule)
+        5. **Verification plan** — the concrete grep/structural command that
+           proves match or divergence for each attribute
+
+      Use a heredoc with a flush-left `EOF` terminator:
+
+gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" --body "$(cat <<'EOF'
+**Directive Interpretation**
+- Literal meaning: "<exact phrase from PBI>"
+- Operational meaning: <what it means for code>
+- Comparison target: <file paths / modules>
+- Mandatory attributes:
+    1. <attribute 1 + short rationale>
+    2. <attribute 2 + short rationale>
+    3. <attribute 3 + short rationale>
+    ... (3 min, 7 max)
+- Verification plan:
+    - <attribute 1> → `<grep/command>`
+    - <attribute 2> → `<grep/command>`
+    - ...
+EOF
+)"
+
+      ⚠️ HARD STOP:
+        - No FDS fetch until the interpretation is posted (or the no-directive
+          line below is posted)
+        - No surface check (`ls`, `grep FDS label`) before the interpretation
+        - Existence ≠ conformity — existence checks are NOT valid until the
+          interpretation is on record
+
+      ⚠️ Ambiguity gate (ask, don't assume):
+        If a directive is present but you cannot confidently fill all 5 fields
+        (e.g. the comparison target is missing, the directive is vague, the
+        mandatory attributes could plausibly be 2 or 20 — you are guessing),
+        do NOT post a half-populated interpretation. Instead, run all three
+        of these — in order — before waiting:
+          1. Post ONE focused question on the issue:
+             gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
+               --body "**Directive Interpretation — needs clarification:**
+             Phrase: \"<exact directive phrase>\"
+             Ambiguity: <what you cannot decide confidently>
+             Options: <A / B / …>"
+          2. Ping Discord with the same question + the issue link
+             (owner notification — real-time; see persona-top Discord Ping Protocol):
+             claire discord send "Issue #<N> — Directive Interpretation ambiguous: <one-sentence summary>. Link: https://github.com/$CLAIRE_WAIT_REPO/issues/<N>"
+             ⚠️ If the disclosure guard blocks the URL (internal-reference
+                match), fall back to sending without the URL and note in the
+                message body that the link is in the GitHub comment.
+          3. Block on the response:
+             claire wait --issue <N>
+        Plausibility ≠ confirmation. One good question beats a fabricated
+        5-field block that downstream roles will trust. GitHub = audit trail,
+        Discord = real-time owner notification — both are mandatory on
+        ambiguity.
+
+      If the PBI has NO directive phrases, post the explicit line verbatim so
+      the absence is deliberate, not an oversight:
+          gh issue comment <N> --repo "$CLAIRE_WAIT_REPO" \
+            --body "No directive phrases found — proceeding with standard analysis."
+
 - [ ] FDS fetch-on-use + manifest — download the fresh attachment, extract
       sections, emit the manifest you will quote in your receipt:
       ```bash
