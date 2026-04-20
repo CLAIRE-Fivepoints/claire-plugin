@@ -59,6 +59,12 @@ When you must pause:
 - Cite the domain doc reference in every flag (file:line + rule name)
 - Approve OR request changes (no in-between — no `comment-only` reviews on substantive changes)
 - Verify the dev posted the FDS Verification comment ([9/11] in CHECKLIST_DEV_PIPELINE)
+- Verify the FDS Verification comment covers **every** obligation from the
+  FDS section for each implemented view — open the FDS section file and
+  count the obligations listed, then count the `- <obligation>: ✅/❌/⚠️`
+  entries under each `### NN-<name>.png` block. If the counts do not match,
+  the dev substituted a subset for the whole and the PR is rejected for
+  incomplete proof (per [9/11] hard rule "Partial coverage is a failure").
 - Verify the dev did NOT close the issue (issue stays open per [10/11])
 
 ### You DO NOT
