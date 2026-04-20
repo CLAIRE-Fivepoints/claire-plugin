@@ -113,7 +113,6 @@ def extract_fds_verification(comment_bodies: list[str]) -> str | None:
 
 def build_pr_body(
     branch: str,
-    issue: int,
     fds_verification: str | None,
     mp4_attachment_url: str | None,
     mp4_skip_reason: str | None,
@@ -125,11 +124,12 @@ def build_pr_body(
     an attachment link to the MP4. When the MP4 can't be attached (too big,
     not found on disk), the body surfaces the skip reason instead of silently
     dropping it — a reviewer must see that a proof was expected.
+
+    The GitHub issue number is intentionally NOT embedded — GitHub is private
+    to ADO reviewers, so `owner/repo#N` is noise to them. Ticket traceability
+    is preserved via the branch name (convention: feature/<ticket-id>-<desc>).
     """
-    sections: list[str] = [
-        f"## GitHub Issue\n{GH_REPO}#{issue}",
-        f"## Branch\n`{branch}`",
-    ]
+    sections: list[str] = [f"## Branch\n`{branch}`"]
 
     if mp4_attachment_url:
         sections.append(
@@ -270,7 +270,6 @@ def create_pr(branch: str, target: str, issue: int, pat: str) -> tuple[int, str]
     # listed" instead of a misleading "Upload in progress..." stuck forever.
     skeleton_body = build_pr_body(
         branch,
-        issue,
         fds_verification=fds_text,
         mp4_attachment_url=None,
         mp4_skip_reason=None,
@@ -295,7 +294,6 @@ def create_pr(branch: str, target: str, issue: int, pat: str) -> tuple[int, str]
     attachment_url, skip_reason = attach_mp4_and_get_link(pr_id, mp4_path, pat)
     final_body = build_pr_body(
         branch,
-        issue,
         fds_verification=fds_text,
         mp4_attachment_url=attachment_url,
         mp4_skip_reason=skip_reason,

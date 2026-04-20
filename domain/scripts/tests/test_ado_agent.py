@@ -108,7 +108,6 @@ class TestBuildPrBody:
         fds = f"{FDS_SENTINEL}\n- Screen A: pass\n- Screen B: pass"
         body = build_pr_body(
             "feature/71-x",
-            71,
             fds_verification=fds,
             mp4_attachment_url=None,
             mp4_skip_reason=None,
@@ -120,7 +119,6 @@ class TestBuildPrBody:
     def test_embeds_mp4_attachment_link_when_url_provided(self):
         body = build_pr_body(
             "feature/71-x",
-            71,
             fds_verification=None,
             mp4_attachment_url="https://ado/x.mp4",
             mp4_skip_reason=None,
@@ -130,7 +128,6 @@ class TestBuildPrBody:
     def test_surfaces_skip_reason_when_mp4_not_attached(self):
         body = build_pr_body(
             "feature/71-x",
-            71,
             fds_verification=None,
             mp4_attachment_url=None,
             mp4_skip_reason="MP4 too large (50 MB)",
@@ -143,7 +140,6 @@ class TestBuildPrBody:
     def test_skips_mp4_and_fds_sections_when_neither_present(self):
         body = build_pr_body(
             "feature/71-x",
-            71,
             fds_verification=None,
             mp4_attachment_url=None,
             mp4_skip_reason=None,
@@ -155,7 +151,6 @@ class TestBuildPrBody:
         # If both are somehow supplied, the URL wins (truthy attachment).
         body = build_pr_body(
             "feature/71-x",
-            71,
             fds_verification=None,
             mp4_attachment_url="https://ado/x.mp4",
             mp4_skip_reason="should be ignored",
@@ -163,16 +158,21 @@ class TestBuildPrBody:
         assert "Download MP4 proof" in body
         assert "should be ignored" not in body
 
-    def test_always_includes_branch_and_issue(self):
+    def test_always_includes_branch(self):
+        # Ticket id lives in the branch name by convention
+        # (feature/<ticket-id>-<desc>). GitHub issue number is intentionally
+        # NOT embedded — ADO reviewers can't reach GitHub, the reference
+        # would be noise to them.
         body = build_pr_body(
             "feature/9999-abc",
-            9999,
             fds_verification=None,
             mp4_attachment_url=None,
             mp4_skip_reason=None,
         )
         assert "feature/9999-abc" in body
-        assert "#9999" in body
+        # Negative assertion: no `GitHub Issue` section, no `owner/repo#N`
+        assert "GitHub Issue" not in body
+        assert f"#{9999}" not in body
 
 
 # ---------------------------------------------------------------------------
