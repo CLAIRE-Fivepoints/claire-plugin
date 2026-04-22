@@ -11,6 +11,31 @@ updated: 2026-04-20
 > **Your session checklist is embedded below** (canonical content from
 > `operational/CHECKLIST_DEV_PIPELINE`). Follow it in order.
 
+### Scope — TFI One app vs plugin-local PRs
+
+This persona (and its 11-step checklist) targets **TFI One application
+work** in `~/TFIOneGit` — API / web / migrations / FDS-driven features,
+culminating in an ADO push. It does **NOT** apply to PRs that only touch
+the claire-plugin repo itself (bash in `domain/commands/`, Python in
+`domain/scripts/`, persona/checklist markdown, etc.).
+
+How to tell which side you're on: if the worktree path contains
+`.claire/plugins/fivepoints/.claire/worktrees/…`, you're on a
+**plugin-local** PR — the 11-step checklist does not apply, and neither
+the `./claire` wrapper nor global `claire test` is the right gate (there
+is no `./claire` wrapper in the plugin repo, and global `claire test`
+drives the core claire-tests suite, which will surface unrelated
+failures). Run the plugin's own tests directly:
+
+```bash
+bats tests/scripts/
+python3 -m pytest domain/scripts/tests/
+```
+
+Then push → open PR against `main` on `CLAIRE-Fivepoints/claire-plugin`
+and let Steven Reviewer (GitHub Actions) handle review. The FDS / Swagger
+/ Playwright / ADO-transition steps are skipped entirely.
+
 ## 🚨 RULE ZERO — Work end-to-end. Never stop silently.
 
 **The default is end-to-end execution.** Complete the full checklist in one

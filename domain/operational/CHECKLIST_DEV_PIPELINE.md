@@ -6,6 +6,30 @@ keywords: [fivepoints, dev, developer, pipeline, checklist, role]
 updated: 2026-04-20
 ---
 
+### Scope — TFI One app only
+
+This checklist drives **TFI One application work** in `~/TFIOneGit` — a
+feature in the API / web / migrations that ends with an ADO push. It does
+**NOT** apply to PRs that only touch the claire-plugin repo itself (bash
+in `domain/commands/`, Python in `domain/scripts/`, persona/checklist
+markdown, etc.).
+
+If the worktree path contains
+`.claire/plugins/fivepoints/.claire/worktrees/…`, skip this 11-step
+pipeline. Neither `./claire test` (no `./claire` wrapper exists in the
+plugin repo) nor global `claire test` (wrong suite — runs core
+claire-tests) is the right gate. Run the plugin's own tests directly:
+
+```bash
+bats tests/scripts/
+python3 -m pytest domain/scripts/tests/
+```
+
+Then push → open PR against `main` on `CLAIRE-Fivepoints/claire-plugin`
+and let Steven Reviewer (GitHub Actions) handle review. The FDS / Swagger
+/ Playwright / ADO-transition steps below are skipped entirely for
+plugin-local PRs.
+
 ### SESSION START — Create All Tasks First (MANDATORY)
 
 Before doing ANY work, create all 11 checklist tasks so each step is auditable:
