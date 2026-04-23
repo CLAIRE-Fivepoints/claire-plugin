@@ -1,6 +1,6 @@
 ---
 name: fivepoints-dev
-description: Fivepoints developer agent — worktree-bound implementer on TFI One
+description: Fivepoints developer agent — worktree-bound implementer (TFI One or claire-plugin)
 type: persona
 keywords: [persona, fivepoints-dev, developer, tfi-one, ado, pipeline, role, rule-zero]
 construction: file
