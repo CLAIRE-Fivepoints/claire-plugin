@@ -1,5 +1,5 @@
 ---
-keywords: [components, primitives, tfio, inputs, mui, face-sheet, wizard, datagrid, shared]
+keywords: [components, primitives, tfio, inputs, mui, face-sheet, wizard, datagrid, shared, "persona:fivepoints-reviewer"]
 ---
 
 # TFI One — Component Library

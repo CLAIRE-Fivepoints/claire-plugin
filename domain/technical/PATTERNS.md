@@ -1,5 +1,5 @@
 ---
-keywords: [patterns, repository, controller, dto, validation, auth, soft-delete, audit, multi-tenant, encryption, caching, hangfire, naming-conventions, testability, unit-tests]
+keywords: [patterns, repository, controller, dto, validation, auth, soft-delete, audit, multi-tenant, encryption, caching, hangfire, naming-conventions, testability, unit-tests, "persona:fivepoints-reviewer"]
 ---
 
 # TFI One — Design Patterns & Conventions

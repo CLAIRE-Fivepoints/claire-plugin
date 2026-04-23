@@ -3,7 +3,7 @@ domain: fivepoints
 category: knowledge
 name: DEV_RULES
 title: "Five Points — Development Rules (Overrides Core)"
-keywords: [five-points, tfi-one, dev-rules, development, rules, grant, deny, d-ts, ddl, dba, ef-core, scaffolding, subprocess, angular, flyway, migration, business-logic-tests, role-dev, fivepoints-dev, pbi, git-push-github, "persona:fivepoints-dev"]
+keywords: [five-points, tfi-one, dev-rules, development, rules, grant, deny, d-ts, ddl, dba, ef-core, scaffolding, subprocess, angular, flyway, migration, business-logic-tests, role-dev, fivepoints-dev, pbi, git-push-github, "persona:fivepoints-dev", "persona:fivepoints-reviewer"]
 updated: 2026-03-29
 ---
 
