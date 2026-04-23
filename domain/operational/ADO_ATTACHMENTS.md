@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: ADO_ATTACHMENTS
 title: "FivePoints — ADO Attachment Fetch & FDS Manifest"
-keywords: [ado, azure-devops, attachment, fds, docx, fetch-on-use, manifest, sha256, claire-plugin, pbi]
+keywords: [ado, azure-devops, attachment, fds, docx, fetch-on-use, manifest, sha256, claire-plugin, pbi, "persona:fivepoints-dev"]
 updated: 2026-04-19
 ---
 

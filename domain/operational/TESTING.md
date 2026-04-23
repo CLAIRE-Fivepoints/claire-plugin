@@ -1,5 +1,5 @@
 ---
-keywords: [testing, local-setup, credentials, cors, login, vite, dotnet, prime-user, password, azure-devops, pat]
+keywords: [testing, local-setup, credentials, cors, login, vite, dotnet, prime-user, password, azure-devops, pat, "persona:fivepoints-dev"]
 ---
 
 # TFI One — Local Testing Guide

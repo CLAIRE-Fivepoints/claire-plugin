@@ -1,5 +1,5 @@
 ---
-keywords: [five-points, coding-standards, conventions, review, tfi-one]
+keywords: [five-points, coding-standards, conventions, review, tfi-one, "persona:fivepoints-dev"]
 ---
 
 # Five Points – Coding Standards

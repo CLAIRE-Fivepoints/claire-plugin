@@ -1,5 +1,5 @@
 ---
-keywords: [five-points, tfi-one, face-sheet, section, education, history, add-edit, rtk, validator, modal, patterns]
+keywords: [five-points, tfi-one, face-sheet, section, education, history, add-edit, rtk, validator, modal, patterns, "persona:fivepoints-dev"]
 ---
 
 # TFI One — Face Sheet Section Patterns

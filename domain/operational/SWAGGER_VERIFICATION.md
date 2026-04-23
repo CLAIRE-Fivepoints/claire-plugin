@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: SWAGGER_VERIFICATION
 title: "FivePoints — Swagger Endpoint Verification (Code Gen tasks)"
-keywords: [five-points, fivepoints, tfi-one, swagger, endpoint, verification, code-gen, macos, jwt, bearer, playwright, curl, docker, sqlserver, appsettings]
+keywords: [five-points, fivepoints, tfi-one, swagger, endpoint, verification, code-gen, macos, jwt, bearer, playwright, curl, docker, sqlserver, appsettings, "persona:fivepoints-dev"]
 updated: 2026-04-08
 pr: "#2291"
 ---

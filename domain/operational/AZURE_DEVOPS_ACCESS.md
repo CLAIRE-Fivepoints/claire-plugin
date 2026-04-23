@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: AZURE_DEVOPS_ACCESS
 title: "Five Points — Azure DevOps Repo Access"
-keywords: [five-points, azure-devops, ado-api, git-remote, pat, authentication, rest-api, repo-access]
+keywords: [five-points, azure-devops, ado-api, git-remote, pat, authentication, rest-api, repo-access, "persona:fivepoints-dev"]
 updated: 2026-03-25
 ---
 
