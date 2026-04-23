@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: TEST_ENV_START
 title: "FivePoints — Test Environment Start (fivepoints test-env-start)"
-keywords: [five-points, fivepoints, tfi-one, test-env-start, test-environment, tfi-one-stack, sql-server, sqlserver, dotnet, vite, local-testing, dev, tester, "persona:fivepoints-dev"]
+keywords: [five-points, fivepoints, tfi-one, test-env-start, test-environment, tfi-one-stack, sql-server, sqlserver, dotnet, vite, local-testing, dev, tester, "persona:fivepoints-dev", "persona:fivepoints-tester"]
 updated: 2026-04-08
 pr: "#2346"
 ---

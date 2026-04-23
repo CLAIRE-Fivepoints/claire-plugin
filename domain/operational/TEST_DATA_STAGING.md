@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: TEST_DATA_STAGING
 title: "FivePoints — Staging Test Data for FDS Screenshot Verification"
-keywords: [test-data, seed, staging, fds-verification, restricted-query-provider, organization-id, prime-user, client-face-sheet, env-blocked, sql-only]
+keywords: [test-data, seed, staging, fds-verification, restricted-query-provider, organization-id, prime-user, client-face-sheet, env-blocked, sql-only, "persona:fivepoints-tester"]
 updated: 2026-04-20
 related-pr: "CLAIRE-Fivepoints/fivepoints#76"
 ---

@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: ADO_PAT_GUIDE
 title: "FivePoints — ADO PAT Guide (read vs write)"
-keywords: [five-points, ado, azure-devops, PAT, AZURE_DEVOPS_PAT, AZURE_DEVOPS_DEV_PAT, AZURE_DEVOPS_WRITE_PAT, token, credential, git-push, 401, scope, "persona:fivepoints-dev"]
+keywords: [five-points, ado, azure-devops, PAT, AZURE_DEVOPS_PAT, AZURE_DEVOPS_DEV_PAT, AZURE_DEVOPS_WRITE_PAT, token, credential, git-push, 401, scope, "persona:fivepoints-dev", "persona:fivepoints-tester"]
 updated: 2026-04-08
 pr: "#18"
 ---
