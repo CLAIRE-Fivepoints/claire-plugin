@@ -1,5 +1,5 @@
 ---
-keywords: [fivepoints, tfi-one, technical-design, architecture, dotnet, react, azure, authentication, jwt, couchbase, hangfire, serilog, sentry, security, infrastructure, disaster-recovery, soc2, tx-ramp]
+keywords: [fivepoints, tfi-one, technical-design, architecture, dotnet, react, azure, authentication, jwt, couchbase, hangfire, serilog, sentry, security, infrastructure, disaster-recovery, soc2, tx-ramp, "persona:fivepoints-analyst"]
 ---
 
 # TFI One — Technical Design Document
