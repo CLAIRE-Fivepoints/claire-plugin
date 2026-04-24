@@ -156,6 +156,55 @@ make_comments() {
     done
 }
 
+@test "check_proof_gate accepts .webm recordings (Playwright record_video_dir default, issue #122)" {
+    GH_MOCK_COMMENTS_JSON=$(make_comments \
+        "MP4: /tmp/proof.webm" \
+        "**FDS Verification (screenshot + AI)**
+- Screen X: pass")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"both posted"* ]]
+}
+
+@test "check_proof_gate accepts .mov recordings (macOS screen recording default, issue #122)" {
+    GH_MOCK_COMMENTS_JSON=$(make_comments \
+        "Recording: /tmp/proof.mov" \
+        "**FDS Verification (screenshot + AI)**
+- Screen X: pass")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"both posted"* ]]
+}
+
+@test "check_proof_gate ignores comments that merely mention .webm in prose (prose guard extends to new extensions)" {
+    GH_MOCK_COMMENTS_JSON=$(make_comments \
+        "**FDS Verification (screenshot + AI)**
+- Screen X: pass" \
+        "FYI Playwright writes .webm by default — you can attach it directly now.")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[8/11] MP4 missing"* ]]
+}
+
+@test "check_proof_gate rejection hint names .webm / .mov as accepted extensions" {
+    # Ensures the failure text doesn't contradict the widened regex — a dev
+    # reading "no recording URL/path line found" should see .webm/.mov listed.
+    GH_MOCK_COMMENTS_JSON=$(make_comments "unrelated comment")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *".mp4"* ]]
+    [[ "$output" == *".webm"* ]]
+    [[ "$output" == *".mov"* ]]
+}
+
 @test "check_proof_gate errors with code 2 on missing arguments" {
     run bash -c "source '$ADO_COMMON' && check_proof_gate"
     [ "$status" -eq 2 ]

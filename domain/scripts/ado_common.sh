@@ -362,9 +362,14 @@ resolve_gh_repo() {
 #
 # Matchers:
 #   MP4: line starting with `MP4:` / `Proof:` / `Recording:` / `Video:`
-#        (case-insensitive, multiline) followed by content ending in `.mp4`.
-#        Tighter than `contains(".mp4")` to avoid false positives from
-#        discussion comments that mention `.mp4` in prose (PR #78 review point 2).
+#        (case-insensitive, multiline) followed by content ending in
+#        `.mp4`, `.webm`, or `.mov`. `.webm` is Playwright's default
+#        `record_video_dir` output, and `.mov` is the default screen
+#        recording format on macOS — accepting them lets the dev post
+#        the raw recording without a ffmpeg transcode step (issue #122).
+#        Still tighter than `contains(".mp4")` to avoid false positives
+#        from discussion comments that mention an extension in prose
+#        (PR #78 review point 2).
 #   FDS: comment whose body STARTS with `**FDS Verification (screenshot + AI)**`
 #        (per the dev checklist's documented heredoc format).
 #
@@ -381,7 +386,7 @@ check_proof_gate() {
     local result_json
     result_json=$(gh issue view "$issue_number" --repo "$gh_repo" --json comments \
         --jq '{
-            mp4: any(.comments[].body; test("(?im)^(MP4|Proof|Recording|Video)[: ].*\\.mp4")),
+            mp4: any(.comments[].body; test("(?im)^(MP4|Proof|Recording|Video)[: ].*\\.(mp4|webm|mov)")),
             fds: any(.comments[].body; startswith("**FDS Verification (screenshot + AI)**"))
         }' \
         2>/dev/null || echo '{"mp4":false,"fds":false}')
@@ -399,10 +404,11 @@ check_proof_gate() {
         echo ""
         echo "❌ Proof gate failed for issue #${issue_number} (${gh_repo}):"
         if [[ "$mp4_found" != "true" ]]; then
-            echo "   ❌ [8/11] MP4 missing: no 'MP4 URL/path' line found on issue #${issue_number}."
-            echo "      Record an MP4 with Playwright (claire domain read video_proof technical PLAYWRIGHT_PATTERNS),"
-            echo "      then post the path with one of the recognised prefixes (MP4:/Proof:/Recording:/Video:):"
-            echo "        gh issue comment ${issue_number} --body 'MP4: /path/to/proof.mp4'"
+            echo "   ❌ [8/11] MP4 missing: no recording URL/path line found on issue #${issue_number}."
+            echo "      Record with Playwright (claire domain read video_proof technical PLAYWRIGHT_PATTERNS),"
+            echo "      then post the path with one of the recognised prefixes (MP4:/Proof:/Recording:/Video:)"
+            echo "      and a .mp4, .webm, or .mov extension:"
+            echo "        gh issue comment ${issue_number} --body 'MP4: /path/to/proof.webm'"
         fi
         if [[ "$fds_found" != "true" ]]; then
             echo "   ❌ [9/11] FDS Verification missing: no '**FDS Verification (screenshot + AI)**' comment on issue #${issue_number}."

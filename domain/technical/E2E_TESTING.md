@@ -102,20 +102,21 @@ All output goes to `--output-dir` (default: `./education_e2e_videos`).
 
 ### Video Proof Format Requirements
 
-**⚠️ `.webm` files are NOT accepted as proof for GitHub issues or ADO PRs.**
+The proof gate (`check_proof_gate` in `domain/scripts/ado_common.sh`) accepts `.mp4`, `.webm`, and `.mov` directly — Playwright's `record_video_dir` default (`.webm`) and macOS screen recording default (`.mov`) no longer need a ffmpeg transcode to pass the gate (issue #122).
 
-Before attaching a video proof to a GitHub issue or Azure DevOps PR:
+When attaching a video proof to a GitHub issue or Azure DevOps PR:
 
-1. **Convert to MP4** — GitHub and ADO only render MP4 inline; `.webm` is not supported:
+1. **Use a recognised prefix + one of the accepted extensions.** The comment must contain a line starting with `MP4:` / `Proof:` / `Recording:` / `Video:` (case-insensitive) followed by a path ending in `.mp4`, `.webm`, or `.mov`:
+   ```
+   Proof: /Users/andreperez/proof-archive/fivepoints/siblings/proof_20260310.webm
+   ```
+
+2. **Use the full absolute path.** Never use just a filename like `proof_recording.webm` — the reviewer won't be able to locate it.
+
+3. **Transcode to `.mp4` only if you need inline playback** on a client that doesn't render `.webm`. The gate itself does not require it:
    ```bash
    ffmpeg -i proof_recording.webm -c:v libx264 -c:a aac proof_recording.mp4
    ```
-
-2. **Use the full absolute path** — When referencing the file in a comment, always use the full path so it can be found unambiguously:
-   ```
-   Proof: /Users/andreperez/proof-archive/fivepoints/siblings/proof_20260310.mp4
-   ```
-   Never use just a filename like `proof_recording.mp4`.
 
 ## Architecture
 
