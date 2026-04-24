@@ -526,16 +526,23 @@ EOF
       ℹ️ The GitHub issue stays open (see [10/11]) — you stop the session,
          the owner closes the issue separately.
 
-      Retrospective — pick the correct target repo when filing improvement issues:
-      When `claire wait` returns the retrospective prompt, walk the 4-question decision flow:
-      `claire domain read claire knowledge ISSUE_REPO_ROUTING`
-      Always pass `--github-repo <owner/name>` explicitly to `claire issue create`.
-      The pre-flight warning fires if the flag disagrees with the cwd-detected repo —
-      heed it; cwd auto-detection has silently mis-routed plugin issues into core before.
+      Retrospective — issue routing rule (MANDATORY):
+      **For fivepoints-dev sessions: ALL retrospective issues → `CLAIRE-Fivepoints/claire-plugin` by default.**
+      The motif: TFI One dev sessions run from `~/TFIOneGit/`, which auto-detects `CLAIRE-Fivepoints/fivepoints` as the origin repo.
+      Without an explicit `--github-repo` flag, cwd auto-detection wins — silent mis-routing to the app repo.
+      Rule: Only PBI-linked direct client work lands in `fivepoints`. Everything else (workflow fixes, dev tooling, pipeline bugs, doc gaps) → `claire-plugin`.
+      
+      When `claire wait` returns the retrospective prompt:
+      Always pass `--github-repo CLAIRE-Fivepoints/claire-plugin` explicitly to `claire issue create`.
+      (The pre-flight warning fires if the flag disagrees with cwd-detected repo — heed it.)
+      
+      Optional: Walk the full 4-question decision flow in `claire domain read claire knowledge ISSUE_REPO_ROUTING`
+      
       Quick guide for dev-side retrospectives:
         • Dev checklists, gates, FDS handling, ADO transition, fivepoints commands
           → `CLAIRE-Fivepoints/claire-plugin`
-        • TFI One application code (endpoints, migrations, web UI) → `CLAIRE-Fivepoints/fivepoints`
+        • TFI One application code (endpoints, migrations, web UI) — ONLY if PBI-linked
+          → `CLAIRE-Fivepoints/fivepoints`
         • Claire core (bash/python architecture, generic personas, hooks) → `claire-labs/claire`
 
       Tear down + stop:
