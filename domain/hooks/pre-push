@@ -46,11 +46,20 @@ fi
 # Rule: belt-and-suspenders for the pre-commit .fds-cache/ block. Catches
 #       commits that slipped through (hook bypassed with --no-verify, or hook
 #       missing/outdated from a bad install). PR #53 fetch-on-use model.
+#
+# Check 3 — track whether any pushed commit touches com.tfione.web/**/*.{ts,tsx}
+# so the post-loop `npm run lint` gate (the compensating control for the
+# absent ADO CI ESLint step — see GIT_HOOKS.md "Residual risk") knows
+# whether to fire.
+#
+# Both checks iterate the same ref list git streams on stdin, so they
+# share a single loop — stdin is not rewindable.
 # ─────────────────────────────────────────────────────────────
 ZERO="0000000000000000000000000000000000000000"
+PUSH_TOUCHES_WEB=0
 
 while IFS=' ' read -r _local_ref local_sha _remote_ref remote_sha; do
-    # Branch deletion — nothing being pushed
+    # Branch deletion — nothing being pushed.
     if [[ "$local_sha" == "$ZERO" ]]; then
         continue
     fi
@@ -61,11 +70,13 @@ while IFS=' ' read -r _local_ref local_sha _remote_ref remote_sha; do
         range_args=("$local_sha" "--not" "--remotes")
     else
         # Existing branch: inspect the delta being pushed.
-        range_args=("$remote_sha..$local_sha")
+        range_args=("${remote_sha}..${local_sha}")
     fi
 
-    if git log "${range_args[@]}" --name-only --pretty=format: 2>/dev/null \
-        | grep -q "^\.fds-cache/"; then
+    pushed_paths=$(git log "${range_args[@]}" --name-only --pretty=format: 2>/dev/null || true)
+
+    # Check 2 — .fds-cache/
+    if printf '%s\n' "$pushed_paths" | grep -q "^\.fds-cache/"; then
         echo ""
         echo "╔══════════════════════════════════════════════════════════╗"
         echo "║  🚫  TFI One Pre-Push Check FAILED                       ║"
@@ -81,6 +92,41 @@ while IFS=' ' read -r _local_ref local_sha _remote_ref remote_sha; do
         echo ""
         exit 1
     fi
+
+    # Check 3 — web TS/TSX detection (lint gate runs after the loop).
+    if printf '%s\n' "$pushed_paths" | grep -qE "^com\.tfione\.web/.*\.(ts|tsx)$"; then
+        PUSH_TOUCHES_WEB=1
+    fi
 done
+
+if [[ $PUSH_TOUCHES_WEB -eq 1 ]]; then
+    if [[ ! -d "com.tfione.web" ]]; then
+        # Hook installed in a repo that doesn't have com.tfione.web — nothing
+        # to lint. (Shouldn't happen if the diff detected web files, but belt.)
+        echo "⚠️  Pre-push: push touches com.tfione.web/ but the dir is absent locally — skipping lint."
+    elif ! command -v npm >/dev/null 2>&1; then
+        echo "⚠️  Pre-push: npm not on PATH — skipping 'npm run lint' gate."
+        echo "    Install Node.js to enable this check."
+    else
+        echo "ℹ️  Pre-push: commits in this push touch com.tfione.web/ — running 'npm run lint'…"
+        if ! (cd com.tfione.web && npm run --silent lint); then
+            echo ""
+            echo "╔══════════════════════════════════════════════════════════╗"
+            echo "║  🚫  TFI One Pre-Push Check FAILED                       ║"
+            echo "╚══════════════════════════════════════════════════════════╝"
+            echo ""
+            echo "  'npm run lint' reported errors in com.tfione.web."
+            echo ""
+            echo "  This is the compensating gate for the ADO CI ESLint step that"
+            echo "  we cannot add without modifying ADO-tracked files (issue #119)."
+            echo ""
+            echo "  Fix: cd com.tfione.web && npm run lint → resolve errors → re-push."
+            echo "  Emergency bypass: git push --no-verify — document the reason"
+            echo "                    and address the lint errors in a follow-up commit."
+            echo ""
+            exit 1
+        fi
+    fi
+fi
 
 exit 0

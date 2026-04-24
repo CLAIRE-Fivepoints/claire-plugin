@@ -165,11 +165,27 @@ keywords: [five-points, tfi-one, code-quality, devops, ci-cd, stylecop, eslint, 
 | Category | Missing |
 |----------|---------|
 | Backend | No `.editorconfig`, no `Directory.Build.props`, no SonarQube |
-| Frontend | No Prettier, no Stylelint, no Husky/lint-staged, no commitlint |
+| Frontend | No Prettier, no Stylelint, no Husky / lint-staged, no commitlint (see note ¹) |
 | Frontend Testing | No Jest, Vitest, Playwright, or Cypress |
 | Security | No OWASP dependency scanning, no SAST (beyond StyleCop) |
 | Code Coverage | `coverlet` present but no thresholds or CI reporting |
 | API Contracts | No OpenAPI linting (Spectral, etc.) |
+| CI lint gate | `azure_gated_build.yml` does **not** run `npm run lint` (see note ¹) |
+
+¹ **ESLint is enforced client-side via plugin hooks, not Husky.** Issue #119
+decided against adding Husky / lint-staged or an `npm run lint` step to
+`azure_gated_build.yml`, because both options require committing to
+ADO-tracked files in TFIOneGit. Instead, the plugin ships:
+
+- A `pre-commit` Check 6 that runs ESLint on every staged
+  `com.tfione.web/**/*.{ts,tsx}`, installed via `claire fivepoints install-hooks`.
+- A `pre-push` Check 3 that runs `npm run lint` when pushed commits touch
+  the web package.
+
+Both hooks live in the plugin (`domain/hooks/pre-commit`, `pre-push`) and
+reach a dev's clone via the installer — no ADO-origin change. Residual-risk
+and rationale: `claire domain read fivepoints operational GIT_HOOKS`
+→ **Residual risk** and **Why plain hooks and not Husky / lint-staged**.
 
 ---
 
