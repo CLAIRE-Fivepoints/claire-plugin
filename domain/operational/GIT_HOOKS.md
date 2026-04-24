@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: GIT_HOOKS
 title: "Five Points — TFI One Git Hooks"
-keywords: [five-points, fivepoints, git-hooks, pre-commit, pre-push, developer-gates, branch-naming, coding-standards]
+keywords: [five-points, fivepoints, git-hooks, pre-commit, pre-push, developer-gates, branch-naming, coding-standards, "persona:fivepoints-dev"]
 updated: 2026-03-27
 ---
 

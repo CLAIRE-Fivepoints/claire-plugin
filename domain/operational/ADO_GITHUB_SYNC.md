@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: ADO_GITHUB_SYNC
 title: "FivePoints — ADO ↔ GitHub Sync (TFIOneGit mirror)"
-keywords: [five-points, fivepoints, ado, github, sync, ado-github-sync, tfionegit, mirror, dev-branch, feature-branch, branch-visibility, 3-location, remote, origin, review-repo, analyst, dev]
+keywords: [five-points, fivepoints, ado, github, sync, ado-github-sync, tfionegit, mirror, dev-branch, feature-branch, branch-visibility, 3-location, remote, origin, review-repo, analyst, dev, "persona:fivepoints-dev"]
 updated: 2026-04-20
 pr: "#24"
 ---

@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: DEVELOPER_GATES
 title: "Five Points — Developer Gates Before Pushing to Azure DevOps"
-keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate, migration, fk, foreign-key, references]
+keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate, migration, fk, foreign-key, references, "persona:fivepoints-dev"]
 updated: 2026-04-08
 ---
 

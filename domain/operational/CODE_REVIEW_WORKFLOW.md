@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: CODE_REVIEW_WORKFLOW
 title: "Five Points — Code Review Workflow"
-keywords: [five-points, fivepoints, code-review, pr-review, azure-devops, workflow, fivepoints-reviewer]
+keywords: [five-points, fivepoints, code-review, pr-review, azure-devops, workflow, fivepoints-reviewer, "persona:fivepoints-dev"]
 updated: 2026-03-06
 ---
 

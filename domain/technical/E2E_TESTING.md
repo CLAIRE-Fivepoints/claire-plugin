@@ -3,7 +3,7 @@ domain: fivepoints
 category: technical
 name: E2E_TESTING
 title: "E2E Testing with Playwright"
-keywords: [e2e, playwright, testing, education, video-proof, browser-automation]
+keywords: [e2e, playwright, testing, education, video-proof, browser-automation, "persona:fivepoints-dev"]
 updated: 2026-03-05
 ---
 

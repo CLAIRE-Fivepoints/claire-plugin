@@ -2,7 +2,7 @@
 name: CHECKLIST_DEV_PIPELINE
 description: "Five Points — Pipeline role:dev session checklist"
 type: operational
-keywords: [fivepoints, dev, developer, pipeline, checklist, role]
+keywords: [fivepoints, dev, developer, pipeline, checklist, role, "persona:fivepoints-dev"]
 updated: 2026-04-20
 ---
 
