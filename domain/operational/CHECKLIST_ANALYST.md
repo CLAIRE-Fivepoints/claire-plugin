@@ -2,6 +2,7 @@
 name: CHECKLIST_ANALYST
 description: "Five Points — Pipeline role:analyst session checklist"
 type: operational
+version: 1.0.0
 keywords: [fivepoints, analyst, pipeline, checklist, role, "persona:fivepoints-analyst"]
 updated: 2026-04-20
 ---
