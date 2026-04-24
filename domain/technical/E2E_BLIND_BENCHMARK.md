@@ -181,7 +181,7 @@ npx playwright test education.spec.ts --reporter=list
 
 **Note:** Current Playwright coverage is limited to Edit Education Info sub-module.
 Other 5 sub-modules (Overview, Grade Achieved, GED, Enrollment, Report Card) require
-manual verification via the Steven Franklin review checklist.
+manual verification via the reviewer checklist.
 
 ### C.3 Structural diff against ground truth
 

@@ -317,7 +317,7 @@ In `routes/case.tsx`:
 
 ## Pre-PR Checklist (Steven's Rules)
 
-Validate every item before creating a PR. Source: Steven Franklin, Azure DevOps PR #228, Thread #1839.
+Validate every item before creating a PR. Source: Azure DevOps PR #228, Thread #1839.
 
 - [ ] **Rule 1 — Correct branch**: Using the branch created for the PBI, not a custom one
 - [ ] **Rule 2 — No cross-branch merges**: Not merging dev into child branches directly

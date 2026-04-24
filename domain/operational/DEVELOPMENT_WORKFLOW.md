@@ -108,7 +108,7 @@ ENTRYPOINT ["dotnet", "com.tfione.api.dll"]
 - E2E tests (Playwright) are separate and live in the `tfione-e2e` repo
 - The existing `com.tfione.service.test` project contains integration/utility tests only (see below)
 
-> Source: Steven Franklin's PR review, Rule #9 — "Make everything unit testable but do not write (or at least don't check in) unit tests."
+> Source: reviewer feedback, Rule #9 — "Make everything unit testable but do not write (or at least don't check in) unit tests."
 
 ---
 

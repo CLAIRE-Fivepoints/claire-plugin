@@ -327,7 +327,7 @@ All code must be structured for testability, even though unit tests are not comm
 - The `com.tfione.service.test` project exists for integration/utility tests only
 - E2E tests live in a separate repository (`tfione-e2e`)
 
-> Source: Steven Franklin's PR review, Rule #9 — "Make everything unit testable but do not write (or at least don't check in) unit tests."
+> Source: reviewer feedback, Rule #9 — "Make everything unit testable but do not write (or at least don't check in) unit tests."
 
 ---
 
@@ -431,7 +431,7 @@ Before submitting a SQL migration for review:
 
 ## 16. Frontend Component Rules
 
-Rules from Steven Franklin's PR #228 review that apply to all frontend development. For the full component inventory, see `FRONTEND_COMPONENTS.md`.
+Rules from the PR #228 review that apply to all frontend development. For the full component inventory, see `FRONTEND_COMPONENTS.md`.
 
 ### One Component Per File
 

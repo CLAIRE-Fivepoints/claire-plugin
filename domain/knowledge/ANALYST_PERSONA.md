@@ -601,7 +601,7 @@ In March 2026, the Analyst produced a wrong analysis for Section 16.9 (Adoptive 
 - **Result:** Analyzed all 8 sub-entities in the module instead of the 1 in PBI scope
 - **Wrong score:** Tier 4/5 instead of actual Tier 2/5
 - **Wrong tasks:** 21 tasks generated instead of 13 in scope
-- **Client impact:** Steven Franklin (reviewer) rejected analysis as "hors scope du PBI"
+- **Client impact:** the reviewer rejected analysis as "hors scope du PBI"
 
 **Root cause:** `claire analyze` started with code, not spec. Code shows what EXISTS.
 Spec shows what IS REQUIRED. These are different.

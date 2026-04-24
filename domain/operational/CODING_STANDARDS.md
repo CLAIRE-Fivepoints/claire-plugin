@@ -118,8 +118,6 @@ No file should contain more than one class or component. Each class, React compo
 
 **Do not create tests for business logic.** Tests for TFI One application domain (clients, providers, organizations, FDS sections) are not part of the workflow.
 
-> **Source:** Steven Franklin
-
 **What belongs in `com.tfione.service.test`:**
 - Infrastructure service tests — stateless utilities (encryption, password generation, URL builders)
 - External API adapter tests — verify third-party integrations (email, SMS, address validation, signing)
