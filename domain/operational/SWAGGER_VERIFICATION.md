@@ -4,7 +4,7 @@ category: operational
 name: SWAGGER_VERIFICATION
 title: "FivePoints — Swagger Endpoint Verification (Code Gen tasks)"
 keywords: [five-points, fivepoints, tfi-one, swagger, endpoint, verification, code-gen, macos, jwt, bearer, playwright, curl, docker, sqlserver, appsettings, "persona:fivepoints-dev", "persona:fivepoints-tester"]
-updated: 2026-04-08
+updated: 2026-04-23
 pr: "#2291"
 ---
 
@@ -218,6 +218,31 @@ This diff output is included as proof in the PR description or validation commen
 | Swagger UI shows no auth | Authorize dialog unreliable | Use Playwright route interception (Step 6) |
 | API won't start | Previous instance still running | `pkill -f "com.tfione.api"` then restart |
 | Cascade of TS2724 / TS2694 / TS2345 type errors after regen | Stale API assembly — started before new .NET models were added; swagger doesn't expose new schemas yet | Kill API, restart (force recompile), wait for swagger, then regen types — see "Routine — Before Any Local Gate Run" in `DEVELOPER_GATES.md` |
+
+---
+
+## Debugging Boundary — API-OK-via-curl ≠ browser-OK
+
+When `curl` against an endpoint returns 200 with a valid payload, the backend is proven. A UI
+symptom that persists after that point (empty dropdown, missing record, stale cache) is
+**browser-side** — network layer, client cache, CORS, or render code. Keep debugging it
+server-side and you burn 20+ tool calls on a dead end.
+
+**3-check rule.** After at most **three** server-side checks (endpoint responds 200, payload
+shape matches the model, auth header accepted), stop investigating the backend. Ask the
+operator to open browser DevTools and report:
+
+- **Network tab** — does the XHR fire? What status code? What response body?
+- **Console tab** — any errors, CORS warnings, or uncaught exceptions?
+- **Application → Local Storage / Session Storage** — is the auth token present and
+  unexpired?
+
+Only resume server-side investigation if DevTools surfaces a request that never reaches the
+API, or a response whose body disagrees with the `curl` payload captured above.
+
+> **Why this rule exists:** a validation session on TFI One #14 burned ~30 minutes of context
+> chasing an empty Intake-Coordinator dropdown server-side after the API had already been
+> confirmed working via `curl`. Root cause was browser-side. Retrospective in #117.
 
 ---
 
