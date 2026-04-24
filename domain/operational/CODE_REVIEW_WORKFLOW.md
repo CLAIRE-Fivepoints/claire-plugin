@@ -45,7 +45,7 @@ Reply to the review comment for each concern. Claire will update the review base
 When `claire review --pr N` is run, Claire:
 
 1. **Reads domain docs** before looking at code:
-   - `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA` — character (Steven Franklin), review checklist, and standards
+   - `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA` — full review rule set (character, checklist, standards)
    - `claire domain read fivepoints operational CODING_STANDARDS`
 
 2. **Reads the PR diff** via `gh pr diff N`
