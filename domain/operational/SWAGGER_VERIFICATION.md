@@ -27,15 +27,17 @@ Several blockers exist on macOS that are not obvious. This document prevents 30�
 
 ## Key Credentials (Local Dev)
 
+> **Source of truth for app credentials:** `claire domain read fivepoints operational TESTING` (§ Test Users & Credentials). Update there first; mirror here.
+
 | What | Value |
 |------|-------|
 | SQL Server container | `tfione-sqlserver` |
 | SA password | `TFIOne_Dev2024!` |
-| App login | `prime.user` / `Admin123!` |
+| App login | `prime.user` / `Test1234!` |
 | API HTTPS | `https://localhost:58337` |
 | Swagger JSON | `https://localhost:58337/swagger/v1/swagger.json` |
 
-> **Note:** `prime.user` password (`Admin123!`) is NOT the SA password (`TFIOne_Dev2024!`).
+> **Note:** `prime.user` password (`Test1234!`) is NOT the SA password (`TFIOne_Dev2024!`).
 
 ---
 
@@ -105,7 +107,7 @@ grep "Now listening" /tmp/tfiapi.log
 ```bash
 TOKEN=$(curl -sk -X POST "https://localhost:58337/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"username": "prime.user", "password": "Admin123!"}' \
+  -d '{"username": "prime.user", "password": "Test1234!"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
 
 # Verify token is non-empty
@@ -115,7 +117,7 @@ echo "Token length: ${#TOKEN}"
 
 If `TOKEN` is empty, check:
 - API is running (`grep "Now listening" /tmp/tfiapi.log`)
-- Credentials are correct (`prime.user` / `Admin123!`)
+- Credentials are correct (`prime.user` / `Test1234!`)
 
 ---
 
@@ -214,7 +216,7 @@ This diff output is included as proof in the PR description or validation commen
 | `curl` returns 401 | Token expired or generated before API restart | Re-run Step 4 after final restart |
 | `curl` returns 500 | DB not connected | Verify `tfione-sqlserver` is running (Step 1) |
 | `curl` returns 500 (connection string) | `Integrated Security=True` on macOS | Apply Step 2 override |
-| `TOKEN` is empty | Wrong credentials | Use `prime.user` / `Admin123!` (not SA password) |
+| `TOKEN` is empty | Wrong credentials | Use `prime.user` / `Test1234!` (not SA password) |
 | Swagger UI shows no auth | Authorize dialog unreliable | Use Playwright route interception (Step 6) |
 | API won't start | Previous instance still running | `pkill -f "com.tfione.api"` then restart |
 | Cascade of TS2724 / TS2694 / TS2345 type errors after regen | Stale API assembly — started before new .NET models were added; swagger doesn't expose new schemas yet | Kill API, restart (force recompile), wait for swagger, then regen types — see "Routine — Before Any Local Gate Run" in `DEVELOPER_GATES.md` |
