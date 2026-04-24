@@ -412,7 +412,7 @@ Fix locally — do not push and wait for CI to tell you.
 
 This document is referenced in:
 
-- `fivepoints/operational/CODE_REVIEW_WORKFLOW` — Steven Franklin checks gate compliance
+- `fivepoints/operational/CODE_REVIEW_WORKFLOW` — the reviewer checks gate compliance
   during PR review
 - Work checklist (prepended to spawned fivepoints tasks)
 - Session CLAUDE.md for fivepoints worktrees

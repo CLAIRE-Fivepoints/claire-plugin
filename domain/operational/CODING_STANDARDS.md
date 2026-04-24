@@ -1,5 +1,5 @@
 ---
-keywords: [five-points, coding-standards, conventions, review, tfi-one, "persona:fivepoints-dev"]
+keywords: [five-points, coding-standards, conventions, review, tfi-one, "persona:fivepoints-dev", "persona:fivepoints-reviewer"]
 ---
 
 # Five Points – Coding Standards
@@ -117,8 +117,6 @@ No file should contain more than one class or component. Each class, React compo
 ### 8. Unit Tests
 
 **Do not create tests for business logic.** Tests for TFI One application domain (clients, providers, organizations, FDS sections) are not part of the workflow.
-
-> **Source:** Steven Franklin
 
 **What belongs in `com.tfione.service.test`:**
 - Infrastructure service tests — stateless utilities (encryption, password generation, URL builders)

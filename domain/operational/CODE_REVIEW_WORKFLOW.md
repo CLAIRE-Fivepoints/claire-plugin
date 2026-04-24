@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: CODE_REVIEW_WORKFLOW
 title: "Five Points — Code Review Workflow"
-keywords: [five-points, fivepoints, code-review, pr-review, azure-devops, workflow, fivepoints-reviewer, "persona:fivepoints-dev"]
+keywords: [five-points, fivepoints, code-review, pr-review, azure-devops, workflow, fivepoints-reviewer, "persona:fivepoints-dev", "persona:fivepoints-reviewer"]
 updated: 2026-03-06
 ---
 
@@ -45,8 +45,7 @@ Reply to the review comment for each concern. Claire will update the review base
 When `claire review --pr N` is run, Claire:
 
 1. **Reads domain docs** before looking at code:
-   - `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA` — review checklist and standards
-   - `claire domain read fivepoints knowledge REVIEWER_PERSONA` — Steven Franklin persona
+   - `claire domain read fivepoints knowledge CODE_REVIEW_PERSONA` — full review rule set (character, checklist, standards)
    - `claire domain read fivepoints operational CODING_STANDARDS`
 
 2. **Reads the PR diff** via `gh pr diff N`

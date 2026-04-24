@@ -166,7 +166,7 @@ Repositories **must communicate permission errors back to the client**. Authoriz
 - Multi-tenant data isolation is enforced at the repo level via `IRestrictedQueryProvider` and `OrganizationId` scoping
 - If a user attempts to access data outside their organization or without the required permission, the repo must surface this — never return empty results silently
 
-> Source: Steven Franklin's PR review, Rule #4 — "Repos need to communicate permission errors back to the client."
+> Source: reviewer feedback, Rule #4 — "Repos need to communicate permission errors back to the client."
 
 ### How It Works
 

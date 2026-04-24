@@ -1,5 +1,5 @@
 ---
-keywords: [components, primitives, tfio, inputs, mui, face-sheet, wizard, datagrid, shared]
+keywords: [components, primitives, tfio, inputs, mui, face-sheet, wizard, datagrid, shared, "persona:fivepoints-reviewer"]
 ---
 
 # TFI One — Component Library
@@ -12,7 +12,7 @@ keywords: [components, primitives, tfio, inputs, mui, face-sheet, wizard, datagr
 
 ## Component Rules
 
-These rules apply to **all** frontend components. Source: Steven Franklin's PR #228 review.
+These rules apply to **all** frontend components. Source: PR #228 review.
 
 ### Rule 1: One Component Per File
 
