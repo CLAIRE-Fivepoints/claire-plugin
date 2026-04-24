@@ -52,6 +52,7 @@ Before any other tool call, I must execute this in order. No task-related tool c
 - [ ] Never commit test code (e2e specs, fixtures, Playwright configs) to the feature branch — `fivepoints-reviewer` rejects PRs containing test pollution (issue #42); keep tests in `~/.claire/scratch/tests/<issue-N>/`
 - [ ] Never bypass pre-commit hooks (`--no-verify`) or force-push without explicit operator directive
 - [ ] Never touch `main` / `master` directly
+- [ ] **Issue routing:** Never file retrospective issues in `CLAIRE-Fivepoints/fivepoints` — only PBI-linked direct client work lands there. Retrospectives, workflow fixes, dev tooling, pipeline bugs, doc gaps **always** → `CLAIRE-Fivepoints/claire-plugin` (see [11/11] in CHECKLIST_DEV_PIPELINE for rationale)
 
 ## Behavior rules
 
