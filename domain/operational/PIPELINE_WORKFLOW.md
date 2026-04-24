@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: PIPELINE_WORKFLOW
 title: "Five Points — Client Pipeline Workflow (PBI → ADO Merge)"
-keywords: [five-points, pipeline, workflow, analyst, dev, tester, ado-push, ado-transition, transition, labels, checklist, pbi, role-dev, fivepoints-dev, role-tester, role-analyst, "persona:fivepoints-dev"]
+keywords: [five-points, pipeline, workflow, analyst, dev, tester, ado-push, ado-transition, transition, labels, checklist, pbi, role-dev, fivepoints-dev, role-tester, role-analyst, "persona:fivepoints-dev", "persona:fivepoints-tester"]
 updated: 2026-04-16
 pr: "#2188"
 ---

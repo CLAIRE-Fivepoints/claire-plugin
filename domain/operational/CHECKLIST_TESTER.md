@@ -2,7 +2,7 @@
 name: CHECKLIST_TESTER
 description: "Five Points — Pipeline role:tester session checklist"
 type: operational
-keywords: [fivepoints, tester, pipeline, checklist, role, e2e, playwright]
+keywords: [fivepoints, tester, pipeline, checklist, role, e2e, playwright, "persona:fivepoints-tester"]
 updated: 2026-04-14
 ---
 
