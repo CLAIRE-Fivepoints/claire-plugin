@@ -111,6 +111,14 @@ commands:
     script: "domain/commands/test-env-start.sh"
     description: "Start full TFI One stack for local testing (SQL Server + .NET API + Vite frontend)"
 
+  - name: "fivepoints smoke-test"
+    script: "domain/commands/smoke-test.sh"
+    description: "6-check health probe of the local TFI One stack (Docker + Swagger + login + reference + user endpoints)"
+
+  - name: "fivepoints seed-test-data"
+    script: "domain/commands/seed-test-data.sh"
+    description: "Idempotently seed local DB with multi-user test data (3 roles × 2 orgs + clients + per-module face-sheet records)"
+
   - name: "fivepoints bridge"
     script: "domain/commands/bridge.sh"
     description: "Manage the Azure DevOps → GitHub issue bridge daemon (start/stop/status/logs/run)"
