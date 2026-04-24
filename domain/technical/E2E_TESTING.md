@@ -11,7 +11,7 @@ updated: 2026-03-05
 
 ## Overview
 
-Automated browser tests that exercise the TFI One frontend, fill forms, save records, and produce `.webm` video recordings as proof of functionality. Currently covers the **Education module** (5 sub-modules).
+Automated browser tests that exercise the TFI One frontend, fill forms, save records, and produce `.mp4` video recordings as proof of functionality. Currently covers the **Education module** (5 sub-modules). Playwright records natively to `.webm`; scripts must post-process to `.mp4` before exiting (see "Video Proof Recording Pattern" below).
 
 ## Usage
 
@@ -95,27 +95,71 @@ page.locator("button:has-text('Save')").first.click()
 ## Output
 
 Each test produces:
-- A `.webm` video recording (1920x1080) showing the full interaction
+- An `.mp4` video recording (1920x1080) showing the full interaction — see "Video Proof Recording Pattern" below; Playwright writes `.webm` natively, and the pattern post-processes it to `.mp4` in the same run.
 - `.png` screenshots at key moments (form filled, after save)
 
 All output goes to `--output-dir` (default: `./education_e2e_videos`).
 
 ### Video Proof Format Requirements
 
-**⚠️ `.webm` files are NOT accepted as proof for GitHub issues or ADO PRs.**
+The proof gate (`check_proof_gate` in `domain/scripts/ado_common.sh`) accepts `.mp4` **only**. `.webm` and `.mov` are rejected. This is deliberate — GitHub and ADO render `.mp4` inline, which is what a reviewer needs to confirm the proof without downloading.
 
-Before attaching a video proof to a GitHub issue or Azure DevOps PR:
+### Video Proof Recording Pattern
 
-1. **Convert to MP4** — GitHub and ADO only render MP4 inline; `.webm` is not supported:
-   ```bash
-   ffmpeg -i proof_recording.webm -c:v libx264 -c:a aac proof_recording.mp4
-   ```
+Playwright's `record_video_dir` writes `.webm` natively, so every recording script MUST transcode to `.mp4` before the run ends. This is **not** a separate "convert before posting" step — it is part of the recording pattern itself. A script that stops at `.webm` is incomplete and will fail the gate (issue #122).
 
-2. **Use the full absolute path** — When referencing the file in a comment, always use the full path so it can be found unambiguously:
-   ```
-   Proof: /Users/andreperez/proof-archive/fivepoints/siblings/proof_20260310.mp4
-   ```
-   Never use just a filename like `proof_recording.mp4`.
+The canonical shape:
+
+1. Record to a raw directory (`.webm` lives here transiently).
+2. Transcode the `.webm` to `.mp4` in the final output directory with ffmpeg.
+3. Delete the `.webm` so only `.mp4` ships as proof.
+4. Print the full absolute `.mp4` path to stdout so the caller can post it.
+
+Reference implementation: `domain/scripts/education_e2e.py` → `save_video()` (the `raw_dir` → `video_dir` conversion). Copy-paste-ready helper for a new script:
+
+```python
+import os
+import shutil
+import subprocess
+
+def save_video(raw_dir: str, output_name: str, video_dir: str) -> str:
+    """Transcode the raw .webm Playwright recording to .mp4 in video_dir.
+
+    Returns the absolute .mp4 path. Falls back to keeping the .webm only
+    when ffmpeg is not installed — the caller should treat that as a
+    broken environment (the proof gate rejects .webm).
+    """
+    os.makedirs(video_dir, exist_ok=True)
+    for name in os.listdir(raw_dir):
+        if not name.endswith(".webm"):
+            continue
+        src = os.path.join(raw_dir, name)
+        mp4_name = output_name if output_name.endswith(".mp4") else f"{output_name}.mp4"
+        dst = os.path.abspath(os.path.join(video_dir, mp4_name))
+        if shutil.which("ffmpeg"):
+            subprocess.run(
+                ["ffmpeg", "-i", src, "-c:v", "libx264", "-c:a", "aac", "-y", dst],
+                check=True,
+                capture_output=True,
+            )
+            os.remove(src)
+            return dst
+        # ffmpeg missing — record.sh and other orchestrators warn but keep
+        # the .webm. The gate will still reject it; install ffmpeg.
+        raise RuntimeError(
+            f"ffmpeg not found — cannot transcode {src} to .mp4. "
+            "Install ffmpeg (brew install ffmpeg) and rerun."
+        )
+    raise FileNotFoundError(f"No .webm found in {raw_dir}")
+```
+
+When posting the path on a GitHub issue or ADO PR, use the full absolute path and one of the recognised prefixes (`MP4:` / `Proof:` / `Recording:` / `Video:`):
+
+```
+MP4: /Users/andreperez/proof-archive/fivepoints/siblings/proof_20260310.mp4
+```
+
+Never post just a filename like `proof_recording.mp4` — the reviewer can't locate it.
 
 ## Architecture
 
