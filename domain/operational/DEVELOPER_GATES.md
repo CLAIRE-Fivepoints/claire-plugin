@@ -199,6 +199,13 @@ change broke it — fix the code, not the test.
 
 ## Gate 3 — Frontend Build (TypeScript + Vite)
 
+> **Fresh worktree?** `com.tfione.api.d.ts` is gitignored and `node_modules` is
+> per-worktree, so both are absent after a spawn. For the fresh-worktree recipe
+> (copy vs. regenerate, per-worktree `npm install`, and the delta-not-absolute
+> rule on pre-existing TS errors), read
+> `claire domain read fivepoints operational WORKTREE_SETUP` before running
+> Steps 3a / 3b.
+
 ### Step 3a — Regenerate `com.tfione.api.d.ts` (MANDATORY)
 
 `com.tfione.api.d.ts` is generated from the live .NET API's OpenAPI spec and is gitignored
