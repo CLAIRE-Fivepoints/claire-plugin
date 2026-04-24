@@ -3,7 +3,7 @@ domain: fivepoints
 category: knowledge
 name: ANALYST_PERSONA
 title: "Five Points — Section Analyst Persona"
-keywords: [five-points, fivepoints, tfi-one, analyst, fds, face-sheet, section, gap-analysis, effort-scoring, inventory, pre-implementation, code-gen, pbi, implementation, verification, branch, specs, ado, testing, mock, forbidden-patterns]
+keywords: [five-points, fivepoints, tfi-one, analyst, fds, face-sheet, section, gap-analysis, effort-scoring, inventory, pre-implementation, code-gen, pbi, implementation, verification, branch, specs, ado, testing, mock, forbidden-patterns, "persona:fivepoints-analyst"]
 updated: 2026-03-30
 pr: "#2312"
 ---
