@@ -108,7 +108,10 @@ done
 # Discover target repos
 # ─────────────────────────────────────────────────────────────
 
-declare -A REPOS  # label → local path
+# Parallel arrays REPO_LABELS / REPO_PATHS instead of `declare -A`:
+# macOS ships bash 3.2 by default and associative arrays require bash 4+.
+REPO_LABELS=()
+REPO_PATHS=()
 
 # 1. Discover fivepoints repos from claire registry
 while IFS= read -r line; do
@@ -117,19 +120,22 @@ while IFS= read -r line; do
     local_path=$(echo "$line" | awk '{print $NF}')
 
     if [[ "$repo_name" == "claire-labs/fivepoints" ]] && [[ -d "$local_path/.git" ]]; then
-        REPOS["claire-labs/fivepoints"]="$local_path"
+        REPO_LABELS+=("claire-labs/fivepoints")
+        REPO_PATHS+=("$local_path")
     elif [[ "$repo_name" == "claire-labs/fivepoints-test" ]] && [[ -d "$local_path/.git" ]]; then
-        REPOS["claire-labs/fivepoints-test"]="$local_path"
+        REPO_LABELS+=("claire-labs/fivepoints-test")
+        REPO_PATHS+=("$local_path")
     fi
 done < <(claire repo list 2>/dev/null | grep "claire-labs/fivepoints" || true)
 
 # 2. TFIOneGit (ADO client repo)
 TFIONE_PATH="${FIVEPOINTS_REPO_PATH:-/Users/andreperez/TFIOneGit}"
 if [[ -d "$TFIONE_PATH/.git" ]]; then
-    REPOS["TFIOneGit (ADO)"]="$TFIONE_PATH"
+    REPO_LABELS+=("TFIOneGit (ADO)")
+    REPO_PATHS+=("$TFIONE_PATH")
 fi
 
-if [[ ${#REPOS[@]} -eq 0 ]]; then
+if [[ ${#REPO_LABELS[@]} -eq 0 ]]; then
     echo "ERROR: No fivepoints repos found." >&2
     echo "  Expected: claire-labs/fivepoints, claire-labs/fivepoints-test in claire repo list" >&2
     echo "  Expected: $TFIONE_PATH (set FIVEPOINTS_REPO_PATH to override)" >&2
@@ -152,8 +158,9 @@ INSTALLED=0
 SKIPPED=0
 FAILED=0
 
-for label in "${!REPOS[@]}"; do
-    local_path="${REPOS[$label]}"
+for i in "${!REPO_LABELS[@]}"; do
+    label="${REPO_LABELS[$i]}"
+    local_path="${REPO_PATHS[$i]}"
 
     echo "  [$label]"
     echo "    Path: $local_path"
@@ -203,7 +210,7 @@ done
 # ─────────────────────────────────────────────────────────────
 
 if [[ "$DRY_RUN" == "true" ]]; then
-    echo "  Would install in ${#REPOS[@]} repo(s). Run without --dry-run to apply."
+    echo "  Would install in ${#REPO_LABELS[@]} repo(s). Run without --dry-run to apply."
     echo ""
     exit 0
 fi

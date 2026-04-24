@@ -32,16 +32,17 @@ plugin-local PRs.
 
 ### SESSION START — Create All Tasks First (MANDATORY)
 
-Before doing ANY work, create all 11 checklist tasks so each step is auditable:
+Before doing ANY work, create all 12 checklist tasks so each step is auditable:
 
 ```
 TaskCreate(title="[1/11] Load context + read issue + checkout branch")
+TaskCreate(title="[1.1/11] Install plugin hooks in this clone — claire fivepoints install-hooks (issue #119)")
 TaskCreate(title="[1.25/11] Directive Interpretation — scan PBI for 'use X as template' / 'mirror Y' and post interpretation (or no-directive line) before FDS fetch")
 TaskCreate(title="[1.5/11] FDS Read + Scope Confirmation — read the FDS attached to the parent PBI yourself")
 TaskCreate(title="[2/11] [GATE-0] Baseline gates + deploy + verify feature does NOT yet exist")
 TaskCreate(title="[3/11] Implement requirements")
 TaskCreate(title="[4/11] Run all 5 gates + commit + push to GitHub")
-TaskCreate(title="[5/11] GitHub PR + gatekeeper code review")
+TaskCreate(title="[5/11] GitHub PR + gatekeeper code review (embed pr_body_checklist.md verbatim)")
 TaskCreate(title="[6/11] Start test environment in current worktree (Steven Reviewer enforces no-test-pollution)")
 TaskCreate(title="[7/11] Swagger verification (backend gate)")
 TaskCreate(title="[8/11] Verify login fixture + run E2E tests (Playwright) + record MP4")
@@ -50,7 +51,7 @@ TaskCreate(title="[10/11] PAT gate + fivepoints ado-transition → push branch t
 TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open for owner)")
 ```
 
-❌ Do NOT start any work before all 11 tasks are created.
+❌ Do NOT start any work before all 12 tasks are created.
 
 ℹ️ **Pipeline shape change (issue #42):** the analyst pipeline is currently
    retired. The dev role now reads the FDS directly (see [1.5/11]) instead of
@@ -108,6 +109,29 @@ TaskCreate(title="[11/11] Stop test environment + claire stop (issue stays open 
         to re-verify the analyst's receipt by hand — the gate does it for you.
       Reference: `claire domain read fivepoints operational ADO_ATTACHMENTS`
       → TaskUpdate(<task_1_id>, status="completed")
+
+- [ ] [1.1/11] 🪝 Install plugin hooks in this clone (MANDATORY — once per session, before any commit):
+      Why: the ADO CI pipeline (`azure_gated_build.yml`) does not run
+      `npm run lint`, and per issue #119 we will not commit the missing
+      step to the ADO-tracked file. The plugin pre-commit / pre-push hooks
+      are the compensating gate — they must be installed before any
+      `git commit` or `git push github` in this clone. Reruns are idempotent
+      (existing hooks are backed up as `.bak.<timestamp>`).
+
+      Command:
+      ```bash
+      claire fivepoints install-hooks
+      ```
+
+      Dry-run (no side effects, prints what would be written):
+      ```bash
+      claire fivepoints install-hooks --dry-run
+      ```
+
+      Reference:
+        - `claire domain read fivepoints operational GIT_HOOKS` — full check list + residual-risk note
+        - `claire fivepoints install-hooks --agent-help`
+      → TaskUpdate(<task_1.1_id>, status="completed")
 
 - [ ] [1.25/11] 🎯 Directive Interpretation (MANDATORY — before [1.5/11] FDS fetch, before any surface check):
       ⚠️  HARD STOP: Do NOT fetch the FDS, read the FDS, `ls`, or `grep` any
@@ -320,10 +344,32 @@ EOF
       → TaskUpdate(<task_4_id>, status="completed")
 
 - [ ] [5/11] Create GitHub PR + wait for Steven Reviewer + post PR link on issue (MANDATORY — do not wait to be asked):
-      gh pr create --base staging --title "feat(five-points): <description>" --body "Closes #<N>"
+      PR body MUST embed the plugin-rendered PR checklist (issue #119
+      substitute for `.azuredevops/pull_request_template.md`). Read the
+      template and paste its fenced block verbatim into the body, filling
+      each `[ ]` as it passes:
+
+      ```bash
+      claire domain read fivepoints templates pr_body_checklist
+      # copy the fenced `## PR Checklist (plugin-rendered — issue #119)` block
+      # into --body below, after "Closes #<N>"
+      gh pr create --base staging \
+          --title "feat(five-points): <description>" \
+          --body "Closes #<N>
+
+      ## PR Checklist (plugin-rendered — issue #119)
+
+      - [ ] Follows patterns in \`docs/27-FIVEPOINTS-CODE-PATTERNS.md\`
+      - [ ] Uses \`rqProvider.GetRestrictedQuery<T>()\` for entity queries
+      - [ ] Uses \`labelToken\` / \`labelDefault\` on Tfio* components
+      - [ ] Validators connected via the \`fluentValidationResolver\` pipeline
+      - [ ] All tests pass (\`dotnet build -c Gate\`, \`dotnet test\`, \`npm run lint\`, \`npm run build-gate\`)
+      - [ ] Pre-commit + pre-push hooks installed for this clone (\`claire fivepoints install-hooks\`)"
+      ```
       # Steven Reviewer (fivepoints-reviewer persona) fires automatically via GitHub Actions runner.
       # Steven's job includes rejecting any PR that contains test artifacts — this is the
       # no-test-pollution enforcement mechanism (replacing the prior isolated-worktree approach).
+      # Steven also rejects PRs missing the `## PR Checklist (plugin-rendered — issue #119)` block.
       Wait for Steven's APPROVE before continuing (arrives via claire wait).
       ❌ Do NOT proceed without Steven's approval.
       ❌ If Steven flags test-pollution → remove the test files from the feature

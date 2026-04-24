@@ -286,6 +286,27 @@ npm run lint
 ESLint uses flat config (`eslint.config.js`) with `typescript-eslint` recommended + `react-hooks`
 plugin. Fix any new errors introduced by your changes.
 
+#### Automated via plugin hooks (issue #119)
+
+The ADO CI pipeline (`azure_gated_build.yml`) does **not** run `npm run lint`,
+and per issue #119 we will not commit the missing step to that ADO-tracked
+file. Two plugin hooks fill the gap:
+
+- **`pre-commit` Check 6** — runs `./node_modules/.bin/eslint
+  --no-error-on-unmatched-pattern <staged paths>` over every staged
+  `com.tfione.web/**/*.{ts,tsx}`.
+- **`pre-push` Check 3** — runs `cd com.tfione.web && npm run --silent lint`
+  when any commit in the push range touches a `com.tfione.web/**/*.{ts,tsx}`.
+
+Install once per clone at session start:
+
+```bash
+claire fivepoints install-hooks
+```
+
+Known residual risks (`--no-verify`, hook not installed) are documented in
+`claire domain read fivepoints operational GIT_HOOKS` → **Residual risk**.
+
 ---
 
 ## Gate 5 — Migration (if you added or modified migration files)
@@ -391,6 +412,7 @@ Or run the relevant E2E scenario for the area you changed.
 ### Before git push — Run ALL Applicable Gates Locally
 
 ```
+[ ] Pre     Install plugin hooks once per clone: claire fivepoints install-hooks
 [ ] Pre     Kill API → restart fresh → wait for swagger → regen types (see Routine above)
 [ ] Gate 0  Branch follows feature/ or bugfix/ convention
 [ ] Gate 0  No business logic tests staged (infrastructure/external API tests only)
