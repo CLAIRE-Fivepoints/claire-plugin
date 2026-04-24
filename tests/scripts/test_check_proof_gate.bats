@@ -156,6 +156,36 @@ make_comments() {
     done
 }
 
+@test "check_proof_gate rejects .webm recordings (MP4-only policy, issue #122)" {
+    # Playwright's record_video_dir default is .webm. The dev-facing pattern in
+    # domain/technical/E2E_TESTING.md requires a ffmpeg transcode to .mp4 at
+    # record time so the .webm never leaves the script. If it does leak into a
+    # comment, the gate must still reject it — .webm/.mov are not valid proof
+    # per the owner directive (#122). Guards against a future agent silently
+    # re-broadening the regex.
+    GH_MOCK_COMMENTS_JSON=$(make_comments \
+        "MP4: /tmp/proof.webm" \
+        "**FDS Verification (screenshot + AI)**
+- Screen X: pass")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[8/11] MP4 missing"* ]]
+}
+
+@test "check_proof_gate rejects .mov recordings (MP4-only policy, issue #122)" {
+    GH_MOCK_COMMENTS_JSON=$(make_comments \
+        "Recording: /tmp/proof.mov" \
+        "**FDS Verification (screenshot + AI)**
+- Screen X: pass")
+    export GH_MOCK_COMMENTS_JSON
+
+    run bash -c "source '$ADO_COMMON' && check_proof_gate 42 fake/repo"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"[8/11] MP4 missing"* ]]
+}
+
 @test "check_proof_gate errors with code 2 on missing arguments" {
     run bash -c "source '$ADO_COMMON' && check_proof_gate"
     [ "$status" -eq 2 ]
