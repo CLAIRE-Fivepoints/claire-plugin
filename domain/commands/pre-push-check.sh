@@ -392,7 +392,7 @@ else
         # Read the staged version of the migration file
         while IFS= read -r ref_line; do
             # Extract the table ref: REFERENCES [schema].[Table] or REFERENCES schema.Table
-            table_ref=$(printf '%s' "$ref_line" | grep -oiE '\[?[a-zA-Z_]+\]?\.\[?[a-zA-Z_]+\]?' | head -1)
+            table_ref=$(printf '%s' "$ref_line" | grep -oiE '\[?[a-zA-Z_]+\]?\.\[?[a-zA-Z_]+\]?' | head -1 || true)
             [[ -z "$table_ref" ]] && continue
 
             # Normalize: strip brackets → schema.table
