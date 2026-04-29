@@ -103,6 +103,10 @@ commands:
     script: "domain/commands/sync-main.sh"
     description: "Force-sync fivepoints test mirror main branch to ADO dev tip (no issues/PRs/branches touched)"
 
+  - name: "fivepoints pre-push-check"
+    script: "domain/commands/pre-push-check.sh"
+    description: "Run all 5 developer gates before git push — Gate 0 hygiene, dotnet build/test, frontend build+lint, FK-safe flyway verify+migrate"
+
   - name: "fivepoints install-hooks"
     script: "domain/commands/install-hooks.sh"
     description: "Install TFI One pre-commit hook into TFIOneGit (branch naming, no GRANT/DENY, no d.ts, no biz logic tests)"
