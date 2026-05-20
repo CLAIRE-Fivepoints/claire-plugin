@@ -139,6 +139,10 @@ commands:
     script: "domain/commands/rebase-no-force.sh"
     description: "Rebase branch onto ADO target and push without ForcePush permission (snapshot+merge strategy)"
 
+  - name: "fivepoints verify-templates"
+    script: "domain/commands/verify-templates.sh"
+    description: "Verify no checklist duplication between fivepoints-dev persona and CHECKLIST_DEV_PIPELINE (single-source-of-truth guard)"
+
 github_orgs:
   - CLAIRE-Fivepoints
 
