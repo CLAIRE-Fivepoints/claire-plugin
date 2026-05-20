@@ -24,5 +24,4 @@ jobs:
     steps:
       - name: Run Claire Review
         run: |
-          cd /Users/andreperez/claire-reboot
           claire review --pr ${{ github.event.pull_request.number }} --repo ${{ github.repository }}
