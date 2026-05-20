@@ -4,7 +4,7 @@ category: operational
 name: GIT_HOOKS
 title: "Five Points — TFI One Git Hooks"
 keywords: [five-points, fivepoints, git-hooks, pre-commit, pre-push, developer-gates, branch-naming, coding-standards, "persona:fivepoints-dev"]
-updated: 2026-03-27
+updated: 2026-05-20
 ---
 
 # Five Points — TFI One Git Hooks
@@ -97,7 +97,8 @@ Runs on `git push`. Mirrors the Azure Pipelines gated build. Blocks push if any 
 | Check 3 — `npm run lint` | `cd com.tfione.web && npm run --silent lint` | Only if push commits touch `com.tfione.web/**/*.{ts,tsx}` (issue #119) |
 | Gate 1 — Backend build *(aspirational)* | `dotnet build com.tfione.sln -c Gate` | Not currently wired into the hook |
 | Gate 3 — Frontend build *(aspirational)* | `cd com.tfione.web && npm run build-gate` | Not currently wired into the hook |
-| Gate 5 — Flyway checksums *(aspirational)* | `claire flyway verify` | Not currently wired into the hook |
+| Gate 5a — Flyway checksums *(aspirational)* | `claire flyway verify` | Not currently wired into the hook |
+| Gate 5b — FK reference check *(aspirational)* | grep staged migrations for `REFERENCES` without prior `CREATE TABLE` | Not currently wired into the hook |
 
 > ⚠️ The "aspirational" rows above appeared in an earlier revision of this doc
 > but were never wired into `domain/hooks/pre-push`. They are kept as the
@@ -119,9 +120,14 @@ you changed will fail.
 
 **Gate 4** runs ESLint with flat config (`eslint.config.js`). Zero errors required.
 
-**Gate 5** detects whether any file under `com.tfione.db/migration/` changed since the upstream
+**Gate 5a** detects whether any file under `com.tfione.db/migration/` changed since the upstream
 branch. If so, runs `claire flyway verify` to detect CRC32 checksum mismatches. If `claire` is
 not installed, this check is skipped with a warning.
+
+**Gate 5b** (aspirational — not yet wired) scans staged migrations for `REFERENCES` clauses and
+verifies that every FK target table has a `CREATE TABLE` migration earlier in the sequence. This
+check would catch the class of failure that caused CI breakage on issue #70. See
+`claire domain read fivepoints operational DEVELOPER_GATES` → Gate 5b for the full command.
 
 **Check 3 — ESLint on pushed web commits** (issue #119) — enumerates every
 commit in the push range (new-branch: `<sha> --not --remotes`; existing

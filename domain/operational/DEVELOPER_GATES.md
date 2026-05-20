@@ -4,7 +4,7 @@ category: operational
 name: DEVELOPER_GATES
 title: "Five Points — Developer Gates Before Pushing to Azure DevOps"
 keywords: [five-points, fivepoints, developer-gates, build, test, typescript, stylecop, eslint, flyway, e2e, pre-push, quality-gate, migration, fk, foreign-key, references, "persona:fivepoints-dev"]
-updated: 2026-04-08
+updated: 2026-05-20
 ---
 
 # Five Points — Developer Gates Before Pushing to Azure DevOps
@@ -325,7 +325,38 @@ Flyway stores checksums in `flyway_schema_history`. Editing an already-applied m
 changes its checksum and breaks incremental migration — this will fail CI. If you need to
 change a migration that was already pushed, create a new migration instead.
 
-### Gate 5b — Apply pending migrations (mandatory pre-ADO-transition)
+### Gate 5b — FK reference check (if you added FK constraints)
+
+**Applies when:** Any staged migration contains a `REFERENCES` clause.
+
+Root cause of CI failure on issue #70: a migration added a FK referencing a table whose
+`CREATE TABLE` migration came *later* in the sequence. Azure Pipelines starts from an empty
+database and applies migrations strictly in order, so the FK fails immediately.
+
+```bash
+cd ~/TFIOneGit
+
+# For each FK target in staged migrations, verify a prior CREATE TABLE migration exists.
+git diff --cached --name-only | grep "migration/" | while read f; do
+  grep -oP "REFERENCES\s+\[?\w+\]?\.\[?\K\w+" "$f" 2>/dev/null
+done | sort -u | while read table; do
+  if ! grep -rql "CREATE TABLE.*\b${table}\b" com.tfione.db/migration/; then
+    echo "❌ Gate 5b FAILED: no migration creates [${table}] — FK will fail on CI empty-DB"
+    echo "   Fix: add a CREATE TABLE for [${table}] BEFORE this migration in the sequence"
+    exit 1
+  fi
+done && echo "✅ Gate 5b: all FK targets have CREATE TABLE migrations"
+```
+
+**Passing criteria:** No FK target table is missing a `CREATE TABLE` migration.
+
+If a table is referenced but never created by a migration (it was created by a previous
+feature branch already merged), confirm the table's creation migration has a lower version
+number than the current migration — CI applies them in order.
+
+---
+
+### Gate 5c — Apply pending migrations (mandatory pre-ADO-transition)
 
 ```bash
 # Extract SA password from the SQL Server container (exact match on env key — avoids
@@ -425,8 +456,8 @@ Or run the relevant E2E scenario for the area you changed.
 [ ] Gate 3  cd com.tfione.web && npm run build-gate   → 0 errors (tsc -b + vite build)
 [ ] Gate 4  cd com.tfione.web && npm run lint         → 0 errors in your files
 [ ] Gate 5a claire flyway verify     [if migrations]  → no checksum mismatches
-[ ] Gate 5  grep -r "REFERENCES <Table>" com.tfione.db/migration/  [if new FK]  → match existing column/type/nullability
-[ ] Gate 5b flyway migrate (local SQL Server) [if migrations] → 0 errors, all pending applied
+[ ] Gate 5b FK reference check      [if new FK]      → all REFERENCES targets have a CREATE TABLE migration
+[ ] Gate 5c flyway migrate (local SQL Server) [if migrations] → 0 errors, all pending applied
 [ ] Gate 6  claire fivepoints e2e-* [if UI changed]  → flows pass
 ```
 
