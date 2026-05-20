@@ -23,8 +23,10 @@ CHECKLIST_FILE="${BATS_TEST_DIRNAME}/../../domain/operational/CHECKLIST_DEV_PIPE
 }
 
 @test "CHECKLIST_DEV_PIPELINE.md contains all 11 steps (single source of truth)" {
+    # Use the same line-start pattern as the script so inline cross-references
+    # ("see [7/11]") do not produce false positives.
     for step in 1 2 3 4 5 6 7 8 9 10 11; do
-        run grep -cF "[${step}/11]" "$CHECKLIST_FILE"
+        run grep -cE "^- \[[ x]\] \[${step}/11\]" "$CHECKLIST_FILE"
         [ "$output" -ge 1 ]
     done
 }
