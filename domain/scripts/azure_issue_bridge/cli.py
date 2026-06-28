@@ -71,12 +71,14 @@ def _parse_lookback(value: str) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     from azure_issue_bridge.bridge import process_emails
+    from azure_issue_bridge.sync import RealBranchSync
 
     lookback_days = _parse_lookback(args.lookback) if args.lookback else None
     results = process_emails(
         max_results=args.max_results,
         dry_run=args.dry_run,
         lookback_days=lookback_days,
+        branch_sync=RealBranchSync(),
     )
 
     if not results:
@@ -99,6 +101,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_start(args: argparse.Namespace) -> int:
     """Polling loop — run every `interval` minutes."""
     from azure_issue_bridge.bridge import process_emails
+    from azure_issue_bridge.sync import RealBranchSync
 
     interval_seconds = args.interval * 60
     lookback_days = _parse_lookback(args.lookback) if args.lookback else None
@@ -125,6 +128,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 max_results=args.max_results,
                 dry_run=args.dry_run,
                 lookback_days=lookback_days,
+                branch_sync=RealBranchSync(),
             )
 
             if results:
@@ -155,6 +159,7 @@ def cmd_test(args: argparse.Namespace) -> int:
         PROCESSED_FILE,
         process_emails,
     )
+    from azure_issue_bridge.sync import RealBranchSync
 
     # Reset dedup state so already-processed emails are retried
     if PROCESSED_FILE.exists():
@@ -164,7 +169,10 @@ def cmd_test(args: argparse.Namespace) -> int:
     print(f"Running pipeline (max {args.max_results} PBI)...\n")
     # Scan up to 50 inbox emails but process at most max_results work items
     results = process_emails(
-        max_results=50, dry_run=args.dry_run, max_process=args.max_results
+        max_results=50,
+        dry_run=args.dry_run,
+        max_process=args.max_results,
+        branch_sync=RealBranchSync(),
     )
 
     if not results:
