@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from azure_issue_bridge.sync import MockBranchSync
 from azure_issue_bridge.worktree import MockWorktreePrepare
 
 
@@ -237,7 +238,6 @@ class TestPipelineWorktreeIntegration:
                 ),
             ))
             stack.enter_context(patch("azure_issue_bridge.bridge.add_issue_label"))
-            stack.enter_context(patch("azure_issue_bridge.bridge.sync_github_branch"))
             stack.enter_context(patch(
                 "azure_issue_bridge.bridge.assign_github_issue",
                 side_effect=mock_assign,
@@ -248,7 +248,11 @@ class TestPipelineWorktreeIntegration:
             stack.enter_context(patch(
                 "azure_issue_bridge.bridge.load_processed_ids", return_value=set()
             ))
-            process_emails(config=config, worktree_prepare=mock_wt)
+            process_emails(
+                config=config,
+                branch_sync=MockBranchSync(),
+                worktree_prepare=mock_wt,
+            )
 
         assert call_order == ["prepare", "assign"], (
             "Expected prepare before assign, got: {}".format(call_order)
@@ -287,7 +291,6 @@ class TestPipelineWorktreeIntegration:
                 ),
             ))
             stack.enter_context(patch("azure_issue_bridge.bridge.add_issue_label"))
-            stack.enter_context(patch("azure_issue_bridge.bridge.sync_github_branch"))
             mock_assign = stack.enter_context(
                 patch("azure_issue_bridge.bridge.assign_github_issue")
             )
@@ -297,7 +300,11 @@ class TestPipelineWorktreeIntegration:
             stack.enter_context(patch(
                 "azure_issue_bridge.bridge.load_processed_ids", return_value=set()
             ))
-            results = process_emails(config=config, worktree_prepare=mock_wt)
+            results = process_emails(
+                config=config,
+                branch_sync=MockBranchSync(),
+                worktree_prepare=mock_wt,
+            )
 
         # assign must NOT be called when prepare raises
         mock_assign.assert_not_called()
@@ -337,7 +344,6 @@ class TestPipelineWorktreeIntegration:
                 ),
             ))
             stack.enter_context(patch("azure_issue_bridge.bridge.add_issue_label"))
-            stack.enter_context(patch("azure_issue_bridge.bridge.sync_github_branch"))
             stack.enter_context(patch("azure_issue_bridge.bridge.assign_github_issue"))
             stack.enter_context(patch("azure_issue_bridge.bridge.save_processed_id"))
             stack.enter_context(patch("azure_issue_bridge.bridge.archive_email"))
@@ -345,7 +351,11 @@ class TestPipelineWorktreeIntegration:
             stack.enter_context(patch(
                 "azure_issue_bridge.bridge.load_processed_ids", return_value=set()
             ))
-            process_emails(config=config, worktree_prepare=mock_wt)
+            process_emails(
+                config=config,
+                branch_sync=MockBranchSync(),
+                worktree_prepare=mock_wt,
+            )
 
         assert len(mock_wt.prepared) == 1
         assert mock_wt.prepared[0]["branch"] == "pbi-77"
@@ -386,7 +396,6 @@ class TestPipelineWorktreeIntegration:
             mock_add_label = stack.enter_context(
                 patch("azure_issue_bridge.bridge.add_issue_label")
             )
-            stack.enter_context(patch("azure_issue_bridge.bridge.sync_github_branch"))
             stack.enter_context(patch("azure_issue_bridge.bridge.assign_github_issue"))
             stack.enter_context(patch("azure_issue_bridge.bridge.save_processed_id"))
             stack.enter_context(patch("azure_issue_bridge.bridge.archive_email"))
@@ -394,6 +403,10 @@ class TestPipelineWorktreeIntegration:
             stack.enter_context(patch(
                 "azure_issue_bridge.bridge.load_processed_ids", return_value=set()
             ))
-            process_emails(config=config, worktree_prepare=mock_wt)
+            process_emails(
+                config=config,
+                branch_sync=MockBranchSync(),
+                worktree_prepare=mock_wt,
+            )
 
         mock_add_label.assert_called_once_with("org/target", 88, "role:myapp-dev")

@@ -82,7 +82,7 @@ class TestMockBranchSync:
 
 
 # ---------------------------------------------------------------------------
-# process_emails() + sync_github_branch integration tests
+# process_emails() + branch_sync integration tests
 # ---------------------------------------------------------------------------
 
 
@@ -108,13 +108,14 @@ def _default_config() -> Any:
 
 
 class TestProcessEmailsSync:
-    """process_emails() must call sync_github_branch after issue creation, before archiving."""
+    """process_emails() must call branch_sync.sync_branch after issue creation, before archiving."""
 
     def _run_process_emails(
         self,
         dry_run: bool = False,
+        branch_sync: Any = None,
     ) -> tuple[list[Any], Any, Any, Any]:
-        """Standard fixture: returns (results, mock_sync, mock_save, mock_archive)."""
+        """Standard fixture: returns (results, mock_bs, mock_save, mock_archive)."""
         from azure_issue_bridge.bridge import process_emails
         from azure_issue_bridge.worktree import MockWorktreePrepare
 
@@ -122,6 +123,7 @@ class TestProcessEmailsSync:
         work_item = make_work_item()
         decision = make_create_decision(emails=[email])
         config = _default_config()
+        mock_bs = branch_sync if branch_sync is not None else MockBranchSync()
 
         with (
             patch("claire_py.email.watcher.list_unread_replies", return_value=[email]),
@@ -137,7 +139,6 @@ class TestProcessEmailsSync:
                 return_value=_make_github_issue(42),
             ),
             patch("azure_issue_bridge.bridge.add_issue_label"),
-            patch("azure_issue_bridge.bridge.sync_github_branch") as mock_sync,
             patch("azure_issue_bridge.bridge.assign_github_issue"),
             patch("azure_issue_bridge.bridge.save_processed_id") as mock_save,
             patch("azure_issue_bridge.bridge.archive_email") as mock_archive,
@@ -146,22 +147,25 @@ class TestProcessEmailsSync:
             results = process_emails(
                 dry_run=dry_run,
                 config=config,
+                branch_sync=mock_bs,
                 worktree_prepare=MockWorktreePrepare(),
             )
 
-        return results, mock_sync, mock_save, mock_archive
+        return results, mock_bs, mock_save, mock_archive
 
     def test_sync_called_once_after_issue_creation(self) -> None:
-        results, mock_sync, mock_save, _ = self._run_process_emails()
+        results, mock_bs, mock_save, _ = self._run_process_emails()
 
         assert len(results) == 1
         assert results[0].error is None
-        mock_sync.assert_called_once_with(
-            "CLAIRE-Fivepoints/fivepoints-test",
-            "develop",
-            "CLAIRE-Fivepoints/fivepoints",
-            "develop",
-        )
+        assert mock_bs.syncs == [
+            (
+                "CLAIRE-Fivepoints/fivepoints-test",
+                "develop",
+                "CLAIRE-Fivepoints/fivepoints",
+                "develop",
+            )
+        ]
         mock_save.assert_called_once()
 
     def test_sync_called_before_email_archiving(self) -> None:
@@ -174,8 +178,9 @@ class TestProcessEmailsSync:
         work_item = make_work_item()
         decision = make_create_decision(emails=[email])
 
-        def fake_sync(*args: Any, **kwargs: Any) -> None:
-            call_order.append("sync")
+        class OrderTrackingBranchSync:
+            def sync_branch(self, *args: Any, **kwargs: Any) -> None:
+                call_order.append("sync")
 
         def fake_archive(msg_id: str) -> None:
             call_order.append("archive")
@@ -196,7 +201,6 @@ class TestProcessEmailsSync:
                 ),
             ),
             patch("azure_issue_bridge.bridge.add_issue_label"),
-            patch("azure_issue_bridge.bridge.sync_github_branch", side_effect=fake_sync),
             patch("azure_issue_bridge.bridge.assign_github_issue"),
             patch("azure_issue_bridge.bridge.save_processed_id"),
             patch("azure_issue_bridge.bridge.archive_email", side_effect=fake_archive),
@@ -204,6 +208,7 @@ class TestProcessEmailsSync:
         ):
             process_emails(
                 config=_default_config(),
+                branch_sync=OrderTrackingBranchSync(),
                 worktree_prepare=MockWorktreePrepare(),
             )
 
@@ -216,6 +221,11 @@ class TestProcessEmailsSync:
         email = make_email()
         work_item = make_work_item()
         decision = make_create_decision(emails=[email])
+
+        failing_sync = MockBranchSync()
+        failing_sync.sync_branch = MagicMock(  # type: ignore[method-assign]
+            side_effect=RuntimeError("git push failed: unauthorized")
+        )
 
         with (
             patch("claire_py.email.watcher.list_unread_replies", return_value=[email]),
@@ -233,10 +243,6 @@ class TestProcessEmailsSync:
                 ),
             ),
             patch("azure_issue_bridge.bridge.add_issue_label"),
-            patch(
-                "azure_issue_bridge.bridge.sync_github_branch",
-                side_effect=RuntimeError("git push failed: unauthorized"),
-            ),
             patch("azure_issue_bridge.bridge.assign_github_issue"),
             patch("azure_issue_bridge.bridge.save_processed_id") as mock_save,
             patch("azure_issue_bridge.bridge.archive_email") as mock_archive,
@@ -244,6 +250,7 @@ class TestProcessEmailsSync:
         ):
             results = process_emails(
                 config=_default_config(),
+                branch_sync=failing_sync,
                 worktree_prepare=MockWorktreePrepare(),
             )
 
@@ -254,17 +261,17 @@ class TestProcessEmailsSync:
         mock_archive.assert_not_called()
 
     def test_dry_run_does_not_call_sync(self) -> None:
-        results, mock_sync, _, _ = self._run_process_emails(dry_run=True)
+        results, mock_bs, _, _ = self._run_process_emails(dry_run=True)
 
-        mock_sync.assert_not_called()
+        assert mock_bs.syncs == []
         assert len(results) == 1
         assert results[0].github_issue_url == "(dry-run)"
 
     def test_sync_is_always_called(self) -> None:
-        """sync_github_branch is always called — no optional adapter."""
-        results, mock_sync, mock_save, _ = self._run_process_emails()
+        """branch_sync.sync_branch is always called — defaults to RealBranchSync when None."""
+        results, mock_bs, mock_save, _ = self._run_process_emails()
 
         assert len(results) == 1
         assert results[0].error is None
-        mock_sync.assert_called_once()
+        assert len(mock_bs.syncs) == 1
         mock_save.assert_called_once()

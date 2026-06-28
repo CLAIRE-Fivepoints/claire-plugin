@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
+    from azure_issue_bridge.sync import BranchSyncAdapter
     from azure_issue_bridge.worktree import WorktreePrepareAdapter
 
 logger = logging.getLogger(__name__)
@@ -542,21 +543,6 @@ def assign_github_issue(repo: str, issue_number: int, agent: str) -> None:
     logger.info("Assigned issue #%s in %s to %s", issue_number, repo, agent)
 
 
-def sync_github_branch(
-    source_repo: str,
-    source_branch: str,
-    target_repo: str,
-    target_branch: str,
-) -> None:
-    """Sync source_branch from source_repo to target_repo via the GitHub REST API.
-
-    Raises RuntimeError on failure (propagated from RealBranchSync).
-    """
-    from azure_issue_bridge.sync import RealBranchSync
-
-    RealBranchSync().sync_branch(source_repo, source_branch, target_repo, target_branch)
-
-
 # ---------------------------------------------------------------------------
 # Full pipeline
 # ---------------------------------------------------------------------------
@@ -986,7 +972,8 @@ def process_emails(
     max_process: int | None = None,
     lookback_days: int | None = None,
     config: BridgeConfig | None = None,
-    worktree_prepare: WorktreePrepareAdapter | None = None,
+    branch_sync: "BranchSyncAdapter | None" = None,
+    worktree_prepare: "WorktreePrepareAdapter | None" = None,
 ) -> list[ProcessingResult]:
     """Scan Gmail inbox for ADO assignment emails and process each one.
 
@@ -999,16 +986,21 @@ def process_emails(
         dry_run: If True, log what would be created without touching GitHub or archiving.
         max_process: If set, limit the number of new work items created.
         lookback_days: If set, only scan emails from the last N days (Gmail newer_than filter).
+        branch_sync: Adapter for syncing the develop branch.  When None, uses
+            RealBranchSync().  Pass a MockBranchSync in tests.
         worktree_prepare: Adapter for creating git worktrees.  When None, uses
             RealWorktreePrepare().  Pass a MockWorktreePrepare in tests.
 
     Returns a list of ProcessingResult for each unique ADO work item found.
     """
+    from azure_issue_bridge.sync import RealBranchSync
     from azure_issue_bridge.worktree import RealWorktreePrepare
     from claire_py.email.watcher import list_unread_replies
 
     if config is None:
         config = load_bridge_config()
+    if branch_sync is None:
+        branch_sync = RealBranchSync()
     if worktree_prepare is None:
         worktree_prepare = RealWorktreePrepare()
 
@@ -1109,6 +1101,22 @@ def process_emails(
             if dry_run:
                 title = f"{work_item.title} (PBI #{work_item.id})"
                 logger.info("[dry-run] Would create issue: %s", title)
+                logger.info(
+                    "[dry-run] Would add label: role:%s-dev", config.client
+                )
+                logger.info(
+                    "[dry-run] Would sync branch %s: %s → %s",
+                    config.sync_branch,
+                    config.source_repo,
+                    config.target_repo,
+                )
+                logger.info(
+                    "[dry-run] Would create worktree for issue (branch: pbi-%s)",
+                    pbi_id,
+                )
+                logger.info(
+                    "[dry-run] Would assign issue to %s", config.agent
+                )
                 result.github_issue_url = "(dry-run)"
             else:
                 # Step 2: Pre-creation duplicate guard — re-check GitHub right before
@@ -1140,7 +1148,7 @@ def process_emails(
                     )
 
                     # Step 5: Sync develop branch source → target repo
-                    sync_github_branch(
+                    branch_sync.sync_branch(
                         config.source_repo,
                         config.sync_branch,
                         config.target_repo,
