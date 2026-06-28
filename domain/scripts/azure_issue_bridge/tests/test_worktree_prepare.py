@@ -181,21 +181,26 @@ def _make_work_item(item_id: int, title: str) -> MagicMock:
     )
 
 
+def _make_config(client: str = "fivepoints"):
+    from azure_issue_bridge.bridge import BridgeConfig
+    return BridgeConfig(
+        agent="claire-test-ai",
+        client=client,
+        source_repo="org/source",
+        target_repo="org/target",
+        sync_branch="develop",
+    )
+
+
 class TestPipelineWorktreeIntegration:
     """process_emails must call prepare_worktree before assign_github_issue."""
 
     def test_worktree_called_before_assign(self) -> None:
-        from azure_issue_bridge.bridge import BridgeConfig, GitHubIssue, process_emails
+        from azure_issue_bridge.bridge import GitHubIssue, process_emails
 
         mock_wt = MockWorktreePrepare()
         email = _make_email("Task 42 - DEV - some task")
-        config = BridgeConfig(
-            agent="claire-test-ai",
-            client="fivepoints",
-            source_repo="org/source",
-            target_repo="org/target",
-            sync_branch="develop",
-        )
+        config = _make_config()
 
         call_order: list[str] = []
 
@@ -209,7 +214,6 @@ class TestPipelineWorktreeIntegration:
         mock_wt.prepare = mock_prepare
 
         with ExitStack() as stack:
-            # list_unread_replies is imported locally inside process_emails
             stack.enter_context(patch(
                 "claire_py.email.watcher.list_unread_replies",
                 return_value=[email],
@@ -251,22 +255,15 @@ class TestPipelineWorktreeIntegration:
         )
 
     def test_pipeline_aborts_when_prepare_raises(self) -> None:
-        from azure_issue_bridge.bridge import BridgeConfig, GitHubIssue, process_emails
+        from azure_issue_bridge.bridge import GitHubIssue, process_emails
 
         mock_wt = MockWorktreePrepare()
         mock_wt.prepare = MagicMock(side_effect=RuntimeError("git worktree add failed"))
 
         email = _make_email("Task 55 - DEV - failing task")
-        config = BridgeConfig(
-            agent="claire-test-ai",
-            client="fivepoints",
-            source_repo="org/source",
-            target_repo="org/target",
-            sync_branch="develop",
-        )
+        config = _make_config()
 
         with ExitStack() as stack:
-            # list_unread_replies is imported locally inside process_emails
             stack.enter_context(patch(
                 "claire_py.email.watcher.list_unread_replies",
                 return_value=[email],
@@ -310,20 +307,13 @@ class TestPipelineWorktreeIntegration:
         assert "git worktree add failed" in results[0].error
 
     def test_branch_name_uses_issue_number(self) -> None:
-        from azure_issue_bridge.bridge import BridgeConfig, GitHubIssue, process_emails
+        from azure_issue_bridge.bridge import GitHubIssue, process_emails
 
         mock_wt = MockWorktreePrepare()
         email = _make_email("Task 77 - DEV - branch name test")
-        config = BridgeConfig(
-            agent="claire-test-ai",
-            client="fivepoints",
-            source_repo="org/source",
-            target_repo="org/target",
-            sync_branch="develop",
-        )
+        config = _make_config()
 
         with ExitStack() as stack:
-            # list_unread_replies is imported locally inside process_emails
             stack.enter_context(patch(
                 "claire_py.email.watcher.list_unread_replies",
                 return_value=[email],
@@ -364,20 +354,13 @@ class TestPipelineWorktreeIntegration:
         assert mock_wt.prepared[0]["repo"] == "org/target"
 
     def test_label_uses_client_config(self) -> None:
-        from azure_issue_bridge.bridge import BridgeConfig, GitHubIssue, process_emails
+        from azure_issue_bridge.bridge import GitHubIssue, process_emails
 
         mock_wt = MockWorktreePrepare()
         email = _make_email("Task 88 - DEV - label test")
-        config = BridgeConfig(
-            agent="claire-test-ai",
-            client="myapp",
-            source_repo="org/source",
-            target_repo="org/target",
-            sync_branch="develop",
-        )
+        config = _make_config(client="myapp")
 
         with ExitStack() as stack:
-            # list_unread_replies is imported locally inside process_emails
             stack.enter_context(patch(
                 "claire_py.email.watcher.list_unread_replies",
                 return_value=[email],

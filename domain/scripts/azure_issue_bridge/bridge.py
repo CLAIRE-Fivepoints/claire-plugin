@@ -514,79 +514,6 @@ def add_issue_label(repo: str, issue_number: int, label: str) -> None:
     logger.info("Added label %r to issue #%s in %s", label, issue_number, repo)
 
 
-def sync_github_branch(
-    source_repo: str,
-    source_branch: str,
-    target_repo: str,
-    target_branch: str,
-) -> None:
-    """Force-sync target_repo/target_branch to the current HEAD of source_repo/source_branch.
-
-    Uses the GitHub REST API via gh CLI to:
-      1. Fetch the SHA of source_repo/source_branch
-      2. Force-update target_repo/target_branch to that SHA
-
-    Raises RuntimeError on any failure — the caller should abort the pipeline.
-    """
-    # Step 1: resolve source branch SHA
-    sha_result = subprocess.run(
-        [
-            "gh",
-            "api",
-            f"repos/{source_repo}/git/ref/heads/{source_branch}",
-            "--jq",
-            ".object.sha",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if sha_result.returncode != 0 or not sha_result.stdout.strip():
-        raise RuntimeError(
-            f"Failed to resolve SHA for {source_repo}/{source_branch}: "
-            f"{sha_result.stderr.strip()}"
-        )
-    sha = sha_result.stdout.strip()
-    logger.info(
-        "Syncing %s/%s → %s/%s (SHA %s)",
-        source_repo,
-        source_branch,
-        target_repo,
-        target_branch,
-        sha[:8],
-    )
-
-    # Step 2: force-update target branch ref
-    patch_result = subprocess.run(
-        [
-            "gh",
-            "api",
-            "--method",
-            "PATCH",
-            f"repos/{target_repo}/git/refs/heads/{target_branch}",
-            "--field",
-            f"sha={sha}",
-            "--field",
-            "force=true",
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if patch_result.returncode != 0:
-        raise RuntimeError(
-            f"Failed to update {target_repo}/{target_branch} to {sha[:8]}: "
-            f"{patch_result.stderr.strip()}"
-        )
-    logger.info(
-        "Synced %s/%s → %s/%s (%s)",
-        source_repo,
-        source_branch,
-        target_repo,
-        target_branch,
-        sha[:8],
-    )
-
 
 def assign_github_issue(repo: str, issue_number: int, agent: str) -> None:
     """Assign a GitHub issue to an agent via gh CLI.
@@ -614,6 +541,21 @@ def assign_github_issue(repo: str, issue_number: int, agent: str) -> None:
             f"{result.stderr.strip()}"
         )
     logger.info("Assigned issue #%s in %s to %s", issue_number, repo, agent)
+
+
+def sync_github_branch(
+    source_repo: str,
+    source_branch: str,
+    target_repo: str,
+    target_branch: str,
+) -> None:
+    """Sync source_branch from source_repo to target_repo via the GitHub REST API.
+
+    Raises RuntimeError on failure (propagated from RealBranchSync).
+    """
+    from azure_issue_bridge.sync import RealBranchSync
+
+    RealBranchSync().sync_branch(source_repo, source_branch, target_repo, target_branch)
 
 
 # ---------------------------------------------------------------------------

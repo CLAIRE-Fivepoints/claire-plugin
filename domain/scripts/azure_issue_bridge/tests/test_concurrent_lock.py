@@ -13,6 +13,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from azure_issue_bridge.bridge import GitHubIssue, process_emails
+from azure_issue_bridge.worktree import MockWorktreePrepare
 
 
 def make_email(subject: str, message_id: str = "msg-001") -> Any:
@@ -141,7 +142,7 @@ class TestPreCreationDuplicateGuard:
             patch("azure_issue_bridge.bridge.archive_email"),
             patch("azure_issue_bridge.bridge.save_state"),
         ):
-            results = process_emails()
+            results = process_emails(worktree_prepare=MockWorktreePrepare())
 
         # create_github_issue must have been called exactly once
         mock_create.assert_called_once()
