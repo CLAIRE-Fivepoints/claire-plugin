@@ -4,6 +4,7 @@ azure_issue_bridge.cli — Command-line interface.
 Subcommands:
   run     One-shot: scan inbox and process any pending ADO assignment emails
   start   Polling loop: run repeatedly on a configurable interval
+  inject  Feed a synthetic email directly into the bridge pipeline (no auth required)
   status  Show the last run state
 """
 
@@ -15,6 +16,7 @@ import logging
 import os
 import sys
 import time
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -192,6 +194,75 @@ def cmd_test(args: argparse.Namespace) -> int:
 
     failures = [r for r in results if not r.success and not r.skipped]
     return 1 if failures else 0
+
+
+def cmd_inject(args: argparse.Namespace) -> int:
+    """Feed a synthetic email into the bridge pipeline without Gmail or ADO auth."""
+    from azure_issue_bridge.bridge import (
+        WorkItem,
+        _DEFAULT_GH_REPO,
+        create_github_issue,
+        is_pbi_email,
+        parse_pbi_id,
+        parse_subject_parts,
+    )
+
+    msg = SimpleNamespace(subject=args.subject, message_id="inject")
+    if not is_pbi_email(msg):
+        print(f"✗ Subject does not match ADO PBI pattern: {args.subject!r}")
+        return 1
+
+    pbi_id = parse_pbi_id(args.subject)
+    if not pbi_id:
+        print("✗ Could not parse PBI ID from subject")
+        return 1
+
+    area, title = parse_subject_parts(args.subject)
+    if not title:
+        title = f"PBI {pbi_id}"
+
+    work_item = WorkItem(
+        id=int(pbi_id),
+        title=title,
+        description="",
+        acceptance_criteria="",
+        area_path=area,
+        state="To Do",
+        work_item_type="Task",
+    )
+
+    repo = args.repo or os.environ.get("ADO_BRIDGE_REPO", _DEFAULT_GH_REPO)
+
+    if args.dry_run:
+        ado_org = os.environ.get("ADO_ORG", "FivePointsTechnology")
+        ado_project = os.environ.get("ADO_PROJECT", "TFIOne")
+        ado_url = (
+            f"https://dev.azure.com/{ado_org}/{ado_project}"
+            f"/_workitems/edit/{pbi_id}"
+        )
+        print(f"[dry-run] Parsed PBI #{pbi_id}")
+        print(f"  from:    {args.from_addr}")
+        print(f"  title:   {work_item.title} (PBI #{pbi_id})")
+        print(f"  area:    {work_item.area_path or '(none)'}")
+        print(f"  repo:    {repo}")
+        print()
+        print("[dry-run] Issue body preview:")
+        print(f"  **Azure DevOps:** {ado_url}")
+        print(f"  **State:** {work_item.state}")
+        print(f"  **Area:** {work_item.area_path}")
+        print(f"  **Type:** {work_item.work_item_type}")
+        return 0
+
+    os.environ["ADO_BRIDGE_REPO"] = repo
+    try:
+        issue_url = create_github_issue(work_item)
+    except RuntimeError as exc:
+        print(f"✗ {exc}")
+        return 1
+
+    print(f"✓ PBI #{pbi_id}: {work_item.title}")
+    print(f"  → {issue_url}")
+    return 0
 
 
 def cmd_restore_inbox(_args: argparse.Namespace) -> int:
@@ -394,6 +465,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Format only, do NOT spawn analyst session",
     )
 
+    # inject
+    inject_p = sub.add_parser(
+        "inject",
+        help="Feed a synthetic email into the bridge pipeline (no Gmail or ADO auth required)",
+    )
+    inject_p.add_argument(
+        "--from",
+        dest="from_addr",
+        required=True,
+        metavar="ADDRESS",
+        help="Sender address (e.g. azuredevops@microsoft.com)",
+    )
+    inject_p.add_argument(
+        "--subject",
+        required=True,
+        metavar="SUBJECT",
+        help="Email subject matching the ADO PBI pattern",
+    )
+    inject_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print parsed result without creating any GitHub issue",
+    )
+    inject_p.add_argument(
+        "--repo",
+        default=None,
+        metavar="OWNER/NAME",
+        help="Target GitHub repo (default: ADO_BRIDGE_REPO env or claire-labs/fivepoints-test)",
+    )
+
     # restore-inbox
     sub.add_parser(
         "restore-inbox",
@@ -423,6 +524,7 @@ def main() -> None:
         "run": cmd_run,
         "start": cmd_start,
         "test": cmd_test,
+        "inject": cmd_inject,
         "restore-inbox": cmd_restore_inbox,
         "status": cmd_status,
     }
@@ -463,6 +565,29 @@ notifications arrive for the same PBI.
   Runs in foreground, polling inbox every N minutes (default: 15).
   Use for always-on daemon. Pair with a process manager or cron.
 
+### inject — synthetic email injection (no Gmail or ADO auth required)
+  claire azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME]
+
+  Feeds a synthetic email directly into the bridge pipeline without polling Gmail
+  or calling the ADO REST API. Use for e2e testing without AZURE_DEVOPS_PAT.
+
+  --from ADDRESS      Sender address (e.g. azuredevops@microsoft.com)
+  --subject SUBJECT   Email subject matching the ADO PBI pattern
+  --dry-run           Print parsed result without creating any GitHub issue
+  --repo OWNER/NAME   Target repo override (default: ADO_BRIDGE_REPO or fivepoints-test)
+
+  Examples:
+    # Dry-run — parse subject, print what would be created
+    claire azure-issue-bridge inject \\
+      --from "azuredevops@microsoft.com" \\
+      --subject "Product Backlog Item 12345 - DEV - Client Management test" \\
+      --dry-run
+
+    # Live — create issue in fivepoints-test (default)
+    claire azure-issue-bridge inject \\
+      --from "azuredevops@microsoft.com" \\
+      --subject "Product Backlog Item 12345 - DEV - Client Management test"
+
 ### restore-inbox — restore archived ADO emails for re-processing
   claire azure-issue-bridge restore-inbox
 
@@ -477,7 +602,7 @@ notifications arrive for the same PBI.
   and processed email registry location.
 
 ## Email Filter
-- Sender: azuredevops@microsoft.com (default) — overridable via PBI_TEST_SENDER or PBI_SENDER
+- Sender: azuredevops@microsoft.com (default) — overridable via PBI_SENDER
 - Subject: must match "Product Backlog Item {ID}" or similar ADO work item patterns
 
 ## Pipeline
@@ -513,6 +638,7 @@ Output symbols:
 ## Required Credentials
   AZURE_DEVOPS_PAT    — ADO REST API auth (read from env or ~/.config/claire/.env)
   Gmail OAuth2        — configured via: claire email auth
+  (inject subcommand requires neither — no Gmail or ADO auth needed)
 
 ## State Files
   ~/.claire/azure-issue-bridge/state.json     — last run metadata
@@ -536,9 +662,6 @@ Output symbols:
   ADO_PROJECT         Azure DevOps project (default: TFIOne)
   ADO_BRIDGE_REPO     Target GitHub repo (default: claire-labs/fivepoints-test)
                       Set to claire-labs/fivepoints to go live
-  PBI_TEST_SENDER     Override accepted email sender for testing (e.g. andreoperez@gmail.com)
-                      Takes priority over PBI_SENDER. Emails from this address with the
-                      standard ADO subject format are processed identically to ADO emails.
   PBI_SENDER          Override the production ADO sender (default: azuredevops@microsoft.com)
 """
 
