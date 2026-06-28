@@ -469,7 +469,7 @@ notifications arrive for the same PBI.
   and processed email registry location.
 
 ## Email Filter
-- Sender: azuredevops@microsoft.com
+- Sender: azuredevops@microsoft.com (default) — overridable via PBI_TEST_SENDER or PBI_SENDER
 - Subject: must match "Product Backlog Item {ID}" or similar ADO work item patterns
 
 ## Pipeline
@@ -528,6 +528,10 @@ Output symbols:
   ADO_PROJECT         Azure DevOps project (default: TFIOne)
   ADO_BRIDGE_REPO     Target GitHub repo (default: claire-labs/fivepoints-test)
                       Set to claire-labs/fivepoints to go live
+  PBI_TEST_SENDER     Override accepted email sender for testing (e.g. andreoperez@gmail.com)
+                      Takes priority over PBI_SENDER. Emails from this address with the
+                      standard ADO subject format are processed identically to ADO emails.
+  PBI_SENDER          Override the production ADO sender (default: azuredevops@microsoft.com)
 """
 
 
