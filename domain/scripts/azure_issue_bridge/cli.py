@@ -196,11 +196,13 @@ def cmd_test(args: argparse.Namespace) -> int:
     return 1 if failures else 0
 
 
+_DEFAULT_INJECT_REPO = "claire-labs/fivepoints-test"
+
+
 def cmd_inject(args: argparse.Namespace) -> int:
     """Feed a synthetic email into the bridge pipeline without Gmail or ADO auth."""
     from azure_issue_bridge.bridge import (
         WorkItem,
-        _DEFAULT_GH_REPO,
         create_github_issue,
         is_pbi_email,
         parse_pbi_id,
@@ -231,7 +233,7 @@ def cmd_inject(args: argparse.Namespace) -> int:
         work_item_type="Task",
     )
 
-    repo = args.repo or os.environ.get("ADO_BRIDGE_REPO", _DEFAULT_GH_REPO)
+    repo = args.repo or os.environ.get("ADO_BRIDGE_REPO", _DEFAULT_INJECT_REPO)
 
     if args.dry_run:
         ado_org = os.environ.get("ADO_ORG", "FivePointsTechnology")
@@ -473,9 +475,9 @@ def build_parser() -> argparse.ArgumentParser:
     inject_p.add_argument(
         "--from",
         dest="from_addr",
-        required=True,
+        default="azuredevops@microsoft.com",
         metavar="ADDRESS",
-        help="Sender address (e.g. azuredevops@microsoft.com)",
+        help="Sender address shown in dry-run output (default: azuredevops@microsoft.com)",
     )
     inject_p.add_argument(
         "--subject",
@@ -571,7 +573,7 @@ notifications arrive for the same PBI.
   Feeds a synthetic email directly into the bridge pipeline without polling Gmail
   or calling the ADO REST API. Use for e2e testing without AZURE_DEVOPS_PAT.
 
-  --from ADDRESS      Sender address (e.g. azuredevops@microsoft.com)
+  --from ADDRESS      Sender address shown in dry-run output (default: azuredevops@microsoft.com)
   --subject SUBJECT   Email subject matching the ADO PBI pattern
   --dry-run           Print parsed result without creating any GitHub issue
   --repo OWNER/NAME   Target repo override (default: ADO_BRIDGE_REPO or fivepoints-test)

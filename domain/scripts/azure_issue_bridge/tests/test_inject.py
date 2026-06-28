@@ -125,7 +125,7 @@ class TestCmdInjectLive:
         out = capsys.readouterr().out
         assert "https://github.com/org/repo/issues/99" in out
 
-    def test_live_repo_override_sets_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_live_repo_override_sets_env(self) -> None:
         args = _make_args(repo="CLAIRE-Fivepoints/fivepoints-test")
         captured_repo: list[str] = []
 
