@@ -514,7 +514,6 @@ def add_issue_label(repo: str, issue_number: int, label: str) -> None:
     logger.info("Added label %r to issue #%s in %s", label, issue_number, repo)
 
 
-
 def assign_github_issue(repo: str, issue_number: int, agent: str) -> None:
     """Assign a GitHub issue to an agent via gh CLI.
 

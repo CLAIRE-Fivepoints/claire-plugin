@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender, branch-sync, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH]
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender, branch-sync, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label]
 updated: 2026-06-28
 ---
 
@@ -25,12 +25,15 @@ ADO PBI assigned to andre.perez@dothelpllc.com
   → parses PBI ID from subject: "Product Backlog Item {ID} - {area} - {title}"
   → TRIAGE: skip if duplicate, terminal state, or non-Task type
   → fetches PBI details from ADO REST API (AZURE_DEVOPS_PAT)
-  → creates GitHub issue in ADO_BRIDGE_REPO (default: claire-labs/fivepoints-test)
-  → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub API)
+  → creates GitHub issue in ADO_BRIDGE_SYNC_TARGET repo
+  → adds role label: role:{ADO_BRIDGE_CLIENT}-dev
+  → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub REST API)
+  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}  ← BEFORE assignment
+  → assigns issue to ADO_BRIDGE_AGENT                                                ← ALWAYS LAST
   → archives email in Gmail
-  → claire spawn daemon (consumer.py) detects new issue in ADO_BRIDGE_REPO
-  → spawns Claire agent in isolated worktree
-  → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_REPO> for wait/PR targeting
+  → claire spawn daemon (consumer.py) detects assignment, finds worktree already prepared
+  → launches Claire agent in the pre-created worktree (no re-creation)
+  → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET> for wait/PR targeting
 ```
 
 ---
@@ -68,9 +71,14 @@ Gmail inbox
       → if issue exists → action=skip (mark emails processed + archive)
       → if no issue   → action=create
   → [create only] GET https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{id}?$expand=all
-  → gh issue create --repo <ADO_BRIDGE_REPO>
+  → gh issue create --repo <ADO_BRIDGE_SYNC_TARGET>
+  → gh issue edit --add-label role:{ADO_BRIDGE_CLIENT}-dev
   → sync ADO_BRIDGE_SYNC_SOURCE/<branch> → ADO_BRIDGE_SYNC_TARGET/<branch> (GitHub REST API)
       → failure aborts pipeline for this PBI (no archiving, no agent assignment)
+  → git worktree add -b pbi-{N} <local>/.claire/worktrees/issue-{N} origin/develop
+      → worktree created BEFORE issue assignment
+      → failure aborts pipeline (no archiving, no agent assignment)
+  → gh issue edit --add-assignee <ADO_BRIDGE_AGENT>  ← ALWAYS LAST
   → persist all email IDs for this PBI to ~/.claire/azure-issue-bridge/processed.json
   → archive all emails for this PBI in Gmail (remove INBOX label)
 ```
@@ -96,23 +104,26 @@ Gmail inbox
 
 ## Spawn Daemon Pickup
 
-After the bridge creates a GitHub issue, the **claire spawn daemon** (`consumer.py`) takes over:
+After the bridge creates the GitHub issue, adds the role label, creates the worktree, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
 
-1. The spawn daemon monitors `ADO_BRIDGE_REPO` for newly opened issues
-2. When an issue matching the spawn criteria is detected, it creates an isolated git worktree
-3. A Claire agent is launched inside the worktree with the issue as its task
-4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_REPO>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
+1. The spawn daemon monitors `ADO_BRIDGE_SYNC_TARGET` for newly assigned issues
+2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it looks for an existing worktree at `.claire/worktrees/issue-{N}` — the bridge has already created it
+3. A Claire agent is launched **inside the pre-created worktree** (no re-creation); `claire start --issue N` is idempotent when the worktree already exists
+4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
 
-**`ADO_BRIDGE_REPO` vs `CLAIRE_WAIT_REPO`:**
-- `ADO_BRIDGE_REPO` — configures where the bridge creates GitHub issues (set at bridge/operator level)
+**Why the bridge creates the worktree before assigning:**
+The spawn daemon used to create the worktree on detection. Moving worktree creation into the bridge (before assignment) means the agent starts on a branch that already exists, avoiding a race between branch creation and the first `git push`.
+
+**`ADO_BRIDGE_SYNC_TARGET` vs `CLAIRE_WAIT_REPO`:**
+- `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues and the worktree (set at bridge/operator level)
 - `CLAIRE_WAIT_REPO` — passed by the spawn daemon into the spawned agent's environment so the agent knows which repo to watch for wait events
 - Both refer to the same repo; they are different variable names at different stages of the pipeline
 
-To repoint the pipeline to a different repo, set `ADO_BRIDGE_REPO`:
+To repoint the pipeline to a different repo, set `ADO_BRIDGE_SYNC_TARGET`:
 
 ```bash
-export ADO_BRIDGE_REPO=claire-labs/fivepoints   # production
-export ADO_BRIDGE_REPO=claire-labs/fivepoints-test  # staging (default)
+export ADO_BRIDGE_SYNC_TARGET=CLAIRE-Fivepoints/fivepoints   # production
+export ADO_BRIDGE_SYNC_TARGET=CLAIRE-Fivepoints/fivepoints-test  # staging (default)
 ```
 
 ---
@@ -216,9 +227,11 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `ADO_BRIDGE_HOUR_END` | `17` | Business hours end (local time, exclusive) |
 | `PBI_TEST_SENDER` | _(unset)_ | Override accepted email sender for testing (e.g. `andreoperez@gmail.com`). Takes priority over `PBI_SENDER`. Emails from this address with the standard ADO subject format are processed identically to real ADO emails. |
 | `PBI_SENDER` | `azuredevops@microsoft.com` | Override the production ADO sender. Use when ADO notifications come from a custom address. Falls back to the ADO default when unset. |
+| `ADO_BRIDGE_AGENT` | `claire-test-ai` | GitHub username assigned to each new issue. **Set this explicitly in production** — the default targets the test account. |
+| `ADO_BRIDGE_CLIENT` | `fivepoints` | Client slug used to build the role label: `role:{ADO_BRIDGE_CLIENT}-dev`. Determines which agent persona is activated by the spawn daemon. |
 | `ADO_BRIDGE_SYNC_SOURCE` | `CLAIRE-Fivepoints/fivepoints-test` | Source GitHub repo for branch sync (the repo Claire agents push to). |
-| `ADO_BRIDGE_SYNC_TARGET` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo for branch sync (the production repo). |
-| `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target before each agent assignment. |
+| `ADO_BRIDGE_SYNC_TARGET` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo where issues are created, where the worktree branch is pushed, and where the issue is assigned. |
+| `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target and used as base for the new `pbi-{N}` branch. |
 
 ---
 
@@ -238,8 +251,10 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | File | Role |
 |------|------|
 | `domain/scripts/azure_issue_bridge/bridge.py` | Core pipeline logic |
+| `domain/scripts/azure_issue_bridge/sync.py` | Branch sync adapter — `RealBranchSync` (GitHub REST API) and `MockBranchSync` (test double) |
+| `domain/scripts/azure_issue_bridge/worktree.py` | Worktree adapter — `WorktreePrepareAdapter` Protocol, `RealWorktreePrepare` (git worktree add), `MockWorktreePrepare` (test double) |
 | `domain/scripts/azure_issue_bridge/cli.py` | CLI entry point (`python3 -m azure_issue_bridge.cli`) |
-| `domain/scripts/azure_issue_bridge/tests/` | Unit tests (triage, fetch metadata, concurrent lock) |
+| `domain/scripts/azure_issue_bridge/tests/` | Unit tests (triage, sync, worktree, concurrent lock) |
 | `domain/commands/azure-issue-bridge.sh` | Bash router — sets PYTHONPATH and dispatches to the python CLI |
 
 The bash router prepends `domain/scripts` to `PYTHONPATH` so the package is importable as `azure_issue_bridge`. The module still imports `claire_py.email.auth` and `claire_py.email.watcher` from claire core (which remain there).
