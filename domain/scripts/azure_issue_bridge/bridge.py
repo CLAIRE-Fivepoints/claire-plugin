@@ -25,7 +25,10 @@ import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from azure_issue_bridge.sync import BranchSyncAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -129,11 +132,19 @@ _ADO_SENDER = "azuredevops@microsoft.com"
 # ---------------------------------------------------------------------------
 
 
+_DEFAULT_SYNC_SOURCE = "CLAIRE-Fivepoints/fivepoints-test"
+_DEFAULT_SYNC_TARGET = "CLAIRE-Fivepoints/fivepoints"
+_DEFAULT_SYNC_BRANCH = "develop"
+
+
 @dataclass
 class BridgeConfig:
     """Runtime configuration for the azure issue bridge."""
 
     pbi_sender: str = _ADO_SENDER
+    sync_source_repo: str = _DEFAULT_SYNC_SOURCE
+    sync_target_repo: str = _DEFAULT_SYNC_TARGET
+    sync_branch_name: str = _DEFAULT_SYNC_BRANCH
 
 
 def _get_env_or_file(key: str) -> str:
@@ -158,13 +169,30 @@ def load_bridge_config() -> BridgeConfig:
       1. PBI_TEST_SENDER  — test override (e.g. andreoperez@gmail.com)
       2. PBI_SENDER       — custom production sender
       3. azuredevops@microsoft.com — ADO default
+
+    Sync vars (ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH)
+    fall back to CLAIRE-Fivepoints/fivepoints-test → CLAIRE-Fivepoints/fivepoints / develop.
     """
     pbi_sender = (
         _get_env_or_file("PBI_TEST_SENDER")
         or _get_env_or_file("PBI_SENDER")
         or _ADO_SENDER
     )
-    return BridgeConfig(pbi_sender=pbi_sender)
+    sync_source_repo = (
+        _get_env_or_file("ADO_BRIDGE_SYNC_SOURCE") or _DEFAULT_SYNC_SOURCE
+    )
+    sync_target_repo = (
+        _get_env_or_file("ADO_BRIDGE_SYNC_TARGET") or _DEFAULT_SYNC_TARGET
+    )
+    sync_branch_name = (
+        _get_env_or_file("ADO_BRIDGE_SYNC_BRANCH") or _DEFAULT_SYNC_BRANCH
+    )
+    return BridgeConfig(
+        pbi_sender=pbi_sender,
+        sync_source_repo=sync_source_repo,
+        sync_target_repo=sync_target_repo,
+        sync_branch_name=sync_branch_name,
+    )
 
 
 def is_pbi_email(msg: Any) -> bool:
@@ -848,6 +876,7 @@ def process_emails(
     max_process: int | None = None,
     lookback_days: int | None = None,
     config: BridgeConfig | None = None,
+    branch_sync: BranchSyncAdapter | None = None,
 ) -> list[ProcessingResult]:
     """Scan Gmail inbox for ADO assignment emails and process each one.
 
@@ -965,6 +994,14 @@ def process_emails(
             if dry_run:
                 title = f"{work_item.title} (PBI #{work_item.id})"
                 logger.info("[dry-run] Would create issue: %s", title)
+                if branch_sync is not None:
+                    logger.info(
+                        "[dry-run] Would sync %s/%s → %s/%s",
+                        config.sync_source_repo,
+                        config.sync_branch_name,
+                        config.sync_target_repo,
+                        config.sync_branch_name,
+                    )
                 result.github_issue_url = "(dry-run)"
             else:
                 # Step 2: Pre-creation duplicate guard — re-check GitHub right before
@@ -987,6 +1024,16 @@ def process_emails(
                     # Step 3: Create GitHub issue
                     issue_url = create_github_issue(work_item)
                     result.github_issue_url = issue_url
+
+                    # Step 4: Sync source branch to target repo before worktree/assign.
+                    # Raises on failure → caught by outer except → pipeline aborted.
+                    if branch_sync is not None:
+                        branch_sync.sync_branch(
+                            source_repo=config.sync_source_repo,
+                            source_branch=config.sync_branch_name,
+                            target_repo=config.sync_target_repo,
+                            target_branch=config.sync_branch_name,
+                        )
 
                     # Mark ALL emails for this PBI as processed and archive them
                     for email in decision.emails:

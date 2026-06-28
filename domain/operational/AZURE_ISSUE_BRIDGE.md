@@ -3,8 +3,8 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender]
-updated: 2026-04-10
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender, branch-sync, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH]
+updated: 2026-06-28
 ---
 
 # Azure DevOps Email Bridge
@@ -26,6 +26,7 @@ ADO PBI assigned to andre.perez@dothelpllc.com
   → TRIAGE: skip if duplicate, terminal state, or non-Task type
   → fetches PBI details from ADO REST API (AZURE_DEVOPS_PAT)
   → creates GitHub issue in ADO_BRIDGE_REPO (default: claire-labs/fivepoints-test)
+  → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub API)
   → archives email in Gmail
   → claire spawn daemon (consumer.py) detects new issue in ADO_BRIDGE_REPO
   → spawns Claire agent in isolated worktree
@@ -68,6 +69,8 @@ Gmail inbox
       → if no issue   → action=create
   → [create only] GET https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{id}?$expand=all
   → gh issue create --repo <ADO_BRIDGE_REPO>
+  → sync ADO_BRIDGE_SYNC_SOURCE/<branch> → ADO_BRIDGE_SYNC_TARGET/<branch> (GitHub REST API)
+      → failure aborts pipeline for this PBI (no archiving, no agent assignment)
   → persist all email IDs for this PBI to ~/.claire/azure-issue-bridge/processed.json
   → archive all emails for this PBI in Gmail (remove INBOX label)
 ```
@@ -213,6 +216,9 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `ADO_BRIDGE_HOUR_END` | `17` | Business hours end (local time, exclusive) |
 | `PBI_TEST_SENDER` | _(unset)_ | Override accepted email sender for testing (e.g. `andreoperez@gmail.com`). Takes priority over `PBI_SENDER`. Emails from this address with the standard ADO subject format are processed identically to real ADO emails. |
 | `PBI_SENDER` | `azuredevops@microsoft.com` | Override the production ADO sender. Use when ADO notifications come from a custom address. Falls back to the ADO default when unset. |
+| `ADO_BRIDGE_SYNC_SOURCE` | `CLAIRE-Fivepoints/fivepoints-test` | Source GitHub repo for branch sync (the repo Claire agents push to). |
+| `ADO_BRIDGE_SYNC_TARGET` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo for branch sync (the production repo). |
+| `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target before each agent assignment. |
 
 ---
 
