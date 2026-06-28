@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from azure_issue_bridge.bridge import process_emails
+from azure_issue_bridge.bridge import GitHubIssue, process_emails
 
 
 def make_email(subject: str, message_id: str = "msg-001") -> Any:
@@ -129,8 +129,14 @@ class TestPreCreationDuplicateGuard:
             ),
             patch(
                 "azure_issue_bridge.bridge.create_github_issue",
-                return_value="https://github.com/claire-labs/fivepoints/issues/105",
+                return_value=GitHubIssue(
+                    url="https://github.com/claire-labs/fivepoints/issues/105",
+                    number=105,
+                ),
             ) as mock_create,
+            patch("azure_issue_bridge.bridge.add_issue_label"),
+            patch("azure_issue_bridge.bridge.sync_github_branch"),
+            patch("azure_issue_bridge.bridge.assign_github_issue"),
             patch("azure_issue_bridge.bridge.save_processed_id"),
             patch("azure_issue_bridge.bridge.archive_email"),
             patch("azure_issue_bridge.bridge.save_state"),

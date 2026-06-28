@@ -11,7 +11,11 @@ Pipeline:
      - Skip PBIs that already have an open GitHub issue (dedup)
   4. Fetch the full work item from Azure DevOps REST API (create decisions only)
   5. Create a GitHub issue with the PBI link via gh CLI
-  6. Archive the email and persist processed IDs to avoid re-processing
+  6. Add role label to the issue
+  7. Sync develop branch source → target repo
+  8. Create git worktree for the issue (branch: pbi-{issue})   ← BEFORE assignment
+  9. Assign the issue to the agent                             ← ALWAYS LAST
+  10. Archive the email and persist processed IDs to avoid re-processing
 """
 
 from __future__ import annotations
@@ -28,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from azure_issue_bridge.sync import BranchSyncAdapter
+    from azure_issue_bridge.worktree import WorktreePrepareAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +136,8 @@ _ADO_SENDER = "azuredevops@microsoft.com"
 # ---------------------------------------------------------------------------
 
 
+_DEFAULT_BRIDGE_AGENT = "claire-test-ai"
+_DEFAULT_BRIDGE_CLIENT = "fivepoints"
 _DEFAULT_SYNC_SOURCE = "CLAIRE-Fivepoints/fivepoints-test"
 _DEFAULT_SYNC_TARGET = "CLAIRE-Fivepoints/fivepoints"
 _DEFAULT_SYNC_BRANCH = "develop"
@@ -142,9 +148,11 @@ class BridgeConfig:
     """Runtime configuration for the azure issue bridge."""
 
     pbi_sender: str = _ADO_SENDER
-    sync_source_repo: str = _DEFAULT_SYNC_SOURCE
-    sync_target_repo: str = _DEFAULT_SYNC_TARGET
-    sync_branch_name: str = _DEFAULT_SYNC_BRANCH
+    agent: str = _DEFAULT_BRIDGE_AGENT
+    client: str = _DEFAULT_BRIDGE_CLIENT
+    source_repo: str = _DEFAULT_SYNC_SOURCE
+    target_repo: str = _DEFAULT_SYNC_TARGET
+    sync_branch: str = _DEFAULT_SYNC_BRANCH
 
 
 def _get_env_or_file(key: str) -> str:
@@ -178,20 +186,24 @@ def load_bridge_config() -> BridgeConfig:
         or _get_env_or_file("PBI_SENDER")
         or _ADO_SENDER
     )
-    sync_source_repo = (
+    agent = _get_env_or_file("ADO_BRIDGE_AGENT") or _DEFAULT_BRIDGE_AGENT
+    client = _get_env_or_file("ADO_BRIDGE_CLIENT") or _DEFAULT_BRIDGE_CLIENT
+    source_repo = (
         _get_env_or_file("ADO_BRIDGE_SYNC_SOURCE") or _DEFAULT_SYNC_SOURCE
     )
-    sync_target_repo = (
-        _get_env_or_file("ADO_BRIDGE_SYNC_TARGET") or _DEFAULT_SYNC_TARGET
+    target_repo = (
+        _get_env_or_file("ADO_BRIDGE_SYNC_TARGET")
+        or _get_env_or_file("ADO_BRIDGE_REPO")
+        or _DEFAULT_SYNC_TARGET
     )
-    sync_branch_name = (
-        _get_env_or_file("ADO_BRIDGE_SYNC_BRANCH") or _DEFAULT_SYNC_BRANCH
-    )
+    sync_branch = _get_env_or_file("ADO_BRIDGE_SYNC_BRANCH") or _DEFAULT_SYNC_BRANCH
     return BridgeConfig(
         pbi_sender=pbi_sender,
-        sync_source_repo=sync_source_repo,
-        sync_target_repo=sync_target_repo,
-        sync_branch_name=sync_branch_name,
+        agent=agent,
+        client=client,
+        source_repo=source_repo,
+        target_repo=target_repo,
+        sync_branch=sync_branch,
     )
 
 
@@ -371,12 +383,31 @@ def _strip_html(html: str) -> str:
     return text
 
 
-def create_github_issue(work_item: WorkItem) -> str:
+_ISSUE_NUMBER_RE = re.compile(r"/issues/(\d+)$")
+
+
+@dataclass
+class GitHubIssue:
+    """Reference to a created GitHub issue."""
+
+    url: str
+    number: int
+
+
+def _extract_issue_number(url: str) -> int:
+    """Extract the issue number from a GitHub issue URL."""
+    m = _ISSUE_NUMBER_RE.search(url)
+    if not m:
+        raise RuntimeError(f"Cannot extract issue number from URL: {url!r}")
+    return int(m.group(1))
+
+
+def create_github_issue(work_item: WorkItem) -> GitHubIssue:
     """Create a GitHub issue from an ADO work item.
 
     For Tasks with a parent PBI, fetches the parent and includes its description
     and acceptance criteria so the issue contains full business context.
-    Returns the GitHub issue URL.
+    Returns a GitHubIssue with url and number.
     """
     repo = os.environ.get("ADO_BRIDGE_REPO", _DEFAULT_GH_REPO)
     org = os.environ.get("ADO_ORG", _DEFAULT_ADO_ORG)
@@ -435,8 +466,11 @@ def create_github_issue(work_item: WorkItem) -> str:
         raise RuntimeError(f"gh issue create failed: {result.stderr.strip()}")
 
     issue_url = result.stdout.strip()
-    logger.info("Created GitHub issue for PBI #%s: %s", work_item.id, issue_url)
-    return issue_url
+    issue_number = _extract_issue_number(issue_url)
+    logger.info(
+        "Created GitHub issue #%s for PBI #%s: %s", issue_number, work_item.id, issue_url
+    )
+    return GitHubIssue(url=issue_url, number=issue_number)
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +479,141 @@ def create_github_issue(work_item: WorkItem) -> str:
 
 # Default: fivepoints-test (safe). Override: ADO_BRIDGE_REPO=claire-labs/fivepoints
 _DEFAULT_GH_REPO = os.environ.get("ADO_BRIDGE_REPO", "claire-labs/fivepoints-test")
+
+
+# ---------------------------------------------------------------------------
+# GitHub issue operations
+# ---------------------------------------------------------------------------
+
+
+def add_issue_label(repo: str, issue_number: int, label: str) -> None:
+    """Add a label to a GitHub issue via gh CLI.
+
+    Raises RuntimeError on failure.
+    """
+    result = subprocess.run(
+        [
+            "gh",
+            "issue",
+            "edit",
+            str(issue_number),
+            "--repo",
+            repo,
+            "--add-label",
+            label,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"gh issue edit --add-label failed for issue #{issue_number} in {repo}: "
+            f"{result.stderr.strip()}"
+        )
+    logger.info("Added label %r to issue #%s in %s", label, issue_number, repo)
+
+
+def sync_github_branch(
+    source_repo: str,
+    source_branch: str,
+    target_repo: str,
+    target_branch: str,
+) -> None:
+    """Force-sync target_repo/target_branch to the current HEAD of source_repo/source_branch.
+
+    Uses the GitHub REST API via gh CLI to:
+      1. Fetch the SHA of source_repo/source_branch
+      2. Force-update target_repo/target_branch to that SHA
+
+    Raises RuntimeError on any failure — the caller should abort the pipeline.
+    """
+    # Step 1: resolve source branch SHA
+    sha_result = subprocess.run(
+        [
+            "gh",
+            "api",
+            f"repos/{source_repo}/git/ref/heads/{source_branch}",
+            "--jq",
+            ".object.sha",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if sha_result.returncode != 0 or not sha_result.stdout.strip():
+        raise RuntimeError(
+            f"Failed to resolve SHA for {source_repo}/{source_branch}: "
+            f"{sha_result.stderr.strip()}"
+        )
+    sha = sha_result.stdout.strip()
+    logger.info(
+        "Syncing %s/%s → %s/%s (SHA %s)",
+        source_repo,
+        source_branch,
+        target_repo,
+        target_branch,
+        sha[:8],
+    )
+
+    # Step 2: force-update target branch ref
+    patch_result = subprocess.run(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{target_repo}/git/refs/heads/{target_branch}",
+            "--field",
+            f"sha={sha}",
+            "--field",
+            "force=true",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if patch_result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to update {target_repo}/{target_branch} to {sha[:8]}: "
+            f"{patch_result.stderr.strip()}"
+        )
+    logger.info(
+        "Synced %s/%s → %s/%s (%s)",
+        source_repo,
+        source_branch,
+        target_repo,
+        target_branch,
+        sha[:8],
+    )
+
+
+def assign_github_issue(repo: str, issue_number: int, agent: str) -> None:
+    """Assign a GitHub issue to an agent via gh CLI.
+
+    Raises RuntimeError on failure.
+    """
+    result = subprocess.run(
+        [
+            "gh",
+            "issue",
+            "edit",
+            str(issue_number),
+            "--repo",
+            repo,
+            "--add-assignee",
+            agent,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"gh issue edit --add-assignee failed for issue #{issue_number} in {repo}: "
+            f"{result.stderr.strip()}"
+        )
+    logger.info("Assigned issue #%s in %s to %s", issue_number, repo, agent)
 
 
 # ---------------------------------------------------------------------------
@@ -876,7 +1045,7 @@ def process_emails(
     max_process: int | None = None,
     lookback_days: int | None = None,
     config: BridgeConfig | None = None,
-    branch_sync: BranchSyncAdapter | None = None,
+    worktree_prepare: WorktreePrepareAdapter | None = None,
 ) -> list[ProcessingResult]:
     """Scan Gmail inbox for ADO assignment emails and process each one.
 
@@ -889,13 +1058,18 @@ def process_emails(
         dry_run: If True, log what would be created without touching GitHub or archiving.
         max_process: If set, limit the number of new work items created.
         lookback_days: If set, only scan emails from the last N days (Gmail newer_than filter).
+        worktree_prepare: Adapter for creating git worktrees.  When None, uses
+            RealWorktreePrepare().  Pass a MockWorktreePrepare in tests.
 
     Returns a list of ProcessingResult for each unique ADO work item found.
     """
+    from azure_issue_bridge.worktree import RealWorktreePrepare
     from claire_py.email.watcher import list_unread_replies
 
     if config is None:
         config = load_bridge_config()
+    if worktree_prepare is None:
+        worktree_prepare = RealWorktreePrepare()
 
     processed_ids = load_processed_ids()
     results: list[ProcessingResult] = []
@@ -994,14 +1168,6 @@ def process_emails(
             if dry_run:
                 title = f"{work_item.title} (PBI #{work_item.id})"
                 logger.info("[dry-run] Would create issue: %s", title)
-                if branch_sync is not None:
-                    logger.info(
-                        "[dry-run] Would sync %s/%s → %s/%s",
-                        config.sync_source_repo,
-                        config.sync_branch_name,
-                        config.sync_target_repo,
-                        config.sync_branch_name,
-                    )
                 result.github_issue_url = "(dry-run)"
             else:
                 # Step 2: Pre-creation duplicate guard — re-check GitHub right before
@@ -1022,18 +1188,35 @@ def process_emails(
                         archive_email(email.message_id)
                 else:
                     # Step 3: Create GitHub issue
-                    issue_url = create_github_issue(work_item)
-                    result.github_issue_url = issue_url
+                    issue = create_github_issue(work_item)
+                    result.github_issue_url = issue.url
 
-                    # Step 4: Sync source branch to target repo before worktree/assign.
-                    # Raises on failure → caught by outer except → pipeline aborted.
-                    if branch_sync is not None:
-                        branch_sync.sync_branch(
-                            source_repo=config.sync_source_repo,
-                            source_branch=config.sync_branch_name,
-                            target_repo=config.sync_target_repo,
-                            target_branch=config.sync_branch_name,
-                        )
+                    # Step 4: Add role label
+                    add_issue_label(
+                        config.target_repo,
+                        issue.number,
+                        f"role:{config.client}-dev",
+                    )
+
+                    # Step 5: Sync develop branch source → target repo
+                    sync_github_branch(
+                        config.source_repo,
+                        config.sync_branch,
+                        config.target_repo,
+                        config.sync_branch,
+                    )
+
+                    # Step 6: Create worktree for the issue (BEFORE assignment)
+                    branch_name = f"pbi-{issue.number}"
+                    worktree_prepare.prepare(
+                        repo=config.target_repo,
+                        issue=issue.number,
+                        base_branch=config.sync_branch,
+                        branch_name=branch_name,
+                    )
+
+                    # Step 7: Assign the issue to the agent (ALWAYS LAST)
+                    assign_github_issue(config.target_repo, issue.number, config.agent)
 
                     # Mark ALL emails for this PBI as processed and archive them
                     for email in decision.emails:
