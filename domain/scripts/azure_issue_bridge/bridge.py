@@ -167,13 +167,11 @@ def load_bridge_config() -> BridgeConfig:
     return BridgeConfig(pbi_sender=pbi_sender)
 
 
-def is_pbi_email(msg: Any, sender: str) -> bool:
-    """Return True if msg is a PBI assignment email from the given sender.
+def is_pbi_email(msg: Any) -> bool:
+    """Return True if msg is a PBI assignment email.
 
-    The sender pre-filtering is done at the Gmail API level via
-    list_unread_replies(sender_filter=...). This function applies the secondary
-    subject-pattern check, making the filter testable in isolation without
-    touching Gmail.
+    Only checks the subject pattern. Sender filtering is done upstream at the
+    Gmail API level via list_unread_replies(sender_filter=...).
     """
     return is_ado_assignment_email(msg.subject)
 
@@ -889,7 +887,7 @@ def process_emails(
     candidates = [
         e
         for e in emails
-        if e.message_id not in processed_ids and is_pbi_email(e, sender=config.pbi_sender)
+        if e.message_id not in processed_ids and is_pbi_email(e)
     ]
 
     logger.info("Found %d new ADO assignment email(s).", len(candidates))

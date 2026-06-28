@@ -28,6 +28,9 @@ def make_msg(subject: str) -> Any:
 class MockEmailFilter:
     """Test utility — binds a sender and exposes is_pbi_email as an instance method.
 
+    The sender is stored for introspection (e.g. to verify config.pbi_sender) but is
+    not passed to is_pbi_email — sender filtering happens at the Gmail API level.
+
     Usage:
         f = MockEmailFilter(sender="andreoperez@gmail.com")
         assert f.is_pbi_email(msg)
@@ -37,44 +40,44 @@ class MockEmailFilter:
         self.sender = sender
 
     def is_pbi_email(self, msg: Any) -> bool:
-        return is_pbi_email(msg, sender=self.sender)
+        return is_pbi_email(msg)
 
 
 class TestIsPbiEmail:
     """Tests for is_pbi_email(msg, sender)."""
 
-    def test_pbi_subject_with_ado_sender(self) -> None:
+    def test_pbi_subject_matches(self) -> None:
         msg = make_msg("Product Backlog Item 10847 - DEV - Client Management")
-        assert is_pbi_email(msg, sender="azuredevops@microsoft.com")
+        assert is_pbi_email(msg)
 
-    def test_task_subject_with_ado_sender(self) -> None:
+    def test_task_subject_matches(self) -> None:
         msg = make_msg("Task 13644 was assigned to andre.perez dothelpllc.com")
-        assert is_pbi_email(msg, sender="azuredevops@microsoft.com")
+        assert is_pbi_email(msg)
 
-    def test_pbi_subject_with_test_sender(self) -> None:
-        """Test sender (gmail) with same ADO subject format must return True."""
+    def test_pbi_subject_format_matches(self) -> None:
+        """Standard ADO subject format used by both real ADO and test emails."""
         msg = make_msg("Product Backlog Item 10847 - DEV - Client Management")
-        assert is_pbi_email(msg, sender="andreoperez@gmail.com")
+        assert is_pbi_email(msg)
 
-    def test_task_subject_with_test_sender(self) -> None:
+    def test_task_short_subject_matches(self) -> None:
         msg = make_msg("Task 13644 - DEV - implement feature")
-        assert is_pbi_email(msg, sender="andreoperez@gmail.com")
+        assert is_pbi_email(msg)
 
-    def test_bug_subject_with_test_sender(self) -> None:
+    def test_bug_subject_matches(self) -> None:
         msg = make_msg("Bug 9999 - DEV - null pointer exception")
-        assert is_pbi_email(msg, sender="andreoperez@gmail.com")
+        assert is_pbi_email(msg)
 
     def test_non_pbi_subject_returns_false(self) -> None:
         msg = make_msg("Hello from someone")
-        assert not is_pbi_email(msg, sender="azuredevops@microsoft.com")
+        assert not is_pbi_email(msg)
 
-    def test_unrelated_subject_with_test_sender_returns_false(self) -> None:
+    def test_unrelated_subject_returns_false(self) -> None:
         msg = make_msg("Re: your invoice for June")
-        assert not is_pbi_email(msg, sender="andreoperez@gmail.com")
+        assert not is_pbi_email(msg)
 
     def test_empty_subject_returns_false(self) -> None:
         msg = make_msg("")
-        assert not is_pbi_email(msg, sender="azuredevops@microsoft.com")
+        assert not is_pbi_email(msg)
 
 
 class TestMockEmailFilter:
