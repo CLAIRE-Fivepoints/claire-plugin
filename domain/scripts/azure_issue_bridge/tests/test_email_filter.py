@@ -44,7 +44,7 @@ class MockEmailFilter:
 
 
 class TestIsPbiEmail:
-    """Tests for is_pbi_email(msg, sender)."""
+    """Tests for is_pbi_email(msg)."""
 
     def test_pbi_subject_matches(self) -> None:
         msg = make_msg("Product Backlog Item 10847 - DEV - Client Management")

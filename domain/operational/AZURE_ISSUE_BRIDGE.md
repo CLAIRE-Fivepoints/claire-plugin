@@ -4,7 +4,7 @@ category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
 keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender]
-updated: 2026-04-10
+updated: 2026-06-28
 ---
 
 # Azure DevOps Email Bridge
