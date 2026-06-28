@@ -175,16 +175,14 @@ def load_bridge_config() -> BridgeConfig:
     """Load bridge configuration from environment variables or ~/.config/claire/.env.
 
     Priority:
-      1. PBI_TEST_SENDER  — test override (e.g. andreoperez@gmail.com)
-      2. PBI_SENDER       — custom production sender
-      3. azuredevops@microsoft.com — ADO default
+      1. PBI_SENDER       — custom production sender
+      2. azuredevops@microsoft.com — ADO default
 
     Sync vars (ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH)
     fall back to CLAIRE-Fivepoints/fivepoints-test → CLAIRE-Fivepoints/fivepoints / develop.
     """
     pbi_sender = (
-        _get_env_or_file("PBI_TEST_SENDER")
-        or _get_env_or_file("PBI_SENDER")
+        _get_env_or_file("PBI_SENDER")
         or _ADO_SENDER
     )
     agent = _get_env_or_file("ADO_BRIDGE_AGENT") or _DEFAULT_BRIDGE_AGENT
@@ -233,6 +231,25 @@ def parse_pbi_id(subject: str) -> str | None:
     """
     m = _PBI_SUBJECT_RE.search(subject)
     return m.group(1) if m else None
+
+
+def parse_subject_parts(subject: str) -> tuple[str, str]:
+    """Extract (area, title) from an ADO assignment email subject.
+
+    For "Product Backlog Item 12345 - DEV - Client Management test"
+    returns ("DEV", "Client Management test").
+
+    Returns ("", "") if the subject cannot be parsed beyond the ID.
+    """
+    m = _PBI_SUBJECT_RE.search(subject)
+    if not m:
+        return "", ""
+    # Split the remainder by " - " without pre-stripping to preserve empty leading token.
+    rest = subject[m.end():]
+    parts = [p.strip() for p in rest.split(" - ") if p.strip()]
+    area = parts[0] if parts else ""
+    title = " - ".join(parts[1:]) if len(parts) > 1 else ""
+    return area, title
 
 
 # ---------------------------------------------------------------------------

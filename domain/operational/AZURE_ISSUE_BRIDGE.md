@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender, branch-sync, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label]
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_SENDER, configurable-sender, branch-sync, inject, synthetic-email, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label]
 updated: 2026-06-28
 ---
 
@@ -140,6 +140,17 @@ claire fivepoints azure-issue-bridge start --lookback 30d  # Daemon: limit each 
 claire fivepoints azure-issue-bridge stop              # Stop background daemon
 claire fivepoints azure-issue-bridge status            # Show daemon state + last run stats
 claire fivepoints azure-issue-bridge restore-inbox     # Restore archived ADO emails to inbox + reset processed.json
+
+# inject — synthetic email injection (no Gmail or ADO auth required)
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test" \
+  --dry-run   # Print parsed result, create nothing
+
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test"
+  # Creates issue in fivepoints-test (default)
 ```
 
 > **Backward compat:** `claire azure-issue-bridge <cmd>` delegates to `claire fivepoints azure-issue-bridge <cmd>` via the bridge shim in claire core.
@@ -168,6 +179,43 @@ The daemon only polls during business hours — polls outside the window are ski
 | `ADO_BRIDGE_HOUR_END` | `17` | End hour (0–23, local time, exclusive) |
 
 Example: to restrict to 9AM–6PM, set `ADO_BRIDGE_HOUR_START=9` and `ADO_BRIDGE_HOUR_END=18`.
+
+### inject — synthetic email injection
+
+`claire fivepoints azure-issue-bridge inject` feeds a synthetic email directly into the bridge pipeline without polling Gmail or calling the ADO REST API. It is designed for e2e testing: no `AZURE_DEVOPS_PAT` required, no Gmail auth required.
+
+The command:
+1. Constructs an `EmailMessage` from `--from` and `--subject`
+2. Validates it with `is_pbi_email()` (subject must match the ADO PBI pattern)
+3. Builds a synthetic `WorkItem` from the parsed subject (no ADO fetch — subject data only)
+4. In live mode: calls `gh issue create` in the target repo (GitHub auth still required)
+5. In `--dry-run` mode: prints the parsed PBI and issue body preview, creates nothing
+
+```bash
+# Dry-run — print parsed PBI + issue body, create nothing
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test" \
+  --dry-run
+
+# Live — create issue in fivepoints-test (default staging repo)
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test"
+
+# Target a specific repo
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test" \
+  --repo CLAIRE-Fivepoints/fivepoints
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--from ADDRESS` | _(required)_ | Sender address (e.g. `azuredevops@microsoft.com`) |
+| `--subject SUBJECT` | _(required)_ | Email subject matching the ADO PBI pattern |
+| `--dry-run` | false | Print parsed result without creating any GitHub issue |
+| `--repo OWNER/NAME` | `ADO_BRIDGE_REPO` or `claire-labs/fivepoints-test` | Target GitHub repo override |
 
 ### Auto-start via infra
 
@@ -225,7 +273,6 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `ADO_PROJECT` | `TFIOne` | Azure DevOps project |
 | `ADO_BRIDGE_HOUR_START` | `8` | Business hours start (local time, inclusive) |
 | `ADO_BRIDGE_HOUR_END` | `17` | Business hours end (local time, exclusive) |
-| `PBI_TEST_SENDER` | _(unset)_ | Override accepted email sender for testing (e.g. `andreoperez@gmail.com`). Takes priority over `PBI_SENDER`. Emails from this address with the standard ADO subject format are processed identically to real ADO emails. |
 | `PBI_SENDER` | `azuredevops@microsoft.com` | Override the production ADO sender. Use when ADO notifications come from a custom address. Falls back to the ADO default when unset. |
 | `ADO_BRIDGE_AGENT` | `claire-test-ai` | GitHub username assigned to each new issue. **Set this explicitly in production** — the default targets the test account. |
 | `ADO_BRIDGE_CLIENT` | `fivepoints` | Client slug used to build the role label: `role:{ADO_BRIDGE_CLIENT}-dev`. Determines which agent persona is activated by the spawn daemon. |

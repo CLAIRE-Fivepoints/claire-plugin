@@ -5,7 +5,7 @@ Tests cover:
 - is_pbi_email() returns True for PBI subjects regardless of sender value
 - is_pbi_email() returns False for non-PBI subjects
 - MockEmailFilter binds a sender and exposes is_pbi_email as an instance method
-- load_bridge_config() resolves pbi_sender from PBI_TEST_SENDER > PBI_SENDER > default
+- load_bridge_config() resolves pbi_sender from PBI_SENDER > default
 """
 
 from __future__ import annotations
@@ -112,39 +112,13 @@ class TestBridgeConfig:
     """Tests for BridgeConfig and load_bridge_config()."""
 
     def test_default_sender_is_ado(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("PBI_TEST_SENDER", raising=False)
         monkeypatch.delenv("PBI_SENDER", raising=False)
         config = load_bridge_config()
         assert config.pbi_sender == "azuredevops@microsoft.com"
 
-    def test_pbi_test_sender_env_overrides_default(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("PBI_TEST_SENDER", "andreoperez@gmail.com")
-        monkeypatch.delenv("PBI_SENDER", raising=False)
-        config = load_bridge_config()
-        assert config.pbi_sender == "andreoperez@gmail.com"
-
     def test_pbi_sender_env_overrides_default(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.delenv("PBI_TEST_SENDER", raising=False)
-        monkeypatch.setenv("PBI_SENDER", "custom@example.com")
-        config = load_bridge_config()
-        assert config.pbi_sender == "custom@example.com"
-
-    def test_pbi_test_sender_takes_priority_over_pbi_sender(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("PBI_TEST_SENDER", "andreoperez@gmail.com")
-        monkeypatch.setenv("PBI_SENDER", "custom@example.com")
-        config = load_bridge_config()
-        assert config.pbi_sender == "andreoperez@gmail.com"
-
-    def test_empty_pbi_test_sender_falls_through_to_pbi_sender(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setenv("PBI_TEST_SENDER", "")
         monkeypatch.setenv("PBI_SENDER", "custom@example.com")
         config = load_bridge_config()
         assert config.pbi_sender == "custom@example.com"
