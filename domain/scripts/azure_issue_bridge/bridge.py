@@ -124,6 +124,58 @@ _PBI_SUBJECT_RE = re.compile(
 _ADO_SENDER = "azuredevops@microsoft.com"
 
 
+# ---------------------------------------------------------------------------
+# Bridge configuration
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BridgeConfig:
+    """Runtime configuration for the azure issue bridge."""
+
+    pbi_sender: str = _ADO_SENDER
+
+
+def _get_env_or_file(key: str) -> str:
+    """Return env var value, falling back to a matching line in ~/.config/claire/.env."""
+    val = os.environ.get(key, "")
+    if val:
+        return val
+    config_env = Path("~/.config/claire/.env").expanduser()
+    if config_env.exists():
+        with open(config_env) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(f"{key}="):
+                    return line[len(f"{key}="):]
+    return ""
+
+
+def load_bridge_config() -> BridgeConfig:
+    """Load bridge configuration from environment variables or ~/.config/claire/.env.
+
+    Priority:
+      1. PBI_TEST_SENDER  — test override (e.g. andreoperez@gmail.com)
+      2. PBI_SENDER       — custom production sender
+      3. azuredevops@microsoft.com — ADO default
+    """
+    pbi_sender = (
+        _get_env_or_file("PBI_TEST_SENDER")
+        or _get_env_or_file("PBI_SENDER")
+        or _ADO_SENDER
+    )
+    return BridgeConfig(pbi_sender=pbi_sender)
+
+
+def is_pbi_email(msg: Any) -> bool:
+    """Return True if msg is a PBI assignment email.
+
+    Only checks the subject pattern. Sender filtering is done upstream at the
+    Gmail API level via list_unread_replies(sender_filter=...).
+    """
+    return is_ado_assignment_email(msg.subject)
+
+
 def is_ado_assignment_email(subject: str) -> bool:
     """Return True if the subject matches an ADO work item assignment notification.
 
@@ -795,6 +847,7 @@ def process_emails(
     dry_run: bool = False,
     max_process: int | None = None,
     lookback_days: int | None = None,
+    config: BridgeConfig | None = None,
 ) -> list[ProcessingResult]:
     """Scan Gmail inbox for ADO assignment emails and process each one.
 
@@ -812,12 +865,18 @@ def process_emails(
     """
     from claire_py.email.watcher import list_unread_replies
 
+    if config is None:
+        config = load_bridge_config()
+
     processed_ids = load_processed_ids()
     results: list[ProcessingResult] = []
 
-    logger.info("Scanning Gmail inbox for ADO assignment emails...")
+    logger.info(
+        "Scanning Gmail inbox for ADO assignment emails (sender: %s)...",
+        config.pbi_sender,
+    )
     emails = list_unread_replies(
-        sender_filter=_ADO_SENDER,
+        sender_filter=config.pbi_sender,
         subject_filter=None,  # pre-filtered by sender; secondary regex handles type matching
         max_results=max_results,
         unread_only=False,
@@ -828,7 +887,7 @@ def process_emails(
     candidates = [
         e
         for e in emails
-        if e.message_id not in processed_ids and is_ado_assignment_email(e.subject)
+        if e.message_id not in processed_ids and is_pbi_email(e)
     ]
 
     logger.info("Found %d new ADO assignment email(s).", len(candidates))

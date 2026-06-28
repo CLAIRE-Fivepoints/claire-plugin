@@ -3,7 +3,7 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention]
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_TEST_SENDER, PBI_SENDER, test-sender, configurable-sender]
 updated: 2026-04-10
 ---
 
@@ -211,6 +211,8 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `ADO_PROJECT` | `TFIOne` | Azure DevOps project |
 | `ADO_BRIDGE_HOUR_START` | `8` | Business hours start (local time, inclusive) |
 | `ADO_BRIDGE_HOUR_END` | `17` | Business hours end (local time, exclusive) |
+| `PBI_TEST_SENDER` | _(unset)_ | Override accepted email sender for testing (e.g. `andreoperez@gmail.com`). Takes priority over `PBI_SENDER`. Emails from this address with the standard ADO subject format are processed identically to real ADO emails. |
+| `PBI_SENDER` | `azuredevops@microsoft.com` | Override the production ADO sender. Use when ADO notifications come from a custom address. Falls back to the ADO default when unset. |
 
 ---
 
