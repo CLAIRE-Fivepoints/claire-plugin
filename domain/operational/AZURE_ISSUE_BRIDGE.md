@@ -28,11 +28,11 @@ ADO PBI assigned to andre.perez@dothelpllc.com
   → creates GitHub issue in ADO_BRIDGE_SYNC_TARGET repo
   → adds role label: role:{ADO_BRIDGE_CLIENT}-dev
   → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub REST API)
-  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}  ← BEFORE assignment
   → assigns issue to ADO_BRIDGE_AGENT                                                ← ALWAYS LAST
   → archives email in Gmail
-  → claire spawn daemon (consumer.py) detects assignment, finds worktree already prepared
-  → launches Claire agent in the pre-created worktree (no re-creation)
+  → claire spawn daemon (consumer.py) detects assignment
+  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}
+  → launches Claire agent in the worktree
   → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET> for wait/PR targeting
 ```
 
@@ -104,18 +104,15 @@ Gmail inbox
 
 ## Spawn Daemon Pickup
 
-After the bridge creates the GitHub issue, adds the role label, creates the worktree, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
+After the bridge creates the GitHub issue, adds the role label, syncs the branch, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
 
 1. The spawn daemon monitors `ADO_BRIDGE_SYNC_TARGET` for newly assigned issues
-2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it looks for an existing worktree at `.claire/worktrees/issue-{N}` — the bridge has already created it
-3. A Claire agent is launched **inside the pre-created worktree** (no re-creation); `claire start --issue N` is idempotent when the worktree already exists
+2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it creates an isolated git worktree at `.claire/worktrees/issue-{N}` on branch `pbi-{N}`
+3. A Claire agent is launched inside the worktree with the issue as its task
 4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
 
-**Why the bridge creates the worktree before assigning:**
-The spawn daemon used to create the worktree on detection. Moving worktree creation into the bridge (before assignment) means the agent starts on a branch that already exists, avoiding a race between branch creation and the first `git push`.
-
 **`ADO_BRIDGE_SYNC_TARGET` vs `CLAIRE_WAIT_REPO`:**
-- `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues and the worktree (set at bridge/operator level)
+- `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues (set at bridge/operator level)
 - `CLAIRE_WAIT_REPO` — passed by the spawn daemon into the spawned agent's environment so the agent knows which repo to watch for wait events
 - Both refer to the same repo; they are different variable names at different stages of the pipeline
 
