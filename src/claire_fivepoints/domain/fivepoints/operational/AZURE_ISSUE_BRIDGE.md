@@ -3,8 +3,8 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention]
-updated: 2026-06-28
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, inject, synthetic-email, ADO_BRIDGE_SYNC_TARGET, worktree, role-label]
+updated: 2026-06-29
 ---
 
 # Azure DevOps Email Bridge
@@ -131,7 +131,43 @@ claire fivepoints azure-issue-bridge start             # Start background daemon
 claire fivepoints azure-issue-bridge stop              # Stop background daemon
 claire fivepoints azure-issue-bridge status            # Show daemon state + last run stats
 claire fivepoints azure-issue-bridge restore-inbox     # Restore archived ADO emails to inbox + reset processed.json
+
+# inject — synthetic email injection (no Gmail or ADO auth required)
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test" \
+  --dry-run   # Print parsed result + planned pipeline steps, create nothing
+
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test"
+  # Runs full pipeline: create_issue → add_label → sync_branch → prepare_worktree → assign
+
+claire fivepoints azure-issue-bridge inject \
+  --from "azuredevops@microsoft.com" \
+  --subject "Product Backlog Item 12345 - DEV - Client Management test" \
+  --repo CLAIRE-Fivepoints/fivepoints \
+  --agent claire-test-ai
 ```
+
+### inject — synthetic email injection
+
+`claire fivepoints azure-issue-bridge inject` feeds a synthetic email directly into the bridge pipeline without polling Gmail or calling the ADO REST API. It is designed for e2e testing: no `AZURE_DEVOPS_PAT` required, no Gmail auth required.
+
+The command:
+1. Constructs an `EmailMessage` from `--from` and `--subject`
+2. Validates it with `is_pbi_email()` (subject must match the ADO PBI pattern)
+3. Builds a synthetic `WorkItem` from the parsed subject (no ADO fetch — subject data only)
+4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → prepare_worktree → assign` (GitHub auth required, no Gmail or ADO auth)
+5. In `--dry-run` mode: prints the parsed PBI and the planned pipeline steps, creates nothing
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--from ADDRESS` | _(required)_ | Sender address (e.g. `azuredevops@microsoft.com`) |
+| `--subject SUBJECT` | _(required)_ | Email subject matching the ADO PBI pattern |
+| `--dry-run` | false | Print parsed result + pipeline plan without creating anything |
+| `--repo OWNER/NAME` | `ADO_BRIDGE_SYNC_TARGET` or `claire-labs/fivepoints-test` | Target GitHub repo override |
+| `--agent USERNAME` | `ADO_BRIDGE_AGENT` or `claire-test-ai` | GitHub assignee for the created issue |
 
 ---
 

@@ -126,10 +126,10 @@ class TestCmdInjectDryRun:
             mock_run.assert_not_called()
 
     def test_dry_run_shows_repo_override(self, capsys: pytest.CaptureFixture) -> None:
-        args = _make_args(dry_run=True, repo="CLAIRE-Fivepoints/fivepoints-test")
+        args = _make_args(dry_run=True, repo="CLAIRE-Fivepoints/fivepoints")
         cmd_inject(args)
         out = capsys.readouterr().out
-        assert "CLAIRE-Fivepoints/fivepoints-test" in out
+        assert "CLAIRE-Fivepoints/fivepoints" in out
 
     def test_dry_run_shows_agent_override(self, capsys: pytest.CaptureFixture) -> None:
         args = _make_args(dry_run=True, agent="my-bot")
@@ -282,7 +282,7 @@ class TestCmdInjectLive:
         out = capsys.readouterr().out
         assert "https://github.com/org/repo/issues/99" in out
 
-    def test_repo_override(self) -> None:
+    def test_repo_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
         args = _make_args(repo="CLAIRE-Fivepoints/fivepoints-test")
         fake = _fake_issue(1)
 
@@ -290,7 +290,7 @@ class TestCmdInjectLive:
             patch(
                 "azure_issue_bridge.bridge.create_github_issue", return_value=fake
             ) as mock_create,
-            patch("azure_issue_bridge.bridge.add_issue_label"),
+            patch("azure_issue_bridge.bridge.add_issue_label") as mock_label,
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
             patch("azure_issue_bridge.worktree.RealWorktreePrepare") as MockWorktreeClass,
             patch("azure_issue_bridge.bridge.assign_github_issue"),
@@ -301,9 +301,9 @@ class TestCmdInjectLive:
             MockWorktreeClass.return_value = mock_wt
             cmd_inject(args)
 
-        import os
-
-        assert os.environ.get("ADO_BRIDGE_REPO") == "CLAIRE-Fivepoints/fivepoints-test"
+        mock_label.assert_called_once_with(
+            "CLAIRE-Fivepoints/fivepoints-test", fake.number, mock_label.call_args[0][2]
+        )
 
     def test_live_runtime_error_on_create_returns_nonzero(
         self, capsys: pytest.CaptureFixture
