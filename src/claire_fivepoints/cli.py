@@ -267,6 +267,32 @@ class _GhCliAdapter:
         return int(url.split("/")[-1])
 
 
+class _RealLabelAdapter:
+    """Calls `gh issue edit --add-label` via subprocess. Creates the label if absent."""
+
+    def add_label(self, repo: str, issue: int, label: str) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
+            check=False, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            create_result = subprocess.run(
+                ["gh", "label", "create", label, "--repo", repo, "--color", "0075ca"],
+                check=False, capture_output=True, text=True,
+            )
+            retry = subprocess.run(
+                ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
+                check=False, capture_output=True, text=True,
+            )
+            if retry.returncode != 0:
+                label_stderr = create_result.stderr.strip()
+                issue_stderr = retry.stderr.strip()
+                context = f"label create: {label_stderr or '(no stderr)'} | issue edit: {issue_stderr}"
+                raise RuntimeError(f"gh add-label failed: {context}")
+
+
 @bridge_app.callback()
 def _bridge_root(
     agent_help: bool = typer.Option(
@@ -289,14 +315,17 @@ def bridge_run_cmd(
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show detected emails without creating issues."),
     max_results: int = typer.Option(20, "--max-results", help="Max inbox emails to scan."),
-    client: str = typer.Option("fivepoints", "--client", help="Client slug for the role:{client}-dev label."),
+    client: str = typer.Option(
+        "fivepoints", "--client", envvar="ADO_BRIDGE_CLIENT",
+        help="Client slug for the role:{client}-dev label.",
+    ),
     agent_help: bool = typer.Option(
         False, "--agent-help", callback=_bridge_agent_help_callback,
         is_eager=True, hidden=True,
     ),
 ) -> None:
     """Scan Gmail for ADO PBI assignment emails and create GitHub issues."""
-    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter, RealLabelAdapter
+    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter
     from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 
     _console.print(f"[dim]Sender:[/dim] {sender}")
@@ -307,7 +336,7 @@ def bridge_run_cmd(
     adapters = BridgeAdapters(
         email=GmailApiAdapter(),
         github=_GhCliAdapter(),
-        labels=RealLabelAdapter(),
+        labels=_RealLabelAdapter(),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:

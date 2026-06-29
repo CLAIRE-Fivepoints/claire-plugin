@@ -1,12 +1,11 @@
 """azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
-- CLI-backed adapters (GhCliAdapter) remain in cli.py (subprocess.run in CLI entry points only).
+- CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -97,24 +96,6 @@ class GmailApiAdapter:
                 }
             )
         return emails
-
-
-class RealLabelAdapter:
-    def add_label(self, repo: str, issue: int, label: str) -> None:
-        result = subprocess.run(
-            ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
-            check=False, capture_output=True,
-        )
-        if result.returncode != 0:
-            # Label may not exist — create it then retry
-            subprocess.run(
-                ["gh", "label", "create", label, "--repo", repo, "--color", "0075ca"],
-                check=False, capture_output=True,
-            )
-            subprocess.run(
-                ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
-                check=True, capture_output=True,
-            )
 
 
 # ---------------------------------------------------------------------------

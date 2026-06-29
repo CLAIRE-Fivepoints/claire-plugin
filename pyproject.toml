@@ -9,6 +9,7 @@ dependencies = [
     "claire-workflows",
     "google-api-python-client>=2.0",
     "google-auth>=2.0",
+    "typer>=0.9",
 ]
 
 [tool.uv.sources]
@@ -33,7 +34,6 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
-    "typer>=0.26.8",
 ]
 
 [tool.hatch.build.targets.wheel]
