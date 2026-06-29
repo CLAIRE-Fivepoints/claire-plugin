@@ -1,9 +1,9 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter, AssignAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
 - RealBranchSync: syncs branches via the GitHub REST API (urllib) — no subprocess.
 - RealWorktreePrepare: creates git worktrees via subprocess git — no GitHub CLI.
-- CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
+- CLI-backed adapters (GhCliAdapter, RealLabelAdapter, RealAssignAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ __all__ = [
     "LabelAdapter",
     "BranchSyncAdapter",
     "WorktreePrepareAdapter",
+    "AssignAdapter",
     "BridgeAdapters",
     "GmailApiAdapter",
     "RealBranchSync",
@@ -41,6 +42,7 @@ __all__ = [
     "MockGitHubAdapter",
     "MockLabelAdapter",
     "MockWorktreePrepare",
+    "MockAssignAdapter",
 ]
 
 
@@ -74,6 +76,12 @@ class BranchSyncAdapter(Protocol):
         ...
 
 
+class AssignAdapter(Protocol):
+    def assign(self, repo: str, issue: int, agent: str) -> None:
+        """Assign the issue to the agent. Triggers the session-monitor."""
+        ...
+
+
 @dataclass
 class BridgeAdapters:
     email: EmailAdapter
@@ -81,6 +89,7 @@ class BridgeAdapters:
     labels: LabelAdapter
     branch_sync: BranchSyncAdapter
     worktree: WorktreePrepareAdapter
+    assign: AssignAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -270,3 +279,11 @@ class MockGitHubAdapter:
     def create_issue(self, title: str, body: str, repo: str) -> int:
         self.created.append({"title": title, "body": body, "repo": repo})
         return len(self.created)
+
+
+class MockAssignAdapter:
+    def __init__(self) -> None:
+        self.assignments: list[dict] = []
+
+    def assign(self, repo: str, issue: int, agent: str) -> None:
+        self.assignments.append({"repo": repo, "issue": issue, "agent": agent})
