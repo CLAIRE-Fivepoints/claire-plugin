@@ -5,10 +5,10 @@ Tests cover:
 - parse_subject_parts() extracts (area, title) from ADO subject formats
 - _cmd_inject dry-run: prints parsed result + full pipeline plan, no side effects
 - _cmd_inject live mode: runs full pipeline (create_issue, add_label, sync_branch,
-  prepare_worktree, assign) in order, with cleanup commands in output
+  assign) in order, with cleanup commands in output
 - _cmd_inject rejects non-PBI subjects
 - _cmd_inject --repo and --agent overrides
-- _cmd_inject aborts and returns 1 on each step failure (no assignment if worktree fails)
+- _cmd_inject aborts and returns 1 on each step failure
 """
 
 from __future__ import annotations
@@ -118,8 +118,8 @@ class TestCmdInjectDryRun:
         assert "create_issue" in out
         assert "add_label" in out
         assert "sync_branch" in out
-        assert "prepare_worktree" in out
         assert "assign" in out
+        assert "prepare_worktree" not in out
 
     def test_dry_run_no_gh_calls(self) -> None:
         args = _make_args(dry_run=True)
@@ -162,24 +162,17 @@ class TestCmdInjectLive:
             patch("azure_issue_bridge.bridge.add_issue_label") as mock_label,
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
             patch(
-                "azure_issue_bridge.worktree.RealWorktreePrepare"
-            ) as MockWorktreeClass,
-            patch(
                 "azure_issue_bridge.bridge.assign_github_issue"
             ) as mock_assign,
         ):
             mock_sync = MagicMock()
             MockSyncClass.return_value = mock_sync
-            mock_worktree = MagicMock()
-            mock_worktree.prepare.return_value = f"/mock/worktrees/pbi-{issue_number}"
-            MockWorktreeClass.return_value = mock_worktree
 
             rc = cmd_inject(args)
             return rc, {
                 "create": mock_create,
                 "label": mock_label,
                 "sync": mock_sync,
-                "worktree": mock_worktree,
                 "assign": mock_assign,
             }
 
@@ -209,19 +202,12 @@ class TestCmdInjectLive:
         _, mocks = self._run_live(_make_args())
         mocks["sync"].sync_branch.assert_called_once()
 
-    def test_worktree_prepare_called_with_pbi_branch(self) -> None:
-        _, mocks = self._run_live(_make_args(), issue_number=99)
-        mocks["worktree"].prepare.assert_called_once()
-        kw = mocks["worktree"].prepare.call_args[1]
-        assert kw["branch_name"] == "pbi-99"
-        assert kw["issue"] == 99
-
     def test_assign_called_with_agent(self) -> None:
         _, mocks = self._run_live(_make_args())
         mocks["assign"].assert_called_once()
 
-    def test_pipeline_order_label_sync_worktree_assign(self) -> None:
-        """Verify execution order: label → sync → worktree → assign."""
+    def test_pipeline_order_label_sync_assign(self) -> None:
+        """Verify execution order: label → sync → assign."""
         call_order: list[str] = []
         fake = _fake_issue(42)
 
@@ -235,9 +221,6 @@ class TestCmdInjectLive:
             ),
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
             patch(
-                "azure_issue_bridge.worktree.RealWorktreePrepare"
-            ) as MockWorktreeClass,
-            patch(
                 "azure_issue_bridge.bridge.assign_github_issue",
                 side_effect=lambda *a, **kw: call_order.append("assign"),
             ),
@@ -247,16 +230,11 @@ class TestCmdInjectLive:
                 lambda *a, **kw: call_order.append("sync")
             )
             MockSyncClass.return_value = mock_sync
-            mock_worktree = MagicMock()
-            mock_worktree.prepare.side_effect = (
-                lambda *a, **kw: call_order.append("worktree") or "/mock/path"
-            )
-            MockWorktreeClass.return_value = mock_worktree
 
             rc = cmd_inject(_make_args())
 
         assert rc == 0
-        assert call_order == ["label", "sync", "worktree", "assign"]
+        assert call_order == ["label", "sync", "assign"]
 
     def test_happy_path_prints_summary(
         self, capsys: pytest.CaptureFixture
@@ -270,14 +248,7 @@ class TestCmdInjectLive:
         assert "Assigné à" in out
         assert "Pour nettoyer" in out
         assert "gh issue close 151" in out
-
-    def test_happy_path_prints_worktree_path(
-        self, capsys: pytest.CaptureFixture
-    ) -> None:
-        self._run_live(_make_args(), issue_number=42)
-        out = capsys.readouterr().out
-        assert "/mock/worktrees/pbi-42" in out
-        assert "git worktree remove" in out
+        assert "git worktree remove" not in out
 
     def test_live_prints_issue_url(self, capsys: pytest.CaptureFixture) -> None:
         self._run_live(_make_args(), issue_number=99)
@@ -300,13 +271,9 @@ class TestCmdInjectLive:
             ),
             patch("azure_issue_bridge.bridge.add_issue_label"),
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
-            patch("azure_issue_bridge.worktree.RealWorktreePrepare") as MockWorktreeClass,
             patch("azure_issue_bridge.bridge.assign_github_issue"),
         ):
             MockSyncClass.return_value = MagicMock()
-            mock_wt = MagicMock()
-            mock_wt.prepare.return_value = "/mock/path"
-            MockWorktreeClass.return_value = mock_wt
             cmd_inject(args)
 
         assert captured_env["ADO_BRIDGE_REPO"] == "CLAIRE-Fivepoints/fivepoints-test"
@@ -362,34 +329,6 @@ class TestCmdInjectLive:
         out = capsys.readouterr().out
         assert "sync_branch failed" in out
 
-    def test_prepare_worktree_failure_exits_1_no_assign(
-        self, capsys: pytest.CaptureFixture
-    ) -> None:
-        fake = _fake_issue(1)
-        with (
-            patch(
-                "azure_issue_bridge.bridge.create_github_issue", return_value=fake
-            ),
-            patch("azure_issue_bridge.bridge.add_issue_label"),
-            patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
-            patch(
-                "azure_issue_bridge.worktree.RealWorktreePrepare"
-            ) as MockWorktreeClass,
-            patch(
-                "azure_issue_bridge.bridge.assign_github_issue"
-            ) as mock_assign,
-        ):
-            MockSyncClass.return_value = MagicMock()
-            mock_wt = MagicMock()
-            mock_wt.prepare.side_effect = RuntimeError("git failed")
-            MockWorktreeClass.return_value = mock_wt
-            rc = cmd_inject(_make_args())
-
-        assert rc == 1
-        out = capsys.readouterr().out
-        assert "prepare_worktree failed" in out
-        mock_assign.assert_not_called()
-
     def test_assign_failure_exits_1(
         self, capsys: pytest.CaptureFixture
     ) -> None:
@@ -401,17 +340,11 @@ class TestCmdInjectLive:
             patch("azure_issue_bridge.bridge.add_issue_label"),
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
             patch(
-                "azure_issue_bridge.worktree.RealWorktreePrepare"
-            ) as MockWorktreeClass,
-            patch(
                 "azure_issue_bridge.bridge.assign_github_issue",
                 side_effect=RuntimeError("assignee not found"),
             ),
         ):
             MockSyncClass.return_value = MagicMock()
-            mock_wt = MagicMock()
-            mock_wt.prepare.return_value = "/mock/path"
-            MockWorktreeClass.return_value = mock_wt
             rc = cmd_inject(_make_args())
 
         assert rc == 1

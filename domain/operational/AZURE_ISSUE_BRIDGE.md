@@ -28,11 +28,11 @@ ADO PBI assigned to andre.perez@dothelpllc.com
   → creates GitHub issue in ADO_BRIDGE_SYNC_TARGET repo
   → adds role label: role:{ADO_BRIDGE_CLIENT}-dev
   → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub REST API)
-  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}  ← BEFORE assignment
   → assigns issue to ADO_BRIDGE_AGENT                                                ← ALWAYS LAST
   → archives email in Gmail
-  → claire spawn daemon (consumer.py) detects assignment, finds worktree already prepared
-  → launches Claire agent in the pre-created worktree (no re-creation)
+  → claire spawn daemon (consumer.py) detects assignment
+  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}
+  → launches Claire agent in the worktree
   → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET> for wait/PR targeting
 ```
 
@@ -75,9 +75,6 @@ Gmail inbox
   → gh issue edit --add-label role:{ADO_BRIDGE_CLIENT}-dev
   → sync ADO_BRIDGE_SYNC_SOURCE/<branch> → ADO_BRIDGE_SYNC_TARGET/<branch> (GitHub REST API)
       → failure aborts pipeline for this PBI (no archiving, no agent assignment)
-  → git worktree add -b pbi-{N} <local>/.claire/worktrees/issue-{N} origin/develop
-      → worktree created BEFORE issue assignment
-      → failure aborts pipeline (no archiving, no agent assignment)
   → gh issue edit --add-assignee <ADO_BRIDGE_AGENT>  ← ALWAYS LAST
   → persist all email IDs for this PBI to ~/.claire/azure-issue-bridge/processed.json
   → archive all emails for this PBI in Gmail (remove INBOX label)
@@ -104,18 +101,15 @@ Gmail inbox
 
 ## Spawn Daemon Pickup
 
-After the bridge creates the GitHub issue, adds the role label, creates the worktree, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
+After the bridge creates the GitHub issue, adds the role label, syncs the branch, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
 
 1. The spawn daemon monitors `ADO_BRIDGE_SYNC_TARGET` for newly assigned issues
-2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it looks for an existing worktree at `.claire/worktrees/issue-{N}` — the bridge has already created it
-3. A Claire agent is launched **inside the pre-created worktree** (no re-creation); `claire start --issue N` is idempotent when the worktree already exists
+2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it creates an isolated git worktree at `.claire/worktrees/issue-{N}` on branch `pbi-{N}`
+3. A Claire agent is launched inside the worktree with the issue as its task
 4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
 
-**Why the bridge creates the worktree before assigning:**
-The spawn daemon used to create the worktree on detection. Moving worktree creation into the bridge (before assignment) means the agent starts on a branch that already exists, avoiding a race between branch creation and the first `git push`.
-
 **`ADO_BRIDGE_SYNC_TARGET` vs `CLAIRE_WAIT_REPO`:**
-- `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues and the worktree (set at bridge/operator level)
+- `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues (set at bridge/operator level)
 - `CLAIRE_WAIT_REPO` — passed by the spawn daemon into the spawned agent's environment so the agent knows which repo to watch for wait events
 - Both refer to the same repo; they are different variable names at different stages of the pipeline
 
@@ -188,7 +182,7 @@ The command:
 1. Constructs an `EmailMessage` from `--from` and `--subject`
 2. Validates it with `is_pbi_email()` (subject must match the ADO PBI pattern)
 3. Builds a synthetic `WorkItem` from the parsed subject (no ADO fetch — subject data only)
-4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → prepare_worktree → assign` (GitHub auth required, no Gmail or ADO auth)
+4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → assign` (GitHub auth required, no Gmail or ADO auth)
 5. In `--dry-run` mode: prints the parsed PBI and the planned pipeline steps, creates nothing
 
 ```bash

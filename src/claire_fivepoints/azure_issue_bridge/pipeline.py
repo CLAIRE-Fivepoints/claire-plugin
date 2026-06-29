@@ -10,7 +10,6 @@ from claire_fivepoints.azure_issue_bridge.steps import (
     create_issues_step,
     fetch_emails_step,
     filter_pbi_step,
-    prepare_worktree_step,
     sync_branch_step,
 )
 
@@ -32,6 +31,5 @@ bridge_pipeline = pipe(
     create_issues_step,
     add_label_step,
     sync_branch_step,
-    prepare_worktree_step,
     assign_step,         # ← LAST — triggers session-monitor
 )
