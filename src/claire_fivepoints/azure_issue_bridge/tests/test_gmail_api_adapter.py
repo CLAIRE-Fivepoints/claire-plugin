@@ -10,7 +10,10 @@ import pytest
 from claire_fivepoints.azure_issue_bridge.adapters import (
     BridgeAdapters,
     GmailApiAdapter,
+    MockBranchSync,
     MockGitHubAdapter,
+    MockLabelAdapter,
+    MockWorktreePrepare,
 )
 
 
@@ -77,7 +80,13 @@ def _make_mock_creds(expired: bool = False, new_token: str = "new-token") -> Mag
 def test_gmail_api_adapter_satisfies_email_adapter_protocol(tmp_path: Path) -> None:
     """GmailApiAdapter is usable anywhere EmailAdapter is expected."""
     adapter = GmailApiAdapter(credentials_path=tmp_path / "token.json")
-    adapters = BridgeAdapters(email=adapter, github=MockGitHubAdapter())
+    adapters = BridgeAdapters(
+        email=adapter,
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=MockWorktreePrepare(),
+    )
     assert adapters.email is adapter
 
 
