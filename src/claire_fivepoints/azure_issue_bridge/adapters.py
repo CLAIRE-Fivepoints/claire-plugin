@@ -1,6 +1,7 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, WorktreePrepareAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
+- RealWorktreePrepare: creates git worktrees via subprocess git — no GitHub CLI.
 - CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
@@ -9,6 +10,26 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+from claire_fivepoints.azure_issue_bridge.worktree import (
+    MockWorktreePrepare,
+    RealWorktreePrepare,
+    WorktreePrepareAdapter,
+)
+
+__all__ = [
+    "EmailAdapter",
+    "GitHubAdapter",
+    "LabelAdapter",
+    "WorktreePrepareAdapter",
+    "BridgeAdapters",
+    "GmailApiAdapter",
+    "MockEmailAdapter",
+    "MockGitHubAdapter",
+    "MockLabelAdapter",
+    "MockWorktreePrepare",
+    "RealWorktreePrepare",
+]
 
 
 class EmailAdapter(Protocol):
@@ -34,6 +55,7 @@ class BridgeAdapters:
     email: EmailAdapter
     github: GitHubAdapter
     labels: LabelAdapter
+    worktree: WorktreePrepareAdapter
 
 
 # ---------------------------------------------------------------------------

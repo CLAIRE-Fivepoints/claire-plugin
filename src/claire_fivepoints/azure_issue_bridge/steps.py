@@ -70,3 +70,45 @@ def add_label_step(task, ctx: dict, adapters) -> StepResult:
             return StepResult(ok=False, error=f"add_label failed: {exc}")
         labeled.append({"issue": issue_number, "label": label})
     return StepResult(ok=True, data={"labeled": labeled})
+
+
+def prepare_worktree_step(task, ctx: dict, adapters) -> StepResult:
+    """Create a pbi-{issue} worktree on develop before assignment."""
+    branch_prefix = getattr(task, "branch_prefix", "pbi")
+    prepared = []
+    for item in ctx.get("created", []):
+        issue_number = item.get("issue")
+        branch_name = (
+            f"{branch_prefix}-{issue_number}"
+            if issue_number is not None
+            else f"{branch_prefix}-dry"
+        )
+
+        if issue_number is None or task.dry_run:
+            prepared.append(
+                {
+                    "subject": item.get("subject"),
+                    "worktree_skipped": True,
+                    "branch_name": branch_name,
+                }
+            )
+            continue
+
+        try:
+            worktree_path = adapters.worktree.prepare(
+                repo=task.repo,
+                issue=issue_number,
+                base_branch="develop",
+                branch_name=branch_name,
+            )
+        except Exception as exc:
+            return StepResult(ok=False, error=f"prepare_worktree failed: {exc}")
+        prepared.append(
+            {
+                "issue": issue_number,
+                "worktree_path": worktree_path,
+                "branch_name": branch_name,
+            }
+        )
+
+    return StepResult(ok=True, data={"prepared": prepared})
