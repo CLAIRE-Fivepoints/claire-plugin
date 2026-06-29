@@ -10,6 +10,7 @@ import pytest
 from claire_fivepoints.azure_issue_bridge.adapters import (
     BridgeAdapters,
     GmailApiAdapter,
+    MockBranchSync,
     MockGitHubAdapter,
     MockLabelAdapter,
     MockWorktreePrepare,
@@ -83,6 +84,7 @@ def test_gmail_api_adapter_satisfies_email_adapter_protocol(tmp_path: Path) -> N
         email=adapter,
         github=MockGitHubAdapter(),
         labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
     )
     assert adapters.email is adapter

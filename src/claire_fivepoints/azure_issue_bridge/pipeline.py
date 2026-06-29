@@ -10,6 +10,7 @@ from claire_fivepoints.azure_issue_bridge.steps import (
     fetch_emails_step,
     filter_pbi_step,
     prepare_worktree_step,
+    sync_branch_step,
 )
 
 
@@ -19,6 +20,7 @@ class BridgeTask(Task):
     max_results: int = 20
     dry_run: bool = False
     client: str = "fivepoints"
+    source_repo: str = "CLAIRE-Fivepoints/fivepoints-test"
     branch_prefix: str = "pbi"
 
 
@@ -27,6 +29,6 @@ bridge_pipeline = pipe(
     filter_pbi_step,
     create_issues_step,
     add_label_step,
-    # sync_branch_step goes here (issue #156)
+    sync_branch_step,
     prepare_worktree_step,
 )

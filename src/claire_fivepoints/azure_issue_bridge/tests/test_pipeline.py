@@ -5,13 +5,18 @@ import pytest
 
 from claire_fivepoints.azure_issue_bridge.adapters import (
     BridgeAdapters,
+    MockBranchSync,
     MockEmailAdapter,
     MockGitHubAdapter,
     MockLabelAdapter,
     MockWorktreePrepare,
 )
 from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
-from claire_fivepoints.azure_issue_bridge.steps import add_label_step, prepare_worktree_step
+from claire_fivepoints.azure_issue_bridge.steps import (
+    add_label_step,
+    prepare_worktree_step,
+    sync_branch_step,
+)
 
 _ADO_SENDER = "azuredevops@microsoft.com"
 _TEST_SENDER = "andreoperez@gmail.com"
@@ -29,12 +34,14 @@ def _make_email(subject: str, sender: str = _ADO_SENDER, thread_id: str = "t1") 
 def _make_adapters(
     emails: list[dict],
     gh: MockGitHubAdapter | None = None,
+    branch_sync: MockBranchSync | None = None,
     wt: MockWorktreePrepare | None = None,
 ) -> BridgeAdapters:
     return BridgeAdapters(
         email=MockEmailAdapter(emails),
         github=gh or MockGitHubAdapter(),
         labels=MockLabelAdapter(),
+        branch_sync=branch_sync or MockBranchSync(),
         worktree=wt or MockWorktreePrepare(),
     )
 
@@ -171,6 +178,7 @@ def _simple_adapters() -> tuple[MockLabelAdapter, BridgeAdapters]:
         email=MockEmailAdapter([]),
         github=MockGitHubAdapter(),
         labels=labels,
+        branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
     )
     return labels, adapters
@@ -217,6 +225,139 @@ def test_add_label_step_dry_run_skips_adapter() -> None:
     assert result.data["labeled"][0]["dry_run"] is True
 
 
+# ---------------------------------------------------------------------------
+# sync_branch_step — unit tests
+# ---------------------------------------------------------------------------
+
+
+def _sync_adapters(branch_sync: MockBranchSync | None = None) -> tuple[MockBranchSync, BridgeAdapters]:
+    sync = branch_sync or MockBranchSync()
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter([]),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=sync,
+        worktree=MockWorktreePrepare(),
+    )
+    return sync, adapters
+
+
+def test_sync_branch_step_calls_adapter() -> None:
+    sync, adapters = _sync_adapters()
+    task = BridgeTask(
+        sender=_ADO_SENDER,
+        repo="CLAIRE-Fivepoints/fivepoints",
+        source_repo="CLAIRE-Fivepoints/fivepoints-test",
+    )
+    result = sync_branch_step(task, {}, adapters)
+    assert result.ok
+    assert result.data == {"branch_synced": True}
+    assert sync.syncs == [
+        ("CLAIRE-Fivepoints/fivepoints-test", "develop", "CLAIRE-Fivepoints/fivepoints", "develop")
+    ]
+
+
+def test_sync_branch_step_dry_run_skips_adapter() -> None:
+    sync, adapters = _sync_adapters()
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", dry_run=True)
+    result = sync_branch_step(task, {}, adapters)
+    assert result.ok
+    assert result.data == {"sync_skipped": True}
+    assert sync.syncs == []
+
+
+def test_sync_branch_step_failure_returns_error() -> None:
+    class FailingBranchSync:
+        def sync_branch(self, source_repo, source_branch, target_repo, target_branch):
+            raise RuntimeError("GitHub API returned HTTP 422")
+
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter([]),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=FailingBranchSync(),
+        worktree=MockWorktreePrepare(),
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = sync_branch_step(task, {}, adapters)
+    assert not result.ok
+    assert "sync_branch failed" in result.error
+    assert "422" in result.error
+
+
+def test_sync_branch_step_custom_source_repo() -> None:
+    sync, adapters = _sync_adapters()
+    task = BridgeTask(
+        sender=_ADO_SENDER,
+        repo="owner/target",
+        source_repo="owner/source",
+    )
+    result = sync_branch_step(task, {}, adapters)
+    assert result.ok
+    assert sync.syncs[0][0] == "owner/source"
+    assert sync.syncs[0][2] == "owner/target"
+
+
+def test_sync_branch_step_records_multiple_calls() -> None:
+    sync = MockBranchSync()
+    _, adapters = _sync_adapters(sync)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", source_repo="owner/source")
+    sync_branch_step(task, {}, adapters)
+    sync_branch_step(task, {}, adapters)
+    assert len(sync.syncs) == 2
+
+
+def test_bridge_pipeline_includes_sync_branch() -> None:
+    """Full pipeline runs sync_branch after add_label."""
+    sync = MockBranchSync()
+    emails = [_make_email("Product Backlog Item 1 - DEV - Title")]
+    adapters = _make_adapters(emails, branch_sync=sync)
+    task = BridgeTask(
+        sender=_ADO_SENDER,
+        repo="CLAIRE-Fivepoints/fivepoints",
+        source_repo="CLAIRE-Fivepoints/fivepoints-test",
+    )
+    result = bridge_pipeline(task, adapters)
+    assert result.ok
+    assert result.data["branch_synced"] is True
+    assert len(sync.syncs) == 1
+    assert sync.syncs[0] == (
+        "CLAIRE-Fivepoints/fivepoints-test", "develop",
+        "CLAIRE-Fivepoints/fivepoints", "develop",
+    )
+
+
+def test_bridge_pipeline_sync_failure_aborts() -> None:
+    """sync_branch failure aborts the pipeline — no downstream steps run."""
+    class FailingBranchSync:
+        def sync_branch(self, source_repo, source_branch, target_repo, target_branch):
+            raise RuntimeError("network error")
+
+    emails = [_make_email("Product Backlog Item 2 - DEV - Title")]
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter(emails),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=FailingBranchSync(),
+        worktree=MockWorktreePrepare(),
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = bridge_pipeline(task, adapters)
+    assert not result.ok
+    assert "sync_branch failed" in result.error
+
+
+def test_bridge_pipeline_dry_run_skips_sync() -> None:
+    sync = MockBranchSync()
+    emails = [_make_email("Product Backlog Item 3 - DEV - Title")]
+    adapters = _make_adapters(emails, branch_sync=sync)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", dry_run=True)
+    result = bridge_pipeline(task, adapters)
+    assert result.ok
+    assert result.data.get("sync_skipped") is True
+    assert sync.syncs == []
+
+
 def test_add_label_step_empty_created() -> None:
     labels, adapters = _simple_adapters()
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
@@ -234,6 +375,7 @@ def test_add_label_step_failure_aborts_pipeline() -> None:
         email=MockEmailAdapter([]),
         github=MockGitHubAdapter(),
         labels=FailingLabelAdapter(),
+        branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
@@ -254,6 +396,7 @@ def test_bridge_pipeline_labels_created_issues() -> None:
         email=MockEmailAdapter(emails),
         github=MockGitHubAdapter(),
         labels=labels,
+        branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", client="fivepoints")
@@ -274,6 +417,7 @@ def _worktree_adapters() -> tuple[MockWorktreePrepare, BridgeAdapters]:
         email=MockEmailAdapter([]),
         github=MockGitHubAdapter(),
         labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
         worktree=wt,
     )
     return wt, adapters
@@ -341,6 +485,7 @@ def test_prepare_worktree_step_failure_returns_ok_false() -> None:
         email=MockEmailAdapter([]),
         github=MockGitHubAdapter(),
         labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
         worktree=FailingWorktree(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
@@ -371,6 +516,7 @@ def test_bridge_pipeline_prepares_worktrees_for_created_issues() -> None:
         email=MockEmailAdapter(emails),
         github=MockGitHubAdapter(),
         labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
         worktree=wt,
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
