@@ -75,9 +75,6 @@ Gmail inbox
   → gh issue edit --add-label role:{ADO_BRIDGE_CLIENT}-dev
   → sync ADO_BRIDGE_SYNC_SOURCE/<branch> → ADO_BRIDGE_SYNC_TARGET/<branch> (GitHub REST API)
       → failure aborts pipeline for this PBI (no archiving, no agent assignment)
-  → git worktree add -b pbi-{N} <local>/.claire/worktrees/issue-{N} origin/develop
-      → worktree created BEFORE issue assignment
-      → failure aborts pipeline (no archiving, no agent assignment)
   → gh issue edit --add-assignee <ADO_BRIDGE_AGENT>  ← ALWAYS LAST
   → persist all email IDs for this PBI to ~/.claire/azure-issue-bridge/processed.json
   → archive all emails for this PBI in Gmail (remove INBOX label)
