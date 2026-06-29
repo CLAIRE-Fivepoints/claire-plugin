@@ -3,12 +3,12 @@ Unit tests for azure_issue_bridge inject subcommand and parse_subject_parts help
 
 Tests cover:
 - parse_subject_parts() extracts (area, title) from ADO subject formats
-- cmd_inject dry-run: prints parsed result + full pipeline plan, no side effects
-- cmd_inject live mode: runs full pipeline (create_issue, add_label, sync_branch,
+- _cmd_inject dry-run: prints parsed result + full pipeline plan, no side effects
+- _cmd_inject live mode: runs full pipeline (create_issue, add_label, sync_branch,
   prepare_worktree, assign) in order, with cleanup commands in output
-- cmd_inject rejects non-PBI subjects
-- cmd_inject --repo and --agent overrides
-- cmd_inject aborts and returns 1 on each step failure (no assignment if worktree fails)
+- _cmd_inject rejects non-PBI subjects
+- _cmd_inject --repo and --agent overrides
+- _cmd_inject aborts and returns 1 on each step failure (no assignment if worktree fails)
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from azure_issue_bridge.bridge import parse_subject_parts
-from azure_issue_bridge.cli import cmd_inject
+from claire_fivepoints.cli import _cmd_inject as cmd_inject
 
 
 # ---------------------------------------------------------------------------
