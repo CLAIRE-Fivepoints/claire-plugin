@@ -197,15 +197,25 @@ def cmd_test(args: argparse.Namespace) -> int:
 
 
 def cmd_inject(args: argparse.Namespace) -> int:
-    """Feed a synthetic email into the bridge pipeline without Gmail or ADO auth."""
+    """Feed a synthetic email into the bridge pipeline without Gmail or ADO auth.
+
+    Runs the full pipeline: create_issue → add_label → sync_branch →
+    prepare_worktree → assign. No cleanup is performed — use the displayed
+    commands to clean up manually.
+    """
     from azure_issue_bridge.bridge import (
         WorkItem,
         _DEFAULT_GH_REPO,
+        add_issue_label,
+        assign_github_issue,
         create_github_issue,
         is_pbi_email,
+        load_bridge_config,
         parse_pbi_id,
         parse_subject_parts,
     )
+    from azure_issue_bridge.sync import RealBranchSync
+    from azure_issue_bridge.worktree import RealWorktreePrepare
 
     msg = SimpleNamespace(subject=args.subject, message_id="inject")
     if not is_pbi_email(msg):
@@ -231,7 +241,11 @@ def cmd_inject(args: argparse.Namespace) -> int:
         work_item_type="Task",
     )
 
-    repo = args.repo or os.environ.get("ADO_BRIDGE_REPO", _DEFAULT_GH_REPO)
+    config = load_bridge_config()
+    repo = args.repo or config.target_repo
+    agent = getattr(args, "agent", None) or config.agent
+    label = f"role:{config.client}-dev"
+    sync_branch = config.sync_branch
 
     if args.dry_run:
         ado_org = os.environ.get("ADO_ORG", "FivePointsTechnology")
@@ -251,17 +265,71 @@ def cmd_inject(args: argparse.Namespace) -> int:
         print(f"  **State:** {work_item.state}")
         print(f"  **Area:** {work_item.area_path}")
         print(f"  **Type:** {work_item.work_item_type}")
+        print()
+        print("[dry-run] Pipeline steps:")
+        print(f"  1. create_issue   → {work_item.title} (PBI #{pbi_id}) in {repo}")
+        print(f"  2. add_label      → {label}")
+        print(
+            f"  3. sync_branch    → {config.source_repo}/{sync_branch} → {repo}/{sync_branch}"
+        )
+        print(f"  4. prepare_worktree → branch pbi-<N>")
+        print(f"  5. assign         → {agent}")
         return 0
 
     os.environ["ADO_BRIDGE_REPO"] = repo
     try:
-        issue_url = create_github_issue(work_item)
+        issue = create_github_issue(work_item)
     except RuntimeError as exc:
         print(f"✗ {exc}")
         return 1
 
-    print(f"✓ PBI #{pbi_id}: {work_item.title}")
-    print(f"  → {issue_url}")
+    try:
+        add_issue_label(repo, issue.number, label)
+    except RuntimeError as exc:
+        print(f"✗ add_label failed: {exc}")
+        return 1
+
+    branch_sync = RealBranchSync()
+    try:
+        branch_sync.sync_branch(config.source_repo, sync_branch, repo, sync_branch)
+    except RuntimeError as exc:
+        print(f"✗ sync_branch failed: {exc}")
+        return 1
+
+    branch_name = f"pbi-{issue.number}"
+    worktree_prepare = RealWorktreePrepare()
+    worktree_path = ""
+    try:
+        worktree_path = worktree_prepare.prepare(
+            repo=repo,
+            issue=issue.number,
+            base_branch=sync_branch,
+            branch_name=branch_name,
+        )
+    except RuntimeError as exc:
+        print(f"✗ prepare_worktree failed: {exc}")
+        return 1
+
+    try:
+        assign_github_issue(repo, issue.number, agent)
+    except RuntimeError as exc:
+        print(f"✗ assign failed: {exc}")
+        return 1
+
+    print(f"\n✓ Pipeline complet\n")
+    print(f"Issue créée   : {issue.url}")
+    print(f"Label         : {label}")
+    print(
+        f"Branch sync   : {config.source_repo}/{sync_branch} → {repo}/{sync_branch}"
+    )
+    print(f"Branch        : {branch_name}")
+    if worktree_path:
+        print(f"Worktree      : {worktree_path}")
+    print(f"Assigné à     : {agent}")
+    print(f"\nPour nettoyer :")
+    print(f"  gh issue close {issue.number} --repo {repo}")
+    if worktree_path:
+        print(f"  git worktree remove {worktree_path}")
     return 0
 
 
@@ -492,7 +560,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--repo",
         default=None,
         metavar="OWNER/NAME",
-        help="Target GitHub repo (default: ADO_BRIDGE_REPO env or claire-labs/fivepoints-test)",
+        help="Target GitHub repo (default: ADO_BRIDGE_SYNC_TARGET or claire-labs/fivepoints-test)",
+    )
+    inject_p.add_argument(
+        "--agent",
+        default=None,
+        metavar="USERNAME",
+        help="GitHub assignee (default: ADO_BRIDGE_AGENT or claire-test-ai)",
     )
 
     # restore-inbox
@@ -566,15 +640,20 @@ notifications arrive for the same PBI.
   Use for always-on daemon. Pair with a process manager or cron.
 
 ### inject — synthetic email injection (no Gmail or ADO auth required)
-  claire azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME]
+  claire azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME] [--agent USERNAME]
 
   Feeds a synthetic email directly into the bridge pipeline without polling Gmail
-  or calling the ADO REST API. Use for e2e testing without AZURE_DEVOPS_PAT.
+  or calling the ADO REST API. Runs the FULL pipeline:
+    create_issue → add_label → sync_branch → prepare_worktree → assign
+
+  No cleanup is performed — use the displayed commands to clean up manually.
+  GitHub auth (gh CLI) is still required in live mode.
 
   --from ADDRESS      Sender address (e.g. azuredevops@microsoft.com)
   --subject SUBJECT   Email subject matching the ADO PBI pattern
-  --dry-run           Print parsed result without creating any GitHub issue
-  --repo OWNER/NAME   Target repo override (default: ADO_BRIDGE_REPO or fivepoints-test)
+  --dry-run           Print each pipeline step without any side effects
+  --repo OWNER/NAME   Target repo override (default: ADO_BRIDGE_SYNC_TARGET)
+  --agent USERNAME    GitHub assignee override (default: ADO_BRIDGE_AGENT)
 
   Examples:
     # Dry-run — parse subject, print what would be created
