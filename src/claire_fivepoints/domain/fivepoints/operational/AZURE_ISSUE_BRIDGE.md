@@ -11,7 +11,7 @@ updated: 2026-06-28
 
 Automated pipeline: watch Gmail for ADO PBI assignment emails → create structured GitHub issues → spawn a Claire agent.
 
-This command lives inside the **fivepoints plugin**. The Python module is vendored under `domain/scripts/azure_issue_bridge/` and the bash router under `domain/commands/azure-issue-bridge.sh`.
+This command lives inside the **fivepoints plugin**. The pipeline modules (`bridge.py`, `sync.py`, `worktree.py`) are vendored under `domain/scripts/azure_issue_bridge/`; the CLI entry point is `src/claire_fivepoints/cli.py` (registered as `fivepoints azure-issue-bridge`). The bash router lives under `domain/commands/azure-issue-bridge.sh`.
 
 ---
 
@@ -198,8 +198,9 @@ Before the bridge can run, three things must be in place:
 | File | Role |
 |------|------|
 | `domain/scripts/azure_issue_bridge/bridge.py` | Core pipeline logic |
-| `domain/scripts/azure_issue_bridge/cli.py` | CLI entry point (`python3 -m azure_issue_bridge.cli`) |
-| `domain/scripts/azure_issue_bridge/tests/` | Unit tests (triage, fetch metadata, concurrent lock) |
+| `domain/scripts/azure_issue_bridge/sync.py` | Branch sync adapter |
+| `domain/scripts/azure_issue_bridge/worktree.py` | Worktree prepare adapter |
+| `domain/scripts/azure_issue_bridge/tests/` | Unit tests (triage, fetch metadata, concurrent lock, sync, worktree) — `test_inject.py` moved to `src/claire_fivepoints/azure_issue_bridge/tests/` |
 | `domain/commands/azure-issue-bridge.sh` | Bash router — sets PYTHONPATH and dispatches to the python CLI |
 
 The bash router prepends `domain/scripts` to `PYTHONPATH` so the package is importable as `azure_issue_bridge`. The module still imports `claire_py.email.auth` and `claire_py.email.watcher` from claire core (which remain there).
@@ -212,8 +213,8 @@ The bash router prepends `domain/scripts` to `PYTHONPATH` so the package is impo
 | `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/adapters.py` | `EmailAdapter`, `GitHubAdapter` protocols + `BridgeAdapters` + test doubles |
 | `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/steps.py` | Pure pipeline steps: `fetch_emails_step`, `filter_pbi_step`, `create_issues_step` |
 | `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/pipeline.py` | `BridgeTask` + `bridge_pipeline = pipe(...)` |
-| `plugins/fivepoints/src/claire_fivepoints/cli.py` | CLI entry point — `fivepoints azure-issue-bridge run [--from] [--repo] [--dry-run]`; concrete subprocess adapters |
-| `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/tests/` | Unit tests for email filtering and pipeline (zero subprocess, zero network) |
+| `src/claire_fivepoints/cli.py` | CLI entry point — `fivepoints azure-issue-bridge run [--from] [--repo] [--dry-run]` and `fivepoints azure-issue-bridge inject [--from] [--subject] [--dry-run] [--repo] [--agent]`; concrete subprocess adapters |
+| `src/claire_fivepoints/azure_issue_bridge/tests/` | Unit tests for email filtering, pipeline, and inject (zero subprocess, zero network) |
 
 The sender is passed via `--from` flag (`azuredevops@microsoft.com` by default). The pipeline is composed via `claire_core.pipeline.pipe()`. The core triage/ADO fetch logic remains in the fivepoints-plugin repo.
 

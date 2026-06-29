@@ -3,24 +3,26 @@ Unit tests for azure_issue_bridge inject subcommand and parse_subject_parts help
 
 Tests cover:
 - parse_subject_parts() extracts (area, title) from ADO subject formats
-- cmd_inject dry-run: prints parsed result + full pipeline plan, no side effects
-- cmd_inject live mode: runs full pipeline (create_issue, add_label, sync_branch,
+- _cmd_inject dry-run: prints parsed result + full pipeline plan, no side effects
+- _cmd_inject live mode: runs full pipeline (create_issue, add_label, sync_branch,
   prepare_worktree, assign) in order, with cleanup commands in output
-- cmd_inject rejects non-PBI subjects
-- cmd_inject --repo and --agent overrides
-- cmd_inject aborts and returns 1 on each step failure (no assignment if worktree fails)
+- _cmd_inject rejects non-PBI subjects
+- _cmd_inject --repo and --agent overrides
+- _cmd_inject aborts and returns 1 on each step failure (no assignment if worktree fails)
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
+from typer.testing import CliRunner
 
 from azure_issue_bridge.bridge import parse_subject_parts
-from azure_issue_bridge.cli import cmd_inject
+from claire_fivepoints.cli import _cmd_inject as cmd_inject, bridge_app
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +287,17 @@ class TestCmdInjectLive:
     def test_repo_override(self) -> None:
         args = _make_args(repo="CLAIRE-Fivepoints/fivepoints-test")
         fake = _fake_issue(1)
+        captured_env: dict = {}
+
+        def capture_and_return(*a, **kw):
+            captured_env["ADO_BRIDGE_REPO"] = os.environ.get("ADO_BRIDGE_REPO")
+            return fake
 
         with (
             patch(
-                "azure_issue_bridge.bridge.create_github_issue", return_value=fake
-            ) as mock_create,
+                "azure_issue_bridge.bridge.create_github_issue",
+                side_effect=capture_and_return,
+            ),
             patch("azure_issue_bridge.bridge.add_issue_label"),
             patch("azure_issue_bridge.sync.RealBranchSync") as MockSyncClass,
             patch("azure_issue_bridge.worktree.RealWorktreePrepare") as MockWorktreeClass,
@@ -301,9 +309,8 @@ class TestCmdInjectLive:
             MockWorktreeClass.return_value = mock_wt
             cmd_inject(args)
 
-        import os
-
-        assert os.environ.get("ADO_BRIDGE_REPO") == "CLAIRE-Fivepoints/fivepoints-test"
+        assert captured_env["ADO_BRIDGE_REPO"] == "CLAIRE-Fivepoints/fivepoints-test"
+        assert os.environ.get("ADO_BRIDGE_REPO") != "CLAIRE-Fivepoints/fivepoints-test"
 
     def test_live_runtime_error_on_create_returns_nonzero(
         self, capsys: pytest.CaptureFixture
@@ -429,3 +436,40 @@ class TestCmdInjectRejectsNonPBI:
         args = _make_args(subject="", dry_run=True)
         rc = cmd_inject(args)
         assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# bridge_app public interface — CliRunner (typer glue coverage)
+# ---------------------------------------------------------------------------
+
+
+class TestBridgeInjectCmd:
+    """Exercises the public bridge_app typer surface to cover the typer → _cmd_inject glue."""
+
+    _runner = CliRunner()
+
+    def test_dry_run_exits_0(self) -> None:
+        result = self._runner.invoke(
+            bridge_app,
+            [
+                "inject",
+                "--from", "azuredevops@microsoft.com",
+                "--subject", "Product Backlog Item 12345 - DEV - Client Management test",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[dry-run]" in result.output
+        assert "12345" in result.output
+
+    def test_invalid_subject_exits_nonzero(self) -> None:
+        result = self._runner.invoke(
+            bridge_app,
+            [
+                "inject",
+                "--from", "azuredevops@microsoft.com",
+                "--subject", "Hello — not a PBI",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code != 0
