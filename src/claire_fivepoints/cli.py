@@ -371,7 +371,7 @@ def _cmd_inject(args: argparse.Namespace) -> int:
 
     config = load_bridge_config()
     repo = args.repo or config.target_repo
-    agent = getattr(args, "agent", None) or config.agent
+    agent = args.agent or config.agent
     label = f"role:{config.client}-dev"
     sync_branch = config.sync_branch
 
@@ -404,12 +404,18 @@ def _cmd_inject(args: argparse.Namespace) -> int:
         print(f"  5. assign         → {agent}")
         return 0
 
+    _prev_repo = os.environ.get("ADO_BRIDGE_REPO")
     os.environ["ADO_BRIDGE_REPO"] = repo
     try:
         issue = create_github_issue(work_item)
     except RuntimeError as exc:
         print(f"✗ {exc}")
         return 1
+    finally:
+        if _prev_repo is None:
+            os.environ.pop("ADO_BRIDGE_REPO", None)
+        else:
+            os.environ["ADO_BRIDGE_REPO"] = _prev_repo
 
     try:
         add_issue_label(repo, issue.number, label)
