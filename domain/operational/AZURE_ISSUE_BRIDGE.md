@@ -4,7 +4,7 @@ category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
 keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_SENDER, configurable-sender, branch-sync, inject, synthetic-email, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label]
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # Azure DevOps Email Bridge
@@ -188,8 +188,8 @@ The command:
 1. Constructs an `EmailMessage` from `--from` and `--subject`
 2. Validates it with `is_pbi_email()` (subject must match the ADO PBI pattern)
 3. Builds a synthetic `WorkItem` from the parsed subject (no ADO fetch — subject data only)
-4. In live mode: calls `gh issue create` in the target repo (GitHub auth still required)
-5. In `--dry-run` mode: prints the parsed PBI and issue body preview, creates nothing
+4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → prepare_worktree → assign` (GitHub auth required, no Gmail or ADO auth)
+5. In `--dry-run` mode: prints the parsed PBI and the planned pipeline steps, creates nothing
 
 ```bash
 # Dry-run — print parsed PBI + issue body, create nothing
@@ -214,8 +214,9 @@ claire fivepoints azure-issue-bridge inject \
 |------|---------|-------------|
 | `--from ADDRESS` | _(required)_ | Sender address (e.g. `azuredevops@microsoft.com`) |
 | `--subject SUBJECT` | _(required)_ | Email subject matching the ADO PBI pattern |
-| `--dry-run` | false | Print parsed result without creating any GitHub issue |
-| `--repo OWNER/NAME` | `ADO_BRIDGE_REPO` or `claire-labs/fivepoints-test` | Target GitHub repo override |
+| `--dry-run` | false | Print parsed result + pipeline plan without creating anything |
+| `--repo OWNER/NAME` | `ADO_BRIDGE_SYNC_TARGET` or `claire-labs/fivepoints-test` | Target GitHub repo override |
+| `--agent USERNAME` | `ADO_BRIDGE_AGENT` or `claire-test-ai` | GitHub assignee for the created issue |
 
 ### Auto-start via infra
 
