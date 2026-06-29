@@ -30,6 +30,12 @@ fivepoints = "claire_fivepoints:plugin_info"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "typer>=0.26.8",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/claire_fivepoints", "domain/scripts/azure_issue_bridge"]
 

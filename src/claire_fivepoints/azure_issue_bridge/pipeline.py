@@ -5,6 +5,7 @@ from claire_core.pipeline import pipe
 from claire_core.types import Task
 
 from claire_fivepoints.azure_issue_bridge.steps import (
+    add_label_step,
     create_issues_step,
     fetch_emails_step,
     filter_pbi_step,
@@ -16,10 +17,12 @@ class BridgeTask(Task):
     sender: str = "azuredevops@microsoft.com"
     max_results: int = 20
     dry_run: bool = False
+    client: str = "fivepoints"
 
 
 bridge_pipeline = pipe(
     fetch_emails_step,
     filter_pbi_step,
     create_issues_step,
+    add_label_step,
 )

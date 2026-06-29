@@ -48,7 +48,7 @@ _BRIDGE_AGENT_HELP = """\
 
 ## Commands
 
-  claire fivepoints azure-issue-bridge run [--from SENDER] [--repo owner/name] [--dry-run] [--max-results N]
+  claire fivepoints azure-issue-bridge run [--from SENDER] [--repo owner/name] [--dry-run] [--max-results N] [--client SLUG]
   claire fivepoints azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME] [--agent USERNAME]
 
 ## Options (run)
@@ -57,6 +57,7 @@ _BRIDGE_AGENT_HELP = """\
   --repo TEXT       Target GitHub repo (default: claire-labs/fivepoints-test)
   --dry-run         Show detected emails without creating issues
   --max-results N   Max inbox emails to scan (default: 20)
+  --client SLUG     Client slug for the role:{client}-dev label (default: fivepoints)
 
 ## Options (inject)
 
@@ -288,23 +289,25 @@ def bridge_run_cmd(
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show detected emails without creating issues."),
     max_results: int = typer.Option(20, "--max-results", help="Max inbox emails to scan."),
+    client: str = typer.Option("fivepoints", "--client", help="Client slug for the role:{client}-dev label."),
     agent_help: bool = typer.Option(
         False, "--agent-help", callback=_bridge_agent_help_callback,
         is_eager=True, hidden=True,
     ),
 ) -> None:
     """Scan Gmail for ADO PBI assignment emails and create GitHub issues."""
-    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter
+    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter, RealLabelAdapter
     from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 
     _console.print(f"[dim]Sender:[/dim] {sender}")
     if dry_run:
         _console.print("[dim]Mode:[/dim] dry-run — no issues will be created")
 
-    task = BridgeTask(sender=sender, max_results=max_results, dry_run=dry_run, repo=repo)
+    task = BridgeTask(sender=sender, max_results=max_results, dry_run=dry_run, repo=repo, client=client)
     adapters = BridgeAdapters(
         email=GmailApiAdapter(),
         github=_GhCliAdapter(),
+        labels=RealLabelAdapter(),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:
