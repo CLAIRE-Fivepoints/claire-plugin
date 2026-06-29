@@ -32,6 +32,7 @@ __all__ = [
     "LabelAdapter",
     "BranchSyncAdapter",
     "WorktreePrepareAdapter",
+    "AssignAdapter",
     "BridgeAdapters",
     "GmailApiAdapter",
     "RealBranchSync",
@@ -41,6 +42,7 @@ __all__ = [
     "MockGitHubAdapter",
     "MockLabelAdapter",
     "MockWorktreePrepare",
+    "MockAssignAdapter",
 ]
 
 
@@ -71,18 +73,6 @@ class BranchSyncAdapter(Protocol):
         target_branch: str,
     ) -> None:
         """Force-update target_branch in target_repo to match source_branch in source_repo."""
-        ...
-
-
-class WorktreePrepareAdapter(Protocol):
-    def prepare(
-        self,
-        repo: str,
-        issue: int,
-        base_branch: str,
-        branch_name: str,
-    ) -> str:
-        """Create a git worktree for the issue on branch_name. Returns the worktree path."""
         ...
 
 
@@ -289,15 +279,6 @@ class MockGitHubAdapter:
     def create_issue(self, title: str, body: str, repo: str) -> int:
         self.created.append({"title": title, "body": body, "repo": repo})
         return len(self.created)
-
-
-class MockWorktreePrepare:
-    def __init__(self) -> None:
-        self.prepared: list[dict] = []
-
-    def prepare(self, repo: str, issue: int, base_branch: str, branch_name: str) -> str:
-        self.prepared.append({"repo": repo, "issue": issue, "base_branch": base_branch, "branch": branch_name})
-        return f"/mock/worktrees/{branch_name}"
 
 
 class MockAssignAdapter:
