@@ -70,6 +70,29 @@ def sync_branch_step(task, ctx: dict, adapters) -> StepResult:
     return StepResult(ok=True, data={"branch_synced": True})
 
 
+def assign_step(task, ctx: dict, adapters) -> StepResult:
+    """Assign each issue to the agent — ALWAYS LAST in the pipeline. Triggers session-monitor."""
+    assigned = []
+    for item in ctx.get("created", []):
+        issue_number = item.get("issue")
+        if issue_number is None:
+            if task.dry_run:
+                assigned.append({"assign_skipped": True, "agent": task.agent})
+            continue
+
+        if task.dry_run:
+            assigned.append({"assign_skipped": True, "agent": task.agent, "issue": issue_number})
+            continue
+
+        try:
+            adapters.assign.assign(task.repo, issue_number, task.agent)
+        except Exception as exc:
+            return StepResult(ok=False, error=f"assign failed: {exc}")
+        assigned.append({"assigned_to": task.agent, "issue": issue_number})
+
+    return StepResult(ok=True, data={"assigned": assigned})
+
+
 def add_label_step(task, ctx: dict, adapters) -> StepResult:
     """Add role:{client}-dev label to each created issue."""
     label = f"role:{task.client}-dev"

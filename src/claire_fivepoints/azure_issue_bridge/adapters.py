@@ -1,9 +1,9 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter, AssignAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
 - RealBranchSync: syncs branches via the GitHub REST API (urllib) — no subprocess.
 - RealWorktreePrepare: creates git worktrees via subprocess git — no GitHub CLI.
-- CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
+- CLI-backed adapters (GhCliAdapter, RealLabelAdapter, RealAssignAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
@@ -74,6 +74,24 @@ class BranchSyncAdapter(Protocol):
         ...
 
 
+class WorktreePrepareAdapter(Protocol):
+    def prepare(
+        self,
+        repo: str,
+        issue: int,
+        base_branch: str,
+        branch_name: str,
+    ) -> str:
+        """Create a git worktree for the issue on branch_name. Returns the worktree path."""
+        ...
+
+
+class AssignAdapter(Protocol):
+    def assign(self, repo: str, issue: int, agent: str) -> None:
+        """Assign the issue to the agent. Triggers the session-monitor."""
+        ...
+
+
 @dataclass
 class BridgeAdapters:
     email: EmailAdapter
@@ -81,6 +99,7 @@ class BridgeAdapters:
     labels: LabelAdapter
     branch_sync: BranchSyncAdapter
     worktree: WorktreePrepareAdapter
+    assign: AssignAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -270,3 +289,20 @@ class MockGitHubAdapter:
     def create_issue(self, title: str, body: str, repo: str) -> int:
         self.created.append({"title": title, "body": body, "repo": repo})
         return len(self.created)
+
+
+class MockWorktreePrepare:
+    def __init__(self) -> None:
+        self.prepared: list[dict] = []
+
+    def prepare(self, repo: str, issue: int, base_branch: str, branch_name: str) -> str:
+        self.prepared.append({"repo": repo, "issue": issue, "base_branch": base_branch, "branch": branch_name})
+        return f"/mock/worktrees/{branch_name}"
+
+
+class MockAssignAdapter:
+    def __init__(self) -> None:
+        self.assignments: list[dict] = []
+
+    def assign(self, repo: str, issue: int, agent: str) -> None:
+        self.assignments.append({"repo": repo, "issue": issue, "agent": agent})

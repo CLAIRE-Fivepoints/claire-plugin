@@ -294,6 +294,20 @@ class _RealLabelAdapter:
                 raise RuntimeError(f"gh add-label failed: {context}")
 
 
+class _RealAssignAdapter:
+    """Calls `gh issue edit --add-assignee` via subprocess. Triggers the session-monitor."""
+
+    def assign(self, repo: str, issue: int, agent: str) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-assignee", agent],
+            check=False, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"gh assign failed: {result.stderr.strip()}")
+
+
 @bridge_app.callback()
 def _bridge_root(
     agent_help: bool = typer.Option(
@@ -324,12 +338,17 @@ def bridge_run_cmd(
         "CLAIRE-Fivepoints/fivepoints-test", "--source-repo", envvar="ADO_BRIDGE_SYNC_SOURCE",
         help="Source repo for branch sync (develop → target/develop).",
     ),
+    agent: str = typer.Option(
+        "claire-test-ai", "--agent",
+        help="GitHub login of the agent to assign (triggers session-monitor).",
+    ),
     agent_help: bool = typer.Option(
         False, "--agent-help", callback=_bridge_agent_help_callback,
         is_eager=True, hidden=True,
     ),
 ) -> None:
     """Scan Gmail for ADO PBI assignment emails and create GitHub issues."""
+    from azure_issue_bridge.worktree import RealWorktreePrepare
     from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter, RealBranchSync
     from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 
@@ -339,13 +358,15 @@ def bridge_run_cmd(
 
     task = BridgeTask(
         sender=sender, max_results=max_results, dry_run=dry_run,
-        repo=repo, client=client, source_repo=source_repo,
+        repo=repo, client=client, source_repo=source_repo, agent=agent,
     )
     adapters = BridgeAdapters(
         email=GmailApiAdapter(),
         github=_GhCliAdapter(),
         labels=_RealLabelAdapter(),
         branch_sync=RealBranchSync(),
+        worktree=RealWorktreePrepare(),
+        assign=_RealAssignAdapter(),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:

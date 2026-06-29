@@ -5,6 +5,7 @@ import pytest
 
 from claire_fivepoints.azure_issue_bridge.adapters import (
     BridgeAdapters,
+    MockAssignAdapter,
     MockBranchSync,
     MockEmailAdapter,
     MockGitHubAdapter,
@@ -14,6 +15,7 @@ from claire_fivepoints.azure_issue_bridge.adapters import (
 from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 from claire_fivepoints.azure_issue_bridge.steps import (
     add_label_step,
+    assign_step,
     prepare_worktree_step,
     sync_branch_step,
 )
@@ -35,14 +37,16 @@ def _make_adapters(
     emails: list[dict],
     gh: MockGitHubAdapter | None = None,
     branch_sync: MockBranchSync | None = None,
-    wt: MockWorktreePrepare | None = None,
+    worktree: MockWorktreePrepare | None = None,
+    assign: MockAssignAdapter | None = None,
 ) -> BridgeAdapters:
     return BridgeAdapters(
         email=MockEmailAdapter(emails),
         github=gh or MockGitHubAdapter(),
         labels=MockLabelAdapter(),
         branch_sync=branch_sync or MockBranchSync(),
-        worktree=wt or MockWorktreePrepare(),
+        worktree=worktree or MockWorktreePrepare(),
+        assign=assign or MockAssignAdapter(),
     )
 
 
@@ -180,6 +184,7 @@ def _simple_adapters() -> tuple[MockLabelAdapter, BridgeAdapters]:
         labels=labels,
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     return labels, adapters
 
@@ -238,6 +243,7 @@ def _sync_adapters(branch_sync: MockBranchSync | None = None) -> tuple[MockBranc
         labels=MockLabelAdapter(),
         branch_sync=sync,
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     return sync, adapters
 
@@ -277,6 +283,7 @@ def test_sync_branch_step_failure_returns_error() -> None:
         labels=MockLabelAdapter(),
         branch_sync=FailingBranchSync(),
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     result = sync_branch_step(task, {}, adapters)
@@ -340,6 +347,7 @@ def test_bridge_pipeline_sync_failure_aborts() -> None:
         labels=MockLabelAdapter(),
         branch_sync=FailingBranchSync(),
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     result = bridge_pipeline(task, adapters)
@@ -377,6 +385,7 @@ def test_add_label_step_failure_aborts_pipeline() -> None:
         labels=FailingLabelAdapter(),
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     ctx = {"created": [{"subject": "S", "issue": 1}]}
@@ -398,6 +407,7 @@ def test_bridge_pipeline_labels_created_issues() -> None:
         labels=labels,
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", client="fivepoints")
     result = bridge_pipeline(task, adapters)
@@ -411,14 +421,15 @@ def test_bridge_pipeline_labels_created_issues() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _worktree_adapters() -> tuple[MockWorktreePrepare, BridgeAdapters]:
-    wt = MockWorktreePrepare()
+def _worktree_adapters(worktree: MockWorktreePrepare | None = None) -> tuple[MockWorktreePrepare, BridgeAdapters]:
+    wt = worktree or MockWorktreePrepare()
     adapters = BridgeAdapters(
         email=MockEmailAdapter([]),
         github=MockGitHubAdapter(),
         labels=MockLabelAdapter(),
         branch_sync=MockBranchSync(),
         worktree=wt,
+        assign=MockAssignAdapter(),
     )
     return wt, adapters
 
@@ -472,8 +483,8 @@ def test_prepare_worktree_step_multiple_issues() -> None:
     result = prepare_worktree_step(task, ctx, adapters)
     assert result.ok
     assert len(wt.prepared) == 2
-    assert wt.prepared[0]["issue"] == 1
-    assert wt.prepared[1]["issue"] == 2
+    assert wt.prepared[0]["branch"] == "pbi-1"
+    assert wt.prepared[1]["branch"] == "pbi-2"
 
 
 def test_prepare_worktree_step_failure_returns_ok_false() -> None:
@@ -487,6 +498,7 @@ def test_prepare_worktree_step_failure_returns_ok_false() -> None:
         labels=MockLabelAdapter(),
         branch_sync=MockBranchSync(),
         worktree=FailingWorktree(),
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     ctx = {"created": [{"subject": "S", "issue": 5}]}
@@ -518,6 +530,7 @@ def test_bridge_pipeline_prepares_worktrees_for_created_issues() -> None:
         labels=MockLabelAdapter(),
         branch_sync=MockBranchSync(),
         worktree=wt,
+        assign=MockAssignAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     result = bridge_pipeline(task, adapters)
@@ -525,3 +538,174 @@ def test_bridge_pipeline_prepares_worktrees_for_created_issues() -> None:
     assert len(wt.prepared) == 2
     assert wt.prepared[0]["branch"] == "pbi-1"
     assert wt.prepared[1]["branch"] == "pbi-2"
+
+
+# ---------------------------------------------------------------------------
+# assign_step — unit tests
+# ---------------------------------------------------------------------------
+
+
+def _assign_adapters(assign: MockAssignAdapter | None = None) -> tuple[MockAssignAdapter, BridgeAdapters]:
+    a = assign or MockAssignAdapter()
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter([]),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=MockWorktreePrepare(),
+        assign=a,
+    )
+    return a, adapters
+
+
+def test_assign_step_calls_adapter() -> None:
+    a, adapters = _assign_adapters()
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", agent="claire-test-ai")
+    ctx = {"created": [{"subject": "S", "issue": 42}]}
+    result = assign_step(task, ctx, adapters)
+    assert result.ok
+    assert a.assignments == [{"repo": "owner/repo", "issue": 42, "agent": "claire-test-ai"}]
+    assert result.data["assigned"][0] == {"assigned_to": "claire-test-ai", "issue": 42}
+
+
+def test_assign_step_dry_run_skips_adapter() -> None:
+    a, adapters = _assign_adapters()
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", dry_run=True)
+    ctx = {"created": [{"subject": "S", "issue": 42}]}
+    result = assign_step(task, ctx, adapters)
+    assert result.ok
+    assert a.assignments == []
+    assert result.data["assigned"][0]["assign_skipped"] is True
+
+
+def test_assign_step_failure_returns_error() -> None:
+    class FailingAssign:
+        def assign(self, repo, issue, agent):
+            raise RuntimeError("gh assign failed: Not Found")
+
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter([]),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=MockWorktreePrepare(),
+        assign=FailingAssign(),
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    ctx = {"created": [{"subject": "S", "issue": 1}]}
+    result = assign_step(task, ctx, adapters)
+    assert not result.ok
+    assert "assign failed" in result.error
+
+
+def test_assign_step_records_multiple_calls() -> None:
+    a, adapters = _assign_adapters()
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", agent="claire-test-ai")
+    ctx = {"created": [{"subject": "A", "issue": 1}, {"subject": "B", "issue": 2}]}
+    result = assign_step(task, ctx, adapters)
+    assert result.ok
+    assert len(a.assignments) == 2
+    assert a.assignments[0]["issue"] == 1
+    assert a.assignments[1]["issue"] == 2
+
+
+def test_assign_step_custom_agent() -> None:
+    a, adapters = _assign_adapters()
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", agent="custom-bot-ai")
+    ctx = {"created": [{"subject": "S", "issue": 7}]}
+    assign_step(task, ctx, adapters)
+    assert a.assignments[0]["agent"] == "custom-bot-ai"
+
+
+# ---------------------------------------------------------------------------
+# Pipeline order — assign called after prepare_worktree, never before
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_assign_called_after_prepare_worktree() -> None:
+    """assign is always called after prepare_worktree in the full pipeline."""
+    call_order: list[str] = []
+
+    class OrderedWorktree:
+        def prepare(self, repo, issue, base_branch, branch_name):
+            call_order.append("prepare_worktree")
+            return f"/mock/{branch_name}"
+
+    class OrderedAssign:
+        def assign(self, repo, issue, agent):
+            call_order.append("assign")
+
+    emails = [_make_email("Product Backlog Item 5 - DEV - Title")]
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter(emails),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=OrderedWorktree(),
+        assign=OrderedAssign(),
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = bridge_pipeline(task, adapters)
+    assert result.ok
+    assert call_order == ["prepare_worktree", "assign"]
+    prepare_idx = call_order.index("prepare_worktree")
+    assign_idx = call_order.index("assign")
+    assert prepare_idx < assign_idx, "assign must be called after prepare_worktree"
+
+
+def test_pipeline_full_end_to_end() -> None:
+    """Full pipeline: email → issue → label → sync → worktree → assign."""
+    wt = MockWorktreePrepare()
+    a = MockAssignAdapter()
+    emails = [_make_email("Product Backlog Item 99 - DEV - My Feature")]
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter(emails),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=wt,
+        assign=a,
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", agent="claire-test-ai")
+    result = bridge_pipeline(task, adapters)
+    assert result.ok
+    assert len(wt.prepared) == 1
+    assert wt.prepared[0]["branch"] == "pbi-1"
+    assert len(a.assignments) == 1
+    assert a.assignments[0]["agent"] == "claire-test-ai"
+    assert a.assignments[0]["issue"] == 1
+
+
+def test_pipeline_worktree_failure_aborts_before_assign() -> None:
+    """prepare_worktree failure aborts — assign is never called."""
+    class FailingWorktree:
+        def prepare(self, repo, issue, base_branch, branch_name):
+            raise RuntimeError("disk full")
+
+    a = MockAssignAdapter()
+    emails = [_make_email("Product Backlog Item 3 - DEV - Title")]
+    adapters = BridgeAdapters(
+        email=MockEmailAdapter(emails),
+        github=MockGitHubAdapter(),
+        labels=MockLabelAdapter(),
+        branch_sync=MockBranchSync(),
+        worktree=FailingWorktree(),
+        assign=a,
+    )
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = bridge_pipeline(task, adapters)
+    assert not result.ok
+    assert "prepare_worktree failed" in result.error
+    assert a.assignments == []
+
+
+def test_pipeline_dry_run_skips_worktree_and_assign() -> None:
+    wt = MockWorktreePrepare()
+    a = MockAssignAdapter()
+    emails = [_make_email("Product Backlog Item 4 - DEV - Title")]
+    adapters = _make_adapters(emails, worktree=wt, assign=a)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", dry_run=True)
+    result = bridge_pipeline(task, adapters)
+    assert result.ok
+    assert wt.prepared == []
+    assert a.assignments == []
