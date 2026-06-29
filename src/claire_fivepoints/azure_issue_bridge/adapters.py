@@ -1,7 +1,7 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
-- CLI-backed adapters (GhCliAdapter) remain in cli.py (subprocess.run in CLI entry points only).
+- CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
@@ -23,10 +23,17 @@ class GitHubAdapter(Protocol):
         ...
 
 
+class LabelAdapter(Protocol):
+    def add_label(self, repo: str, issue: int, label: str) -> None:
+        """Add a label to a GitHub issue. Creates the label if it does not exist."""
+        ...
+
+
 @dataclass
 class BridgeAdapters:
     email: EmailAdapter
     github: GitHubAdapter
+    labels: LabelAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +101,14 @@ class GmailApiAdapter:
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
+
+
+class MockLabelAdapter:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def add_label(self, repo: str, issue: int, label: str) -> None:
+        self.calls.append({"repo": repo, "issue": issue, "label": label})
 
 
 class MockEmailAdapter:

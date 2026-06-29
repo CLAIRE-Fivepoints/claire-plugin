@@ -9,6 +9,7 @@ dependencies = [
     "claire-workflows",
     "google-api-python-client>=2.0",
     "google-auth>=2.0",
+    "typer>=0.9",
 ]
 
 [tool.uv.sources]
@@ -29,6 +30,11 @@ fivepoints = "claire_fivepoints:plugin_info"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/claire_fivepoints", "domain/scripts/azure_issue_bridge"]

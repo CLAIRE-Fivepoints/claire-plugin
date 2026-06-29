@@ -48,7 +48,7 @@ _BRIDGE_AGENT_HELP = """\
 
 ## Commands
 
-  claire fivepoints azure-issue-bridge run [--from SENDER] [--repo owner/name] [--dry-run] [--max-results N]
+  claire fivepoints azure-issue-bridge run [--from SENDER] [--repo owner/name] [--dry-run] [--max-results N] [--client SLUG]
   claire fivepoints azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME] [--agent USERNAME]
 
 ## Options (run)
@@ -57,6 +57,7 @@ _BRIDGE_AGENT_HELP = """\
   --repo TEXT       Target GitHub repo (default: claire-labs/fivepoints-test)
   --dry-run         Show detected emails without creating issues
   --max-results N   Max inbox emails to scan (default: 20)
+  --client SLUG     Client slug for the role:{client}-dev label (default: fivepoints)
 
 ## Options (inject)
 
@@ -266,6 +267,32 @@ class _GhCliAdapter:
         return int(url.split("/")[-1])
 
 
+class _RealLabelAdapter:
+    """Calls `gh issue edit --add-label` via subprocess. Creates the label if absent."""
+
+    def add_label(self, repo: str, issue: int, label: str) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
+            check=False, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            create_result = subprocess.run(
+                ["gh", "label", "create", label, "--repo", repo, "--color", "0075ca"],
+                check=False, capture_output=True, text=True,
+            )
+            retry = subprocess.run(
+                ["gh", "issue", "edit", str(issue), "--repo", repo, "--add-label", label],
+                check=False, capture_output=True, text=True,
+            )
+            if retry.returncode != 0:
+                label_stderr = create_result.stderr.strip()
+                issue_stderr = retry.stderr.strip()
+                context = f"label create: {label_stderr or '(no stderr)'} | issue edit: {issue_stderr}"
+                raise RuntimeError(f"gh add-label failed: {context}")
+
+
 @bridge_app.callback()
 def _bridge_root(
     agent_help: bool = typer.Option(
@@ -288,6 +315,10 @@ def bridge_run_cmd(
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show detected emails without creating issues."),
     max_results: int = typer.Option(20, "--max-results", help="Max inbox emails to scan."),
+    client: str = typer.Option(
+        "fivepoints", "--client", envvar="ADO_BRIDGE_CLIENT",
+        help="Client slug for the role:{client}-dev label.",
+    ),
     agent_help: bool = typer.Option(
         False, "--agent-help", callback=_bridge_agent_help_callback,
         is_eager=True, hidden=True,
@@ -301,10 +332,11 @@ def bridge_run_cmd(
     if dry_run:
         _console.print("[dim]Mode:[/dim] dry-run — no issues will be created")
 
-    task = BridgeTask(sender=sender, max_results=max_results, dry_run=dry_run, repo=repo)
+    task = BridgeTask(sender=sender, max_results=max_results, dry_run=dry_run, repo=repo, client=client)
     adapters = BridgeAdapters(
         email=GmailApiAdapter(),
         github=_GhCliAdapter(),
+        labels=_RealLabelAdapter(),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:

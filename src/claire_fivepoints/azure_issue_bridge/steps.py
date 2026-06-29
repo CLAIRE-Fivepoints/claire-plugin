@@ -52,3 +52,21 @@ def create_issues_step(task, ctx: dict, adapters) -> StepResult:
         created.append({"subject": e["subject"], "issue": issue_number})
 
     return StepResult(ok=True, data={"created": created})
+
+
+def add_label_step(task, ctx: dict, adapters) -> StepResult:
+    """Add role:{client}-dev label to each created issue."""
+    label = f"role:{task.client}-dev"
+    labeled = []
+    for item in ctx.get("created", []):
+        issue_number = item.get("issue")
+        if issue_number is None:
+            # dry_run item — log only
+            labeled.append({"subject": item.get("subject"), "label": label, "dry_run": True})
+            continue
+        try:
+            adapters.labels.add_label(task.repo, issue_number, label)
+        except Exception as exc:
+            return StepResult(ok=False, error=f"add_label failed: {exc}")
+        labeled.append({"issue": issue_number, "label": label})
+    return StepResult(ok=True, data={"labeled": labeled})
