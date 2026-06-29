@@ -74,6 +74,8 @@ class RealBranchSync:
         target_branch: str,
     ) -> None:
         gh_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        if not gh_token:
+            logger.debug("No GitHub token found — proceeding unauthenticated")
         headers: dict[str, str] = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -90,7 +92,7 @@ class RealBranchSync:
 
     @staticmethod
     def _get_branch_sha(repo: str, branch: str, headers: dict[str, str]) -> str:
-        url = f"{_GITHUB_API}/repos/{repo}/git/ref/heads/{branch}"
+        url = f"{_GITHUB_API}/repos/{repo}/git/refs/heads/{branch}"
         req = urllib.request.Request(url, headers=headers)
         try:
             with urllib.request.urlopen(req) as resp:
@@ -121,7 +123,12 @@ class RealBranchSync:
                 raise RuntimeError(
                     f"Cannot update {repo}/{branch}: GitHub API returned HTTP {exc.code}"
                 ) from exc
-        # 422 → ref does not exist yet; create it
+            body = exc.read().decode(errors="replace")
+            if "Reference does not exist" not in body:
+                raise RuntimeError(
+                    f"Cannot update {repo}/{branch}: GitHub API returned HTTP 422: {body}"
+                ) from exc
+        # 422 "Reference does not exist" → create it
         post_payload = json.dumps(
             {"ref": f"refs/heads/{branch}", "sha": sha}
         ).encode()

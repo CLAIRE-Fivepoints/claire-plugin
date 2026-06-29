@@ -279,7 +279,7 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `ADO_BRIDGE_CLIENT` | `fivepoints` | Client slug used to build the role label: `role:{ADO_BRIDGE_CLIENT}-dev`. Determines which agent persona is activated by the spawn daemon. |
 | `ADO_BRIDGE_SYNC_SOURCE` | `CLAIRE-Fivepoints/fivepoints-test` | Source GitHub repo for branch sync (the repo Claire agents push to). |
 | `ADO_BRIDGE_SYNC_TARGET` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo where issues are created, where the worktree branch is pushed, and where the issue is assigned. |
-| `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target and used as base for the new `pbi-{N}` branch. |
+| `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target (legacy scripts only). The Python package (`claire fivepoints azure-issue-bridge`) hardcodes `develop` in `sync_branch_step`; this variable has no effect on the Typer CLI. |
 
 ---
 
@@ -296,16 +296,26 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 
 ## Source Files (in this plugin)
 
+### Python package (`claire fivepoints azure-issue-bridge` CLI)
+
 | File | Role |
 |------|------|
-| `domain/scripts/azure_issue_bridge/bridge.py` | Core pipeline logic |
-| `domain/scripts/azure_issue_bridge/sync.py` | Branch sync adapter — `RealBranchSync` (GitHub REST API) and `MockBranchSync` (test double) |
-| `domain/scripts/azure_issue_bridge/worktree.py` | Worktree adapter — `WorktreePrepareAdapter` Protocol, `RealWorktreePrepare` (git worktree add), `MockWorktreePrepare` (test double) |
-| `domain/scripts/azure_issue_bridge/cli.py` | CLI entry point (`python3 -m azure_issue_bridge.cli`) |
-| `domain/scripts/azure_issue_bridge/tests/` | Unit tests (triage, sync, worktree, concurrent lock) |
-| `domain/commands/azure-issue-bridge.sh` | Bash router — sets PYTHONPATH and dispatches to the python CLI |
+| `src/claire_fivepoints/azure_issue_bridge/adapters.py` | Protocols (`EmailAdapter`, `GitHubAdapter`, `LabelAdapter`, `BranchSyncAdapter`), `RealBranchSync` (GitHub REST API, no subprocess), `GmailApiAdapter`, and test doubles (`MockBranchSync`, `MockLabelAdapter`, `MockEmailAdapter`, `MockGitHubAdapter`) |
+| `src/claire_fivepoints/azure_issue_bridge/steps.py` | Pure pipeline steps: `fetch_emails_step`, `filter_pbi_step`, `create_issues_step`, `add_label_step`, `sync_branch_step` |
+| `src/claire_fivepoints/azure_issue_bridge/pipeline.py` | `BridgeTask` (pydantic task), `bridge_pipeline` (`pipe()` composition) |
+| `src/claire_fivepoints/azure_issue_bridge/bridge.py` | `is_pbi_email()` filter predicate |
+| `src/claire_fivepoints/azure_issue_bridge/tests/` | Unit tests — zero network calls, zero subprocess |
+| `src/claire_fivepoints/cli.py` | Typer CLI entry point (`claire fivepoints azure-issue-bridge run / inject`) — subprocess-backed adapters (`_GhCliAdapter`, `_RealLabelAdapter`) live here |
 
-The bash router prepends `domain/scripts` to `PYTHONPATH` so the package is importable as `azure_issue_bridge`. The module still imports `claire_py.email.auth` and `claire_py.email.watcher` from claire core (which remain there).
+### Legacy scripts (domain/scripts — predecessor, retained for reference)
+
+| File | Role |
+|------|------|
+| `domain/scripts/azure_issue_bridge/bridge.py` | Original core pipeline logic (predecessor to the Python package) |
+| `domain/scripts/azure_issue_bridge/sync.py` | Original branch sync adapter (`RealBranchSync` using GitHub REST API) |
+| `domain/scripts/azure_issue_bridge/worktree.py` | Original worktree adapter (`RealWorktreePrepare`) |
+| `domain/scripts/azure_issue_bridge/cli.py` | Original CLI entry point (`python3 -m azure_issue_bridge.cli`) |
+| `domain/commands/azure-issue-bridge.sh` | Bash router — sets PYTHONPATH and dispatches to the original python CLI |
 
 ---
 
