@@ -389,9 +389,8 @@ def bridge_run_cmd(
 def _cmd_inject(args: argparse.Namespace) -> int:
     """Feed a synthetic email into the bridge pipeline without Gmail or ADO auth.
 
-    Runs the full pipeline: create_issue → add_label → sync_branch →
-    prepare_worktree → assign. No cleanup is performed — use the displayed
-    commands to clean up manually.
+    Runs the full pipeline: create_issue → add_label → sync_branch → assign.
+    No cleanup is performed — use the displayed commands to clean up manually.
     """
     from azure_issue_bridge.bridge import (
         WorkItem,
@@ -404,7 +403,6 @@ def _cmd_inject(args: argparse.Namespace) -> int:
         parse_subject_parts,
     )
     from azure_issue_bridge.sync import RealBranchSync
-    from azure_issue_bridge.worktree import RealWorktreePrepare
 
     msg = SimpleNamespace(subject=args.subject, message_id="inject")
     if not is_pbi_email(msg):
@@ -461,8 +459,7 @@ def _cmd_inject(args: argparse.Namespace) -> int:
         print(
             f"  3. sync_branch    → {config.source_repo}/{sync_branch} → {repo}/{sync_branch}"
         )
-        print(f"  4. prepare_worktree → branch pbi-<N>")
-        print(f"  5. assign         → {agent}")
+        print(f"  4. assign         → {agent}")
         return 0
 
     _prev_repo = os.environ.get("ADO_BRIDGE_REPO")
@@ -491,20 +488,6 @@ def _cmd_inject(args: argparse.Namespace) -> int:
         print(f"✗ sync_branch failed: {exc}")
         return 1
 
-    branch_name = f"pbi-{issue.number}"
-    worktree_prepare = RealWorktreePrepare()
-    worktree_path = ""
-    try:
-        worktree_path = worktree_prepare.prepare(
-            repo=repo,
-            issue=issue.number,
-            base_branch=sync_branch,
-            branch_name=branch_name,
-        )
-    except RuntimeError as exc:
-        print(f"✗ prepare_worktree failed: {exc}")
-        return 1
-
     try:
         assign_github_issue(repo, issue.number, agent)
     except RuntimeError as exc:
@@ -517,14 +500,9 @@ def _cmd_inject(args: argparse.Namespace) -> int:
     print(
         f"Branch sync   : {config.source_repo}/{sync_branch} → {repo}/{sync_branch}"
     )
-    print(f"Branch        : {branch_name}")
-    if worktree_path:
-        print(f"Worktree      : {worktree_path}")
     print(f"Assigné à     : {agent}")
     print(f"\nPour nettoyer :")
     print(f"  gh issue close {issue.number} --repo {repo}")
-    if worktree_path:
-        print(f"  git worktree remove {worktree_path}")
     return 0
 
 
