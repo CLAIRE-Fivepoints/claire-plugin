@@ -54,6 +54,22 @@ def create_issues_step(task, ctx: dict, adapters) -> StepResult:
     return StepResult(ok=True, data={"created": created})
 
 
+def sync_branch_step(task, ctx: dict, adapters) -> StepResult:
+    """Sync source/develop → target/develop before worktree creation."""
+    if task.dry_run:
+        return StepResult(ok=True, data={"sync_skipped": True})
+    try:
+        adapters.branch_sync.sync_branch(
+            source_repo=task.source_repo,
+            source_branch="develop",
+            target_repo=task.repo,
+            target_branch="develop",
+        )
+    except Exception as exc:
+        return StepResult(ok=False, error=f"sync_branch failed: {exc}")
+    return StepResult(ok=True, data={"branch_synced": True})
+
+
 def add_label_step(task, ctx: dict, adapters) -> StepResult:
     """Add role:{client}-dev label to each created issue."""
     label = f"role:{task.client}-dev"

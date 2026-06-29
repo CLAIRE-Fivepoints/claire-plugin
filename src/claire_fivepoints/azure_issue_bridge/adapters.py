@@ -1,14 +1,23 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
+- RealBranchSync: syncs branches via the GitHub REST API (urllib) — no subprocess.
 - CLI-backed adapters (GhCliAdapter, RealLabelAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
 import json
+import logging
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
+
+logger = logging.getLogger(__name__)
+
+_GITHUB_API = "https://api.github.com"
 
 
 class EmailAdapter(Protocol):
@@ -29,16 +38,112 @@ class LabelAdapter(Protocol):
         ...
 
 
+class BranchSyncAdapter(Protocol):
+    def sync_branch(
+        self,
+        source_repo: str,
+        source_branch: str,
+        target_repo: str,
+        target_branch: str,
+    ) -> None:
+        """Force-update target_branch in target_repo to match source_branch in source_repo."""
+        ...
+
+
 @dataclass
 class BridgeAdapters:
     email: EmailAdapter
     github: GitHubAdapter
     labels: LabelAdapter
+    branch_sync: BranchSyncAdapter
 
 
 # ---------------------------------------------------------------------------
 # Concrete adapters
 # ---------------------------------------------------------------------------
+
+
+class RealBranchSync:
+    """Syncs a branch from source_repo to target_repo via the GitHub REST API."""
+
+    def sync_branch(
+        self,
+        source_repo: str,
+        source_branch: str,
+        target_repo: str,
+        target_branch: str,
+    ) -> None:
+        gh_token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        if not gh_token:
+            logger.debug("No GitHub token found — proceeding unauthenticated")
+        headers: dict[str, str] = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if gh_token:
+            headers["Authorization"] = f"Bearer {gh_token}"
+
+        sha = self._get_branch_sha(source_repo, source_branch, headers)
+        self._set_branch_sha(target_repo, target_branch, sha, headers)
+        logger.info(
+            "Synced %s/%s → %s/%s (sha=%.7s)",
+            source_repo, source_branch, target_repo, target_branch, sha,
+        )
+
+    @staticmethod
+    def _get_branch_sha(repo: str, branch: str, headers: dict[str, str]) -> str:
+        url = f"{_GITHUB_API}/repos/{repo}/git/refs/heads/{branch}"
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())["object"]["sha"]
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"Cannot read {repo}/{branch}: GitHub API returned HTTP {exc.code}"
+            ) from exc
+
+    @staticmethod
+    def _set_branch_sha(
+        repo: str, branch: str, sha: str, headers: dict[str, str]
+    ) -> None:
+        """Force-update branch in repo to sha. Creates the ref if absent."""
+        content_headers = {**headers, "Content-Type": "application/json"}
+        patch_payload = json.dumps({"sha": sha, "force": True}).encode()
+        patch_req = urllib.request.Request(
+            f"{_GITHUB_API}/repos/{repo}/git/refs/heads/{branch}",
+            data=patch_payload,
+            headers=content_headers,
+            method="PATCH",
+        )
+        try:
+            with urllib.request.urlopen(patch_req):
+                return
+        except urllib.error.HTTPError as exc:
+            if exc.code != 422:
+                raise RuntimeError(
+                    f"Cannot update {repo}/{branch}: GitHub API returned HTTP {exc.code}"
+                ) from exc
+            body = exc.read().decode(errors="replace")
+            if "Reference does not exist" not in body:
+                raise RuntimeError(
+                    f"Cannot update {repo}/{branch}: GitHub API returned HTTP 422: {body}"
+                ) from exc
+        # 422 "Reference does not exist" → create it
+        post_payload = json.dumps(
+            {"ref": f"refs/heads/{branch}", "sha": sha}
+        ).encode()
+        post_req = urllib.request.Request(
+            f"{_GITHUB_API}/repos/{repo}/git/refs",
+            data=post_payload,
+            headers=content_headers,
+        )
+        try:
+            with urllib.request.urlopen(post_req):
+                return
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"Cannot create {repo}/{branch}: GitHub API returned HTTP {exc.code}"
+            ) from exc
 
 
 @dataclass
@@ -101,6 +206,20 @@ class GmailApiAdapter:
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
+
+
+class MockBranchSync:
+    def __init__(self) -> None:
+        self.syncs: list[tuple[str, str, str, str]] = []
+
+    def sync_branch(
+        self,
+        source_repo: str,
+        source_branch: str,
+        target_repo: str,
+        target_branch: str,
+    ) -> None:
+        self.syncs.append((source_repo, source_branch, target_repo, target_branch))
 
 
 class MockLabelAdapter:
