@@ -188,7 +188,7 @@ The command:
 1. Constructs an `EmailMessage` from `--from` and `--subject`
 2. Validates it with `is_pbi_email()` (subject must match the ADO PBI pattern)
 3. Builds a synthetic `WorkItem` from the parsed subject (no ADO fetch — subject data only)
-4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → prepare_worktree → assign` (GitHub auth required, no Gmail or ADO auth)
+4. In live mode: runs the full pipeline — `create_issue → add_label → sync_branch → assign` (GitHub auth required, no Gmail or ADO auth)
 5. In `--dry-run` mode: prints the parsed PBI and the planned pipeline steps, creates nothing
 
 ```bash

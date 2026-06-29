@@ -244,6 +244,7 @@ class TestCmdInjectLive:
         assert "✓ Pipeline complet" in out
         assert "Issue créée" in out
         assert "Label" in out
+        assert "Branch" in out
         assert "Assigné à" in out
         assert "Pour nettoyer" in out
         assert "gh issue close 151" in out
