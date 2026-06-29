@@ -1,0 +1,10 @@
+steps:
+  - name: ado-push
+    description: "Push branch to ADO, create ADO PR"
+    flags: [--issue, --repo]
+  - name: ado-watch
+    description: "Monitor ADO PR until it is merged"
+    flags: [--pr, --ado-pr, --repo]
+  - name: improvement-cycle
+    description: "ADO comment review + fix cycle"
+    flags: [--pr, --repo]

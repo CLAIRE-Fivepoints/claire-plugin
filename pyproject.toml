@@ -1,0 +1,34 @@
+[project]
+name = "claire-fivepoints"
+version = "0.1.0"
+description = "Fivepoints plugin for Claire V2 — registers fivepoints.tfone.* workflows"
+requires-python = ">=3.12"
+dependencies = [
+    "claire-core",
+    "claire-adapters",
+    "claire-workflows",
+    "google-api-python-client>=2.0",
+    "google-auth>=2.0",
+]
+
+[tool.uv.sources]
+claire-core = { git = "https://github.com/claire-labs/claire.git", subdirectory = "packages/core" }
+claire-adapters = { git = "https://github.com/claire-labs/claire.git", subdirectory = "packages/adapters" }
+claire-workflows = { git = "https://github.com/claire-labs/claire.git", subdirectory = "packages/workflows" }
+
+[project.scripts]
+fivepoints = "claire_fivepoints.cli:app"
+
+[project.entry-points."claire.plugins"]
+fivepoints = "claire_fivepoints:plugin_info"
+
+[project.entry-points."claire.workflows"]
+"fivepoints.tfone.github" = "claire_fivepoints.workflows:run_fivepoints_tfone_github_for_issue"
+"fivepoints.tfone.full" = "claire_fivepoints.workflows:run_fivepoints_tfone_full_for_issue"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claire_fivepoints"]
