@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from claire_adapters.token import CONFIG_DIR, find_repo_entry, parse_env_file
+from claire_adapters.token import CONFIG_DIR, parse_env_file
 from claire_core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -33,9 +33,13 @@ class ADOContextAdapter(Protocol):
         ...
 
     def download_attachments(
-        self, org: str, project: str, item_id: int, dest: Path
+        self, org: str, project: str, work_item: dict, dest: Path
     ) -> list[Path]:
-        """Download all AttachedFile relations to *dest*; return paths written."""
+        """Download all AttachedFile relations to *dest*; return paths written.
+
+        *work_item* must be the already-fetched dict returned by fetch_work_item.
+        The caller is responsible for fetching — this avoids a redundant REST call.
+        """
         ...
 
 
@@ -82,13 +86,12 @@ class RealADOContextAdapter:
         return result
 
     def download_attachments(
-        self, org: str, project: str, item_id: int, dest: Path
+        self, org: str, project: str, work_item: dict, dest: Path
     ) -> list[Path]:
         import re
 
         import requests
 
-        work_item = self.fetch_work_item(org, project, item_id)
         relations = work_item.get("relations") or []
 
         dest.mkdir(parents=True, exist_ok=True)
@@ -142,7 +145,7 @@ class MockADOContextAdapter:
         return self.work_item
 
     def download_attachments(
-        self, org: str, project: str, item_id: int, dest: Path
+        self, org: str, project: str, work_item: dict, dest: Path
     ) -> list[Path]:
         dest.mkdir(parents=True, exist_ok=True)
         return list(self.attachments)

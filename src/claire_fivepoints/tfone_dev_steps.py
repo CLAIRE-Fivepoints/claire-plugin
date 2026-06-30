@@ -2,6 +2,7 @@
 
 Pipeline shape:
   pipe(
+    HydrateStateStep(),        # reads role label; populates ctx for restart recovery
     DevWithADOContextStep(),   # fetch ADO context + download attachments + spawn dev + wait
     TesterStep(),              # spawn tester + wait role:ready
     PushToADOStep(),           # push branch to ADO + create PR  (from fivepoints_pipeline)
@@ -21,6 +22,7 @@ from claire_workflows.fivepoints_pipeline import (
     FivepointsGitHubAdapter,
     FivepointsTask,
     FivepointsTerminalAdapter,
+    HydrateStateStep,
     PushToADOStep,
     WaitForADOMergeStep,
 )
@@ -97,8 +99,12 @@ def _write_ado_context_summary(
 class DevWithADOContextStep:
     """Fetch ADO context, download attachments, spawn dev session, wait for completion.
 
-    On restart (ctx already has dev_done=True), the step is a no-op so the
-    pipeline can resume at TesterStep without re-spawning the dev.
+    On restart, HydrateStateStep pre-populates ctx with dev_done=True when
+    role:tester (or role:ready) is already present — this step then no-ops so
+    the pipeline resumes at TesterStep without re-spawning the dev.
+
+    fetch_work_item is called once; the result is passed directly to
+    download_attachments to avoid a redundant REST round-trip.
     """
 
     def __call__(
@@ -125,7 +131,7 @@ class DevWithADOContextStep:
         )
 
         attachment_paths = adapters.ado_context.download_attachments(
-            adapters.ado_org, adapters.ado_project, task.issue, dest
+            adapters.ado_org, adapters.ado_project, work_item, dest
         )
         logger.info(
             "tfone_dev.ado_context.attachments_downloaded",
@@ -154,7 +160,8 @@ class DevWithADOContextStep:
 class TesterStep:
     """Spawn tester session and wait until role:ready label is applied.
 
-    Skips if ctx already has tester_done=True (pipeline restart recovery).
+    Skips if ctx already has tester_done=True (set by HydrateStateStep on restart
+    when role:ready is already present).
     """
 
     def __call__(
@@ -191,7 +198,12 @@ class TesterStep:
 
 
 class FivepointsTfoneDevWorkflow:
-    """dev-only variant: DevWithADOContextStep → TesterStep → ADO push → ADO merge.
+    """dev-only variant: HydrateState → Dev+ADO context → Tester → ADO push → ADO merge.
+
+    HydrateStateStep reads the current role label at startup and populates ctx
+    so restart recovery works correctly:
+      role:tester present  → dev_done=True  (skip DevWithADOContextStep)
+      role:ready  present  → dev_done=True, tester_done=True (skip both)
 
     Usage::
 
@@ -201,6 +213,7 @@ class FivepointsTfoneDevWorkflow:
 
     def __init__(self) -> None:
         self._pipeline = pipe(
+            HydrateStateStep(),
             DevWithADOContextStep(),
             TesterStep(),
             PushToADOStep(),

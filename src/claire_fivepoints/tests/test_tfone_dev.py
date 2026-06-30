@@ -1,7 +1,7 @@
 """Tests for DevWithADOContextStep, TesterStep and FivepointsTfoneDevWorkflow.
 
 Level 1 — unit tests for each step in isolation.
-Level 2 — scenario tests for the full FivepointsTfoneDevWorkflow.
+Level 2 — scenario tests for the full FivepointsTfoneDevWorkflow (including restart recovery).
 """
 from __future__ import annotations
 
@@ -29,16 +29,14 @@ def _make_adapters(
     tmp_path: Path,
     *,
     closed: bool = False,
-    label_sequence: list[str | None] | None = None,
+    role_label: str | None = None,
     pr_number: int | None = 10,
     work_item: dict | None = None,
     attachment_paths: list[Path] | None = None,
 ) -> FivepointsTfoneDevAdapters:
     gh = MagicMock()
     gh.is_issue_closed.return_value = closed
-
-    labels = label_sequence if label_sequence is not None else ["role:tester", "role:ready"]
-    gh.get_role_label.side_effect = labels
+    gh.get_role_label.return_value = role_label
     gh.wait_for_label.return_value = None
     gh.find_pr_for_issue.return_value = pr_number
 
@@ -85,13 +83,13 @@ class TestMockADOContextAdapter:
         fake_path = tmp_path / "fixture.docx"
         adapter = MockADOContextAdapter(work_item={}, attachments=[fake_path])
         dest = tmp_path / "attachments"
-        paths = adapter.download_attachments("org", "proj", 1, dest)
+        paths = adapter.download_attachments("org", "proj", {}, dest)
         assert paths == [fake_path]
         assert dest.is_dir()
 
     def test_download_attachments_empty(self, tmp_path: Path) -> None:
         adapter = MockADOContextAdapter(work_item={}, attachments=[])
-        paths = adapter.download_attachments("org", "proj", 1, tmp_path / "out")
+        paths = adapter.download_attachments("org", "proj", {}, tmp_path / "out")
         assert paths == []
 
 
@@ -135,6 +133,24 @@ class TestDevWithADOContextStep:
         assert "My Feature" in content
         assert "Desc" in content
         assert "AC" in content
+
+    def test_single_ado_fetch_per_run(self, tmp_path: Path) -> None:
+        """download_attachments receives the already-fetched work_item — no double fetch."""
+        from unittest.mock import patch
+
+        adapters = _make_adapters(tmp_path)
+        task = _make_task(issue=5)
+
+        fetch_calls: list = []
+        orig_fetch = adapters.ado_context.fetch_work_item
+
+        def tracking_fetch(org, project, item_id):
+            fetch_calls.append((org, project, item_id))
+            return orig_fetch(org, project, item_id)
+
+        adapters.ado_context.fetch_work_item = tracking_fetch
+        DevWithADOContextStep()(task, {}, adapters)
+        assert len(fetch_calls) == 1, "fetch_work_item must be called exactly once"
 
     def test_writes_attachments_list_in_context_file(self, tmp_path: Path) -> None:
         fake = tmp_path / "spec.docx"
@@ -202,13 +218,14 @@ class TestTesterStep:
 
 
 # ---------------------------------------------------------------------------
-# FivepointsTfoneDevWorkflow — scenario tests
+# FivepointsTfoneDevWorkflow — scenario tests (including restart recovery)
 # ---------------------------------------------------------------------------
 
 
 class TestFivepointsTfoneDevWorkflow:
-    def test_full_happy_path(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, pr_number=20)
+    def test_full_happy_path_fresh_start(self, tmp_path: Path) -> None:
+        """No label present → HydrateState returns {} → all steps run."""
+        adapters = _make_adapters(tmp_path, role_label=None, pr_number=20)
         task = _make_task(issue=42)
         result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
@@ -217,41 +234,41 @@ class TestFivepointsTfoneDevWorkflow:
         adapters.ado.push_branch_and_create_pr.assert_called_once_with(42)
         adapters.ado.wait_for_merge.assert_called_once_with(42)
 
-    def test_dev_done_in_ctx_skips_spawn_dev(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, pr_number=5)
+    def test_restart_with_role_tester_skips_dev(self, tmp_path: Path) -> None:
+        """role:tester present → HydrateState sets dev_done=True → DevStep skipped."""
+        adapters = _make_adapters(tmp_path, role_label="role:tester", pr_number=5)
         task = _make_task()
-        # Verify step-level skip: dev_done=True → DevWithADOContextStep no-ops
-        result = DevWithADOContextStep()(task, {"dev_done": True}, adapters)
+        result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_not_called()
-        # Tester still runs when called directly with empty ctx
-        result2 = TesterStep()(task, {}, adapters)
-        assert result2.ok
         adapters.terminal.spawn_tester.assert_called_once()
 
-    def test_tester_done_in_ctx_skips_spawn_tester(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, pr_number=5)
+    def test_restart_with_role_ready_skips_dev_and_tester(self, tmp_path: Path) -> None:
+        """role:ready present → HydrateState sets dev_done+tester_done → both skipped."""
+        adapters = _make_adapters(tmp_path, role_label="role:ready", pr_number=7)
         task = _make_task()
-        result = TesterStep()(task, {"tester_done": True}, adapters)
+        result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
+        adapters.terminal.spawn_dev.assert_not_called()
         adapters.terminal.spawn_tester.assert_not_called()
-        # ADO steps still called
-        adapters.ado.push_branch_and_create_pr.return_value = 55
-        from claire_workflows.fivepoints_pipeline import PushToADOStep
-        push_result = PushToADOStep()(task, {}, adapters)
-        assert push_result.ok
+        adapters.ado.push_branch_and_create_pr.assert_called_once()
+
+    def test_issue_closed_exits_cleanly(self, tmp_path: Path) -> None:
+        """Closed issue → HydrateState returns ok=False → pipeline exits."""
+        adapters = _make_adapters(tmp_path, closed=True)
+        task = _make_task()
+        result = FivepointsTfoneDevWorkflow().run(task, adapters)
+        assert not result.ok
+        adapters.terminal.spawn_dev.assert_not_called()
+        adapters.ado.push_branch_and_create_pr.assert_not_called()
 
     def test_ado_merge_failure_propagates(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path)
+        adapters = _make_adapters(tmp_path, role_label=None)
         adapters.ado.push_branch_and_create_pr.return_value = 99
         adapters.ado.wait_for_merge.side_effect = RuntimeError("ADO PR abandoned")
         task = _make_task()
-        # Run just the ADO steps to confirm error propagation
-        from claire_workflows.fivepoints_pipeline import PushToADOStep, WaitForADOMergeStep
-        push_result = PushToADOStep()(task, {}, adapters)
-        assert push_result.ok
         with pytest.raises(RuntimeError, match="ADO PR abandoned"):
-            WaitForADOMergeStep()(task, {"ado_pr_id": 99}, adapters)
+            FivepointsTfoneDevWorkflow().run(task, adapters)
 
 
 # ---------------------------------------------------------------------------
