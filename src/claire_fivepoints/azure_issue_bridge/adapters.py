@@ -1,15 +1,18 @@
-"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter, AssignAdapter protocols, concrete adapters, and test doubles.
+"""azure_issue_bridge.adapters — EmailAdapter, GitHubAdapter, LabelAdapter, BranchSyncAdapter, WorktreePrepareAdapter, AssignAdapter, ADOAdapter protocols, concrete adapters, and test doubles.
 
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
 - RealBranchSync: syncs branches via the GitHub REST API (urllib) — no subprocess.
 - RealWorktreePrepare: creates git worktrees via subprocess git — no GitHub CLI.
+- RealADOAdapter: fetches Azure DevOps work items via the REST API (urllib) — no subprocess.
 - CLI-backed adapters (GhCliAdapter, RealLabelAdapter, RealAssignAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -33,16 +36,20 @@ __all__ = [
     "BranchSyncAdapter",
     "WorktreePrepareAdapter",
     "AssignAdapter",
+    "ADOAdapter",
+    "WorkItem",
     "BridgeAdapters",
     "GmailApiAdapter",
     "RealBranchSync",
     "RealWorktreePrepare",
+    "RealADOAdapter",
     "MockBranchSync",
     "MockEmailAdapter",
     "MockGitHubAdapter",
     "MockLabelAdapter",
     "MockWorktreePrepare",
     "MockAssignAdapter",
+    "MockADOAdapter",
 ]
 
 
@@ -83,6 +90,30 @@ class AssignAdapter(Protocol):
 
 
 @dataclass
+class WorkItem:
+    """Azure DevOps work item fields relevant to GitHub issue body enrichment."""
+
+    id: int
+    title: str
+    description: str
+    acceptance_criteria: str
+    area_path: str = ""
+    state: str = ""
+    parent_id: int | None = None  # System.Parent — set for Tasks under a PBI
+    work_item_type: str = ""  # System.WorkItemType (e.g. "Task", "Product Backlog Item")
+
+
+class ADOAdapter(Protocol):
+    def fetch_work_item(self, pbi_id: str) -> WorkItem:
+        """Fetch a work item from Azure DevOps and return a WorkItem instance."""
+        ...
+
+    def work_item_url(self, work_item_id: int | str) -> str:
+        """Return the Azure DevOps web URL for a given work item ID."""
+        ...
+
+
+@dataclass
 class BridgeAdapters:
     email: EmailAdapter
     github: GitHubAdapter
@@ -90,6 +121,7 @@ class BridgeAdapters:
     branch_sync: BranchSyncAdapter
     worktree: WorktreePrepareAdapter
     assign: AssignAdapter
+    ado: ADOAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -180,6 +212,105 @@ class RealBranchSync:
             ) from exc
 
 
+_DEFAULT_ADO_ORG = "FivePointsTechnology"
+_DEFAULT_ADO_PROJECT = "TFIOne"
+_ADO_API_VERSION = "7.1"
+
+
+def _get_ado_pat() -> str:
+    """Resolve the Azure DevOps PAT from the environment or ~/.config/claire/.env."""
+    pat = os.environ.get("AZURE_DEVOPS_PAT", "")
+    if pat:
+        return pat
+
+    config_env = Path("~/.config/claire/.env").expanduser()
+    if config_env.exists():
+        with open(config_env) as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("AZURE_DEVOPS_PAT="):
+                    value = line[len("AZURE_DEVOPS_PAT=") :]
+                    if value:
+                        return value
+
+    raise RuntimeError(
+        "AZURE_DEVOPS_PAT not found. "
+        "Set it in the environment or in ~/.config/claire/.env"
+    )
+
+
+def _strip_html(html: str) -> str:
+    """Remove HTML tags, decode common entities, and normalise whitespace."""
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = (
+        text.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&nbsp;", " ")
+        .replace("&#39;", "'")
+        .replace("&quot;", '"')
+    )
+    return re.sub(r"\s+", " ", text).strip()
+
+
+@dataclass
+class RealADOAdapter:
+    """Fetches Azure DevOps work items via the REST API (urllib) — no subprocess."""
+
+    org: str = field(default_factory=lambda: os.environ.get("ADO_ORG", _DEFAULT_ADO_ORG))
+    project: str = field(
+        default_factory=lambda: os.environ.get("ADO_PROJECT", _DEFAULT_ADO_PROJECT)
+    )
+
+    def work_item_url(self, work_item_id: int | str) -> str:
+        return f"https://dev.azure.com/{self.org}/{self.project}/_workitems/edit/{work_item_id}"
+
+    def fetch_work_item(self, pbi_id: str) -> WorkItem:
+        pat = _get_ado_pat()
+        auth = base64.b64encode(f":{pat}".encode()).decode()
+        url = (
+            f"https://dev.azure.com/{self.org}/{self.project}/_apis/wit/workitems/{pbi_id}"
+            f"?$expand=relations&api-version={_ADO_API_VERSION}"
+        )
+        req = urllib.request.Request(
+            url,
+            headers={
+                "Authorization": f"Basic {auth}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            raise RuntimeError(
+                f"ADO API returned HTTP {exc.code} for work item {pbi_id}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"ADO API request failed for work item {pbi_id}: {exc}"
+            ) from exc
+
+        if "errorCode" in data or ("message" in data and "id" not in data):
+            raise RuntimeError(f"ADO API error: {data.get('message', data)}")
+
+        fields = data.get("fields", {})
+        raw_parent = fields.get("System.Parent")
+
+        return WorkItem(
+            id=data["id"],
+            title=fields.get("System.Title", f"PBI {pbi_id}"),
+            description=_strip_html(fields.get("System.Description", "") or ""),
+            acceptance_criteria=_strip_html(
+                fields.get("Microsoft.VSTS.Common.AcceptanceCriteria", "") or ""
+            ),
+            area_path=fields.get("System.AreaPath", ""),
+            state=fields.get("System.State", ""),
+            parent_id=int(raw_parent) if raw_parent else None,
+            work_item_type=fields.get("System.WorkItemType", ""),
+        )
+
+
 @dataclass
 class GmailApiAdapter:
     """Access Gmail via the Google API directly (OAuth2).
@@ -240,6 +371,36 @@ class GmailApiAdapter:
 # ---------------------------------------------------------------------------
 # Test doubles
 # ---------------------------------------------------------------------------
+
+
+class MockADOAdapter:
+    """Test double for ADOAdapter — returns canned WorkItem data, no network calls.
+
+    Unknown PBI IDs return a bare placeholder WorkItem (empty description/AC,
+    no parent) rather than raising, so tests unrelated to ADO enrichment don't
+    need to pre-seed every PBI ID used in their fixtures.
+    """
+
+    def __init__(
+        self,
+        work_items: dict[str, WorkItem] | None = None,
+        org: str = _DEFAULT_ADO_ORG,
+        project: str = _DEFAULT_ADO_PROJECT,
+    ) -> None:
+        self.work_items = work_items or {}
+        self.org = org
+        self.project = project
+        self.calls: list[str] = []
+
+    def work_item_url(self, work_item_id: int | str) -> str:
+        return f"https://dev.azure.com/{self.org}/{self.project}/_workitems/edit/{work_item_id}"
+
+    def fetch_work_item(self, pbi_id: str) -> WorkItem:
+        self.calls.append(str(pbi_id))
+        key = str(pbi_id)
+        if key in self.work_items:
+            return self.work_items[key]
+        return WorkItem(id=int(pbi_id), title=f"PBI {pbi_id}", description="", acceptance_criteria="")
 
 
 class MockBranchSync:

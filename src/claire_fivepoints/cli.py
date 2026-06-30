@@ -348,7 +348,7 @@ def bridge_run_cmd(
     ),
 ) -> None:
     """Scan Gmail for ADO PBI assignment emails and create GitHub issues."""
-    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter, RealBranchSync, RealWorktreePrepare
+    from claire_fivepoints.azure_issue_bridge.adapters import BridgeAdapters, GmailApiAdapter, RealADOAdapter, RealBranchSync, RealWorktreePrepare
     from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 
     _console.print(f"[dim]Sender:[/dim] {sender}")
@@ -366,6 +366,7 @@ def bridge_run_cmd(
         branch_sync=RealBranchSync(),
         worktree=RealWorktreePrepare(),
         assign=_RealAssignAdapter(),
+        ado=RealADOAdapter(),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:

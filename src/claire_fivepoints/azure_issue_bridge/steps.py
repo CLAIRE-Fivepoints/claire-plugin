@@ -1,10 +1,14 @@
 """azure_issue_bridge.steps — pure pipeline steps: fetch_emails, filter_pbi, create_issues."""
 from __future__ import annotations
 
+import logging
 from email.message import EmailMessage
 
 from claire_core.pipeline import StepResult
-from claire_fivepoints.azure_issue_bridge.bridge import is_pbi_email
+from claire_fivepoints.azure_issue_bridge.adapters import ADOAdapter, WorkItem
+from claire_fivepoints.azure_issue_bridge.bridge import is_pbi_email, parse_pbi_id
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_emails_step(task, ctx: dict, adapters) -> StepResult:
@@ -31,6 +35,37 @@ def filter_pbi_step(task, ctx: dict, adapters) -> StepResult:
     return StepResult(ok=True, data={"pbi_emails": pbi_emails})
 
 
+def _build_issue_body(work_item: WorkItem, ado: ADOAdapter) -> str:
+    """Build an enriched issue body from the ADO work item (state, area, type,
+    parent PBI link + background) — falls back to source/thread when no PBI ID
+    could be parsed from the email subject.
+    """
+    body = (
+        f"**Azure DevOps:** {ado.work_item_url(work_item.id)}\n\n"
+        f"**State:** {work_item.state}\n**Area:** {work_item.area_path}"
+    )
+    if work_item.work_item_type:
+        body += f"\n**Type:** {work_item.work_item_type}"
+
+    parent: WorkItem | None = None
+    if work_item.parent_id:
+        body += f"\n**Parent PBI:** {ado.work_item_url(work_item.parent_id)}"
+        try:
+            parent = ado.fetch_work_item(str(work_item.parent_id))
+        except Exception as exc:
+            logger.warning("Could not fetch parent PBI #%s: %s", work_item.parent_id, exc)
+
+    if work_item.description:
+        body += f"\n\n**Description:**\n{work_item.description}"
+    if work_item.acceptance_criteria:
+        body += f"\n\n**Acceptance Criteria:**\n{work_item.acceptance_criteria}"
+
+    if parent and parent.description and parent.description != work_item.description:
+        body += f"\n\n---\n**Parent PBI — Background:**\n{parent.description}"
+
+    return body
+
+
 def create_issues_step(task, ctx: dict, adapters) -> StepResult:
     """Create one GitHub issue per detected PBI. No-op when dry_run=True."""
     if not task.dry_run and not task.repo:
@@ -41,10 +76,20 @@ def create_issues_step(task, ctx: dict, adapters) -> StepResult:
         if task.dry_run:
             created.append({"subject": e["subject"], "dry_run": True})
             continue
+
+        pbi_id = parse_pbi_id(e["subject"])
+        body = f"Source: {e['from_addr']}\nThread: {e['thread_id']}"
+        if pbi_id is not None:
+            try:
+                work_item = adapters.ado.fetch_work_item(pbi_id)
+            except Exception as exc:
+                return StepResult(ok=False, error=f"fetch_work_item failed: {exc}")
+            body = _build_issue_body(work_item, adapters.ado)
+
         try:
             issue_number = adapters.github.create_issue(
                 title=f"PBI: {e['subject']}",
-                body=f"Source: {e['from_addr']}\nThread: {e['thread_id']}",
+                body=body,
                 repo=task.repo,
             )
         except RuntimeError as exc:
