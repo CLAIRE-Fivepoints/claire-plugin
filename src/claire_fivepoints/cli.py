@@ -422,7 +422,10 @@ def bridge_run_cmd(
         if item.get("dry_run"):
             _console.print(f"  [dim][dry-run][/dim] [green]✓[/green] {subject}")
         else:
-            _console.print(f"  [green]✓[/green] {subject} → #{item.get('issue')}")
+            if item.get("skipped"):
+                _console.print(f"  [dim]↷ skipped (exists #{ item.get('existing_issue')})[/dim] {subject}")
+            else:
+                _console.print(f"  [green]✓[/green] {subject} → #{item.get('issue')}")
 
 
 def _cmd_inject(args: argparse.Namespace) -> int:
