@@ -78,6 +78,15 @@ def create_issues_step(task, ctx: dict, adapters) -> StepResult:
             continue
 
         pbi_id = parse_pbi_id(e["subject"])
+
+        # Déduplication — skip si une issue ouverte existe déjà pour ce PBI
+        if pbi_id is not None:
+            existing = adapters.github.find_open_issue(task.repo, pbi_id)
+            if existing is not None:
+                logger.info("PBI %s already has open issue #%s — skipping", pbi_id, existing)
+                created.append({"subject": e["subject"], "skipped": True, "existing_issue": existing})
+                continue
+
         body = f"Source: {e['from_addr']}\nThread: {e['thread_id']}"
         if pbi_id is not None:
             try:

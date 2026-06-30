@@ -66,6 +66,10 @@ class GitHubAdapter(Protocol):
         """Create a GitHub issue and return its number."""
         ...
 
+    def find_open_issue(self, repo: str, pbi_id: str) -> int | None:
+        """Return the issue number of an existing open issue for this PBI ID, or None."""
+        ...
+
 
 class LabelAdapter(Protocol):
     def add_label(self, repo: str, issue: int, label: str) -> None:
@@ -413,6 +417,9 @@ class MockGitHubAdapter:
     def create_issue(self, title: str, body: str, repo: str) -> int:
         self.created.append({"title": title, "body": body, "repo": repo})
         return len(self.created)
+
+    def find_open_issue(self, repo: str, pbi_id: str) -> int | None:
+        return None
 
 
 class MockAssignAdapter:

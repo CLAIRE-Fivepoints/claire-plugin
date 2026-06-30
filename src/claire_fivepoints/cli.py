@@ -291,6 +291,20 @@ class _GhCliAdapter:
         url = result.stdout.strip().rstrip("/")
         return int(url.split("/")[-1])
 
+    def find_open_issue(self, repo: str, pbi_id: str) -> int | None:
+        import json, subprocess
+        result = subprocess.run(
+            ["gh", "issue", "list", "--repo", repo, "--state", "open",
+             "--search", pbi_id, "--json", "number,title", "--limit", "10"],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return None
+        for issue in json.loads(result.stdout or "[]"):
+            if pbi_id in issue.get("title", ""):
+                return issue["number"]
+        return None
+
 
 class _RealLabelAdapter:
     """Calls `gh issue edit --add-label` via subprocess. Creates the label if absent."""
