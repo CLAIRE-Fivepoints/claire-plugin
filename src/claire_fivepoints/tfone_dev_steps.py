@@ -2,12 +2,15 @@
 
 Pipeline shape:
   pipe(
-    HydrateStateStep(),        # reads role label; populates ctx for restart recovery
-    DevWithADOContextStep(),   # fetch ADO context + download attachments + spawn dev + wait
-    TesterStep(),              # spawn tester + wait role:ready
-    PushToADOStep(),           # push branch to ADO + create PR  (from fivepoints_pipeline)
-    WaitForADOMergeStep(),     # block until ADO PR merged        (from fivepoints_pipeline)
+    HydrateStateStep(),   # reads role label; populates ctx for restart recovery
+    SpawnDevStep(),       # spawn dev terminal + wait for role:tester label
+    TesterStep(),         # spawn tester + wait role:ready
+    PushToADOStep(),      # push branch to ADO + create PR  (from fivepoints_pipeline)
+    WaitForADOMergeStep(),# block until ADO PR merged        (from fivepoints_pipeline)
   )
+
+The dev agent reads the GitHub issue body (populated by the bridge) and downloads
+ADO attachments itself — the workflow does not pre-fetch ADO context.
 """
 from __future__ import annotations
 
@@ -27,8 +30,6 @@ from claire_workflows.fivepoints_pipeline import (
     WaitForADOMergeStep,
 )
 
-from claire_fivepoints.ado_context_adapter import ADOContextAdapter
-
 logger = get_logger(__name__)
 
 _LABEL_TESTER = "role:tester"
@@ -47,7 +48,6 @@ class FivepointsTfoneDevAdapters:
     github: FivepointsGitHubAdapter
     terminal: FivepointsTerminalAdapter
     ado: FivepointsADOAdapter
-    ado_context: ADOContextAdapter
     local_path: Path
     ado_org: str
     ado_project: str
@@ -58,53 +58,15 @@ class FivepointsTfoneDevAdapters:
 # ---------------------------------------------------------------------------
 
 
-def _write_ado_context_summary(
-    work_item: dict, attachment_paths: list[Path], dest_file: Path
-) -> None:
-    """Write a human-readable ADO context summary to *dest_file*."""
-    fields = work_item.get("fields") or {}
-    title = fields.get("System.Title", "")
-    description = fields.get("System.Description", "")
-    acceptance_criteria = fields.get("Microsoft.VSTS.Common.AcceptanceCriteria", "")
-    area = fields.get("System.AreaPath", "")
-    state = fields.get("System.State", "")
-    work_type = fields.get("System.WorkItemType", "")
-    item_id = work_item.get("id", "")
+class SpawnDevStep:
+    """Spawn dev session and wait for role:tester label.
 
-    lines = [
-        f"# ADO Work Item #{item_id} — {title}",
-        "",
-        f"**Area:** {area}",
-        f"**State:** {state}",
-        f"**Type:** {work_type}",
-        "",
-    ]
-
-    if description:
-        lines += ["## Description", "", description, ""]
-
-    if acceptance_criteria:
-        lines += ["## Acceptance Criteria", "", acceptance_criteria, ""]
-
-    if attachment_paths:
-        lines += ["## Attachments", ""]
-        for path in attachment_paths:
-            lines.append(f"- `{path.name}` → `{path}`")
-        lines.append("")
-
-    dest_file.write_text("\n".join(lines), encoding="utf-8")
-    logger.info("ado_context.summary_written path=%s", dest_file)
-
-
-class DevWithADOContextStep:
-    """Fetch ADO context, download attachments, spawn dev session, wait for completion.
+    The dev agent reads the GitHub issue body (populated by the bridge with ADO
+    content) and downloads attachments itself via ADO REST API. The workflow
+    does not pre-fetch ADO context — the issue contains everything needed.
 
     On restart, HydrateStateStep pre-populates ctx with dev_done=True when
-    role:tester (or role:ready) is already present — this step then no-ops so
-    the pipeline resumes at TesterStep without re-spawning the dev.
-
-    fetch_work_item is called once; the result is passed directly to
-    download_attachments to avoid a redundant REST round-trip.
+    role:tester (or role:ready) is already present — this step then no-ops.
     """
 
     def __call__(
@@ -115,31 +77,10 @@ class DevWithADOContextStep:
     ) -> StepResult:
         if ctx.get("dev_done"):
             logger.info(
-                "tfone_dev.dev_with_ado_context.skipped",
+                "tfone_dev.spawn_dev.skipped",
                 extra={"issue": task.issue, "repo": task.repo},
             )
             return StepResult(ok=True, data={})
-
-        dest = adapters.local_path / ".claire" / "attachments" / f"issue-{task.issue}"
-
-        work_item = adapters.ado_context.fetch_work_item(
-            adapters.ado_org, adapters.ado_project, task.issue
-        )
-        logger.info(
-            "tfone_dev.ado_context.fetched",
-            extra={"issue": task.issue, "org": adapters.ado_org},
-        )
-
-        attachment_paths = adapters.ado_context.download_attachments(
-            adapters.ado_org, adapters.ado_project, work_item, dest
-        )
-        logger.info(
-            "tfone_dev.ado_context.attachments_downloaded",
-            extra={"issue": task.issue, "count": len(attachment_paths)},
-        )
-
-        context_file = dest / "ADO_CONTEXT.md"
-        _write_ado_context_summary(work_item, attachment_paths, context_file)
 
         adapters.terminal.spawn_dev(task.issue, task.repo)
         logger.info(
@@ -198,11 +139,11 @@ class TesterStep:
 
 
 class FivepointsTfoneDevWorkflow:
-    """dev-only variant: HydrateState → Dev+ADO context → Tester → ADO push → ADO merge.
+    """dev-only variant: HydrateState → SpawnDev → Tester → ADO push → ADO merge.
 
     HydrateStateStep reads the current role label at startup and populates ctx
     so restart recovery works correctly:
-      role:tester present  → dev_done=True  (skip DevWithADOContextStep)
+      role:tester present  → dev_done=True  (skip SpawnDevStep)
       role:ready  present  → dev_done=True, tester_done=True (skip both)
 
     Usage::
@@ -214,7 +155,7 @@ class FivepointsTfoneDevWorkflow:
     def __init__(self) -> None:
         self._pipeline = pipe(
             HydrateStateStep(),
-            DevWithADOContextStep(),
+            SpawnDevStep(),
             TesterStep(),
             PushToADOStep(),
             WaitForADOMergeStep(),

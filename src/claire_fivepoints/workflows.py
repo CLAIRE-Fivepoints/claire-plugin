@@ -21,7 +21,6 @@ from claire_adapters.osascript import load_local_path
 from claire_adapters.token import find_repo_entry
 from claire_fivepoints.adapters import FivepointsGhAdapter, FivepointsOsascriptTerminalAdapter
 from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
-from claire_fivepoints.ado_context_adapter import RealADOContextAdapter
 from claire_fivepoints.tfone_dev_steps import (
     FivepointsTfoneDevAdapters,
     FivepointsTfoneDevWorkflow,
@@ -100,7 +99,6 @@ def run_fivepoints_tfone_dev_for_issue(
         github=FivepointsGhAdapter.default(repo=repo, poll_interval=poll_interval),
         terminal=FivepointsOsascriptTerminalAdapter.with_role_tokens(repo),
         ado=FivepointsConcreteADOAdapter.for_repo(repo),
-        ado_context=RealADOContextAdapter.for_repo(repo),
         local_path=local_path,
         ado_org=ado_org,
         ado_project=ado_project,
