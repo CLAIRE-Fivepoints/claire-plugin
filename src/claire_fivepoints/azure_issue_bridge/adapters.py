@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from claire_adapters.token import CONFIG_DIR, parse_env_file
 from claire_fivepoints.azure_issue_bridge.worktree import (
     MockWorktreePrepare,
     RealWorktreePrepare,
@@ -218,25 +219,23 @@ _ADO_API_VERSION = "7.1"
 
 
 def _get_ado_pat() -> str:
-    """Resolve the Azure DevOps PAT from the environment or ~/.config/claire/.env."""
-    pat = os.environ.get("AZURE_DEVOPS_PAT", "")
-    if pat:
-        return pat
+    """Resolve AZURE_DEVOPS_PAT from github_manager.env, .env, or the environment.
 
-    config_env = Path("~/.config/claire/.env").expanduser()
-    if config_env.exists():
-        with open(config_env) as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("AZURE_DEVOPS_PAT="):
-                    value = line[len("AZURE_DEVOPS_PAT=") :]
-                    if value:
-                        return value
-
-    raise RuntimeError(
-        "AZURE_DEVOPS_PAT not found. "
-        "Set it in the environment or in ~/.config/claire/.env"
+    Mirrors RealADOContextAdapter.for_repo() in claire_fivepoints.ado_context_adapter.
+    """
+    env = parse_env_file(CONFIG_DIR / "github_manager.env")
+    shared_env = parse_env_file(CONFIG_DIR / ".env")
+    pat = (
+        env.get("AZURE_DEVOPS_PAT")
+        or shared_env.get("AZURE_DEVOPS_PAT")
+        or os.environ.get("AZURE_DEVOPS_PAT", "")
     )
+    if not pat:
+        raise RuntimeError(
+            "AZURE_DEVOPS_PAT not found. "
+            f"Set it in the environment, {CONFIG_DIR / 'github_manager.env'}, or {CONFIG_DIR / '.env'}"
+        )
+    return pat
 
 
 def _strip_html(html: str) -> str:
