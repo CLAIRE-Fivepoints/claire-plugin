@@ -4,8 +4,8 @@ category: operational
 name: PIPELINE_WORKFLOW
 title: "Five Points — Client Pipeline Workflow (PBI → ADO Merge)"
 keywords: [five-points, pipeline, workflow, analyst, dev, tester, ado-push, ado-transition, transition, labels, checklist, pbi, role-dev, fivepoints-dev, role-tester, role-analyst, "persona:fivepoints-dev", "persona:fivepoints-tester", "persona:fivepoints-analyst"]
-updated: 2026-04-16
-pr: "#2188"
+updated: 2026-06-30
+pr: "#178"
 ---
 
 # Five Points — Client Pipeline Workflow
@@ -504,6 +504,23 @@ fivepoints ado-push --issue <N>
 6. Changes label to `role:ado-review`
 7. Starts `fivepoints ado-watch --pr <ADO_PR_NUMBER>`
 8. On ADO merge → closes the GitHub issue with final summary
+
+### V2 (`fivepoints.tfone.dev`) prerequisite — the `ado` remote is NOT auto-created
+
+`PushToADOStep` (`claire_fivepoints.tfone_dev_steps`) and `FivepointsConcreteADOAdapter`
+(`claire_fivepoints.ado_adapter`) — the V2 pipeline's equivalent of `ado-push` — assume a
+git remote named `ado` already exists in the dev's local checkout (`local_path` in
+`github_repos.yaml`). Unlike the legacy script above, the V2 adapter does **not** add the
+remote for you; `git push ado <branch>` fails with "ado does not appear to be a git
+repository" if it's missing. One-time setup per machine:
+
+```bash
+git -C ~/projects/fivepoints remote add ado \
+  https://claire-test-ai:${AZURE_DEVOPS_PAT}@dev.azure.com/FivePointsTechnology/TFIOne/_git/TFIOneGit
+```
+
+`AZURE_DEVOPS_PAT` is read from `~/.config/claire/github_manager.env`. Automating this as
+part of `claire setup` / an onboarding script is tracked as a follow-up — not yet built.
 
 ---
 

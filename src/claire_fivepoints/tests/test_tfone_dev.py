@@ -1,23 +1,32 @@
-"""Tests for DevWithADOContextStep, TesterStep and FivepointsTfoneDevWorkflow.
+"""Tests for tfone_dev_steps — PrepareWorktreeStep, SpawnDevStep, TesterStep,
+PushToADOStep, GhCliIssueMetaAdapter, and FivepointsTfoneDevWorkflow.
 
-Level 1 — unit tests for each step in isolation.
+Level 1 — unit tests for each step / adapter in isolation.
 Level 2 — scenario tests for the full FivepointsTfoneDevWorkflow (including restart recovery).
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from claire_core.pipeline import StepResult
-from claire_fivepoints.ado_context_adapter import MockADOContextAdapter
 from claire_fivepoints.tfone_dev_steps import (
-    DevWithADOContextStep,
     FivepointsTfoneDevAdapters,
     FivepointsTfoneDevWorkflow,
+    GhCliIssueMetaAdapter,
+    PrepareWorktreeStep,
+    PushToADOStep,
+    SpawnDevStep,
     TesterStep,
+    _extract_pbi_id,
+    _slugify,
 )
+
+_DEFAULT_BODY = "ADO: https://dev.azure.com/Org/Proj/_workitems/edit/18840"
+_DEFAULT_TITLE = "PBI: Case Face Sheet - Enhancement"
+_DEFAULT_BRANCH = "feature/18840-case-face-sheet-enhancement"
 
 
 # ---------------------------------------------------------------------------
@@ -31,8 +40,9 @@ def _make_adapters(
     closed: bool = False,
     role_label: str | None = None,
     pr_number: int | None = 10,
-    work_item: dict | None = None,
-    attachment_paths: list[Path] | None = None,
+    issue_body: str = _DEFAULT_BODY,
+    issue_title: str = _DEFAULT_TITLE,
+    meta_comment: str | None = None,
 ) -> FivepointsTfoneDevAdapters:
     gh = MagicMock()
     gh.is_issue_closed.return_value = closed
@@ -41,20 +51,20 @@ def _make_adapters(
     gh.find_pr_for_issue.return_value = pr_number
 
     terminal = MagicMock()
+
     ado = MagicMock()
     ado.push_branch_and_create_pr.return_value = 42
     ado.wait_for_merge.return_value = None
 
-    mock_ado_context = MockADOContextAdapter(
-        work_item=work_item or {"id": 1, "fields": {"System.Title": "Test"}},
-        attachments=attachment_paths or [],
-    )
+    meta = MagicMock()
+    meta.get_issue.return_value = {"body": issue_body, "title": issue_title}
+    meta.find_meta_comment.return_value = meta_comment
 
     return FivepointsTfoneDevAdapters(
         github=gh,
         terminal=terminal,
         ado=ado,
-        ado_context=mock_ado_context,
+        meta=meta,
         local_path=tmp_path,
         ado_org="TestOrg",
         ado_project="TestProject",
@@ -66,105 +76,197 @@ def _make_task(issue: int = 42, repo: str = "org/repo"):
     return FivepointsTask(issue=issue, repo=repo)
 
 
-# ---------------------------------------------------------------------------
-# MockADOContextAdapter
-# ---------------------------------------------------------------------------
-
-
-class TestMockADOContextAdapter:
-    def test_fetch_work_item_returns_fixture(self) -> None:
-        adapter = MockADOContextAdapter(work_item={"id": 99}, attachments=[])
-        result = adapter.fetch_work_item("org", "proj", 99)
-        assert result == {"id": 99}
-
-    def test_download_attachments_creates_dest_and_returns_paths(
-        self, tmp_path: Path
-    ) -> None:
-        fake_path = tmp_path / "fixture.docx"
-        adapter = MockADOContextAdapter(work_item={}, attachments=[fake_path])
-        dest = tmp_path / "attachments"
-        paths = adapter.download_attachments("org", "proj", {}, dest)
-        assert paths == [fake_path]
-        assert dest.is_dir()
-
-    def test_download_attachments_empty(self, tmp_path: Path) -> None:
-        adapter = MockADOContextAdapter(work_item={}, attachments=[])
-        paths = adapter.download_attachments("org", "proj", {}, tmp_path / "out")
-        assert paths == []
+def _patch_worktree_prepare(worktree_path: str = "/mock/worktrees/issue-42"):
+    return patch("claire_fivepoints.tfone_dev_steps.RealWorktreePrepare")
 
 
 # ---------------------------------------------------------------------------
-# DevWithADOContextStep
+# _slugify / _extract_pbi_id
 # ---------------------------------------------------------------------------
 
 
-class TestDevWithADOContextStep:
+class TestSlugify:
+    def test_strips_pbi_prefix_and_lowercases(self) -> None:
+        assert _slugify("PBI: Case Face Sheet - Enhancement") == "case-face-sheet-enhancement"
+
+    def test_no_pbi_prefix(self) -> None:
+        assert _slugify("Client Management Test") == "client-management-test"
+
+    def test_truncates_to_max_len(self) -> None:
+        title = "PBI: " + "word " * 30
+        slug = _slugify(title)
+        assert len(slug) <= 50
+
+    def test_collapses_non_alnum_runs(self) -> None:
+        assert _slugify("PBI: A/B  &  C!!!") == "a-b-c"
+
+
+class TestExtractPbiId:
+    def test_extracts_id_from_workitems_link(self) -> None:
+        body = "See https://dev.azure.com/Org/Proj/_workitems/edit/18840 for details"
+        assert _extract_pbi_id(body) == "18840"
+
+    def test_raises_when_no_link_present(self) -> None:
+        with pytest.raises(RuntimeError, match="pbi_id"):
+            _extract_pbi_id("no ado link here")
+
+
+# ---------------------------------------------------------------------------
+# GhCliIssueMetaAdapter
+# ---------------------------------------------------------------------------
+
+
+class TestGhCliIssueMetaAdapter:
+    def test_get_issue_parses_json(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=0, stdout=json.dumps({"body": "b", "title": "t"}))
+        with patch("subprocess.run", return_value=fake_result) as mock_run:
+            data = adapter.get_issue("org/repo", 5)
+        assert data == {"body": "b", "title": "t"}
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:3] == ["gh", "issue", "view"]
+        assert "--json" in cmd and "body,title" in cmd
+
+    def test_get_issue_raises_on_failure(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=1, stderr="boom")
+        with patch("subprocess.run", return_value=fake_result):
+            with pytest.raises(RuntimeError, match="boom"):
+                adapter.get_issue("org/repo", 5)
+
+    def test_find_meta_comment_returns_matching_comment(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        comments = {"comments": [{"body": "unrelated"}, {"body": "<!-- claire:meta -->\nstuff"}]}
+        fake_result = MagicMock(returncode=0, stdout=json.dumps(comments))
+        with patch("subprocess.run", return_value=fake_result):
+            result = adapter.find_meta_comment("org/repo", 5)
+        assert result == "<!-- claire:meta -->\nstuff"
+
+    def test_find_meta_comment_returns_none_when_absent(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=0, stdout=json.dumps({"comments": [{"body": "unrelated"}]}))
+        with patch("subprocess.run", return_value=fake_result):
+            result = adapter.find_meta_comment("org/repo", 5)
+        assert result is None
+
+    def test_find_meta_comment_returns_none_on_gh_failure(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=1, stdout="", stderr="boom")
+        with patch("subprocess.run", return_value=fake_result):
+            result = adapter.find_meta_comment("org/repo", 5)
+        assert result is None
+
+    def test_post_comment_calls_gh(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=0)
+        with patch("subprocess.run", return_value=fake_result) as mock_run:
+            adapter.post_comment("org/repo", 5, "hello")
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["gh", "issue", "comment", "5", "--repo", "org/repo", "--body", "hello"]
+
+    def test_post_comment_raises_on_failure(self) -> None:
+        adapter = GhCliIssueMetaAdapter()
+        fake_result = MagicMock(returncode=1, stderr="boom")
+        with patch("subprocess.run", return_value=fake_result):
+            with pytest.raises(RuntimeError, match="boom"):
+                adapter.post_comment("org/repo", 5, "hello")
+
+
+# ---------------------------------------------------------------------------
+# PrepareWorktreeStep
+# ---------------------------------------------------------------------------
+
+
+class TestPrepareWorktreeStep:
+    def test_fresh_start_creates_worktree_and_posts_comment(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path, meta_comment=None)
+        task = _make_task(issue=18842, repo="org/repo")
+        worktree_path = str(tmp_path / ".claire" / "worktrees" / "issue-18842")
+
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = worktree_path
+            result = PrepareWorktreeStep()(task, {}, adapters)
+
+        assert result.ok
+        assert result.data["worktree_ready"] is True
+        assert result.data["branch_name"] == _DEFAULT_BRANCH
+        assert result.data["worktree_path"] == worktree_path
+
+        mock_cls.assert_called_once_with(local_path=tmp_path)
+        mock_cls.return_value.prepare.assert_called_once_with(
+            repo="org/repo",
+            issue=18842,
+            base_branch="develop",
+            branch_name=_DEFAULT_BRANCH,
+        )
+
+        adapters.meta.post_comment.assert_called_once()
+        posted_repo, posted_issue, posted_body = adapters.meta.post_comment.call_args[0]
+        assert posted_repo == "org/repo"
+        assert posted_issue == 18842
+        assert "<!-- claire:meta -->" in posted_body
+        assert f"`{_DEFAULT_BRANCH}`" in posted_body
+        assert worktree_path in posted_body
+
+    def test_idempotent_when_worktree_exists_and_meta_comment_found(self, tmp_path: Path) -> None:
+        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
+        worktree_dir.mkdir(parents=True)
+        meta_comment = (
+            "<!-- claire:meta -->\n"
+            "**Branch:** `feature/100-existing-branch`\n"
+            "**Worktree:** `/some/path`"
+        )
+        adapters = _make_adapters(tmp_path, meta_comment=meta_comment)
+        task = _make_task(issue=7)
+
+        with _patch_worktree_prepare() as mock_cls:
+            result = PrepareWorktreeStep()(task, {}, adapters)
+
+        assert result.ok
+        assert result.data["branch_name"] == "feature/100-existing-branch"
+        mock_cls.assert_not_called()
+        adapters.meta.get_issue.assert_not_called()
+        adapters.meta.post_comment.assert_not_called()
+
+    def test_falls_through_when_worktree_exists_but_no_meta_comment(self, tmp_path: Path) -> None:
+        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
+        worktree_dir.mkdir(parents=True)
+        adapters = _make_adapters(tmp_path, meta_comment=None)
+        task = _make_task(issue=7)
+
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = str(worktree_dir)
+            result = PrepareWorktreeStep()(task, {}, adapters)
+
+        assert result.ok
+        mock_cls.return_value.prepare.assert_called_once()
+        adapters.meta.post_comment.assert_called_once()
+
+    def test_missing_pbi_id_raises(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path, issue_body="no ado link here", meta_comment=None)
+        task = _make_task(issue=9)
+        with pytest.raises(RuntimeError, match="pbi_id"):
+            PrepareWorktreeStep()(task, {}, adapters)
+
+
+# ---------------------------------------------------------------------------
+# SpawnDevStep
+# ---------------------------------------------------------------------------
+
+
+class TestSpawnDevStep:
     def test_skips_when_dev_done_in_ctx(self, tmp_path: Path) -> None:
         adapters = _make_adapters(tmp_path)
         task = _make_task()
-        result = DevWithADOContextStep()(task, {"dev_done": True}, adapters)
+        result = SpawnDevStep()(task, {"dev_done": True}, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_not_called()
         adapters.github.wait_for_label.assert_not_called()
 
-    def test_fetches_work_item_and_downloads_attachments(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(
-            tmp_path,
-            work_item={
-                "id": 42,
-                "fields": {
-                    "System.Title": "My Feature",
-                    "System.Description": "Desc",
-                    "Microsoft.VSTS.Common.AcceptanceCriteria": "AC",
-                    "System.AreaPath": "Area\\Path",
-                    "System.State": "Active",
-                    "System.WorkItemType": "User Story",
-                },
-            },
-        )
-        task = _make_task(issue=42)
-        result = DevWithADOContextStep()(task, {}, adapters)
-        assert result.ok
-        dest = tmp_path / ".claire" / "attachments" / "issue-42"
-        assert dest.is_dir()
-        context_file = dest / "ADO_CONTEXT.md"
-        assert context_file.is_file()
-        content = context_file.read_text()
-        assert "My Feature" in content
-        assert "Desc" in content
-        assert "AC" in content
-
-    def test_single_ado_fetch_per_run(self, tmp_path: Path) -> None:
-        """download_attachments receives the already-fetched work_item — no double fetch."""
-        from unittest.mock import patch
-
-        adapters = _make_adapters(tmp_path)
-        task = _make_task(issue=5)
-
-        fetch_calls: list = []
-        orig_fetch = adapters.ado_context.fetch_work_item
-
-        def tracking_fetch(org, project, item_id):
-            fetch_calls.append((org, project, item_id))
-            return orig_fetch(org, project, item_id)
-
-        adapters.ado_context.fetch_work_item = tracking_fetch
-        DevWithADOContextStep()(task, {}, adapters)
-        assert len(fetch_calls) == 1, "fetch_work_item must be called exactly once"
-
-    def test_writes_attachments_list_in_context_file(self, tmp_path: Path) -> None:
-        fake = tmp_path / "spec.docx"
-        fake.write_bytes(b"fake")
-        adapters = _make_adapters(tmp_path, attachment_paths=[fake])
-        task = _make_task(issue=7)
-        DevWithADOContextStep()(task, {}, adapters)
-        context_file = tmp_path / ".claire" / "attachments" / "issue-7" / "ADO_CONTEXT.md"
-        assert "spec.docx" in context_file.read_text()
-
     def test_spawns_dev_and_waits_for_label(self, tmp_path: Path) -> None:
         adapters = _make_adapters(tmp_path)
         task = _make_task(issue=5)
-        result = DevWithADOContextStep()(task, {}, adapters)
+        result = SpawnDevStep()(task, {}, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_called_once_with(5, "org/repo")
         adapters.github.wait_for_label.assert_called_once_with(
@@ -174,17 +276,10 @@ class TestDevWithADOContextStep:
     def test_returns_dev_done_and_pr_number(self, tmp_path: Path) -> None:
         adapters = _make_adapters(tmp_path, pr_number=99)
         task = _make_task()
-        result = DevWithADOContextStep()(task, {}, adapters)
+        result = SpawnDevStep()(task, {}, adapters)
         assert result.ok
         assert result.data["dev_done"] is True
         assert result.data["pr_number"] == 99
-
-    def test_context_file_created_even_without_attachments(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, attachment_paths=[])
-        task = _make_task(issue=3)
-        DevWithADOContextStep()(task, {}, adapters)
-        context_file = tmp_path / ".claire" / "attachments" / "issue-3" / "ADO_CONTEXT.md"
-        assert context_file.is_file()
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +313,22 @@ class TestTesterStep:
 
 
 # ---------------------------------------------------------------------------
+# PushToADOStep
+# ---------------------------------------------------------------------------
+
+
+class TestPushToADOStep:
+    def test_reads_branch_name_from_ctx_and_calls_adapter(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path)
+        adapters.ado.push_branch_and_create_pr.return_value = 77
+        task = _make_task(issue=5)
+        result = PushToADOStep()(task, {"branch_name": "feature/1-foo"}, adapters)
+        assert result.ok
+        assert result.data["ado_pr_id"] == 77
+        adapters.ado.push_branch_and_create_pr.assert_called_once_with(5, "feature/1-foo")
+
+
+# ---------------------------------------------------------------------------
 # FivepointsTfoneDevWorkflow — scenario tests (including restart recovery)
 # ---------------------------------------------------------------------------
 
@@ -227,18 +338,22 @@ class TestFivepointsTfoneDevWorkflow:
         """No label present → HydrateState returns {} → all steps run."""
         adapters = _make_adapters(tmp_path, role_label=None, pr_number=20)
         task = _make_task(issue=42)
-        result = FivepointsTfoneDevWorkflow().run(task, adapters)
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = str(tmp_path / ".claire/worktrees/issue-42")
+            result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_called_once()
         adapters.terminal.spawn_tester.assert_called_once()
-        adapters.ado.push_branch_and_create_pr.assert_called_once_with(42)
+        adapters.ado.push_branch_and_create_pr.assert_called_once_with(42, _DEFAULT_BRANCH)
         adapters.ado.wait_for_merge.assert_called_once_with(42)
 
     def test_restart_with_role_tester_skips_dev(self, tmp_path: Path) -> None:
         """role:tester present → HydrateState sets dev_done=True → DevStep skipped."""
         adapters = _make_adapters(tmp_path, role_label="role:tester", pr_number=5)
         task = _make_task()
-        result = FivepointsTfoneDevWorkflow().run(task, adapters)
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = "/mock/worktree"
+            result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_not_called()
         adapters.terminal.spawn_tester.assert_called_once()
@@ -247,11 +362,36 @@ class TestFivepointsTfoneDevWorkflow:
         """role:ready present → HydrateState sets dev_done+tester_done → both skipped."""
         adapters = _make_adapters(tmp_path, role_label="role:ready", pr_number=7)
         task = _make_task()
-        result = FivepointsTfoneDevWorkflow().run(task, adapters)
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = "/mock/worktree"
+            result = FivepointsTfoneDevWorkflow().run(task, adapters)
         assert result.ok
         adapters.terminal.spawn_dev.assert_not_called()
         adapters.terminal.spawn_tester.assert_not_called()
         adapters.ado.push_branch_and_create_pr.assert_called_once()
+
+    def test_restart_with_existing_worktree_reuses_branch_from_meta_comment(
+        self, tmp_path: Path
+    ) -> None:
+        """PrepareWorktreeStep recovers branch_name from the claire:meta comment — no re-derivation, no worktree recreation."""
+        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-42"
+        worktree_dir.mkdir(parents=True)
+        meta_comment = (
+            "<!-- claire:meta -->\n"
+            "**Branch:** `feature/999-recovered-branch`\n"
+            "**Worktree:** `/some/path`"
+        )
+        adapters = _make_adapters(
+            tmp_path, role_label="role:ready", pr_number=7, meta_comment=meta_comment
+        )
+        task = _make_task(issue=42)
+        with _patch_worktree_prepare() as mock_cls:
+            result = FivepointsTfoneDevWorkflow().run(task, adapters)
+        assert result.ok
+        mock_cls.assert_not_called()
+        adapters.ado.push_branch_and_create_pr.assert_called_once_with(
+            42, "feature/999-recovered-branch"
+        )
 
     def test_issue_closed_exits_cleanly(self, tmp_path: Path) -> None:
         """Closed issue → HydrateState returns ok=False → pipeline exits."""
@@ -267,8 +407,10 @@ class TestFivepointsTfoneDevWorkflow:
         adapters.ado.push_branch_and_create_pr.return_value = 99
         adapters.ado.wait_for_merge.side_effect = RuntimeError("ADO PR abandoned")
         task = _make_task()
-        with pytest.raises(RuntimeError, match="ADO PR abandoned"):
-            FivepointsTfoneDevWorkflow().run(task, adapters)
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = "/mock/worktree"
+            with pytest.raises(RuntimeError, match="ADO PR abandoned"):
+                FivepointsTfoneDevWorkflow().run(task, adapters)
 
 
 # ---------------------------------------------------------------------------
@@ -280,8 +422,6 @@ class TestRunFivepointsTfoneDevForIssue:
     def test_entry_point_wires_adapters_and_calls_workflow(
         self, tmp_path: Path
     ) -> None:
-        from unittest.mock import patch
-
         from claire_core.pipeline import StepResult as _SR
         from claire_fivepoints.workflows import run_fivepoints_tfone_dev_for_issue
 
@@ -290,8 +430,6 @@ class TestRunFivepointsTfoneDevForIssue:
 
         mock_ado_cls = MagicMock()
         mock_ado_cls.for_repo.return_value = MagicMock()
-        mock_ado_ctx_cls = MagicMock()
-        mock_ado_ctx_cls.for_repo.return_value = MagicMock()
         mock_workflow_cls = MagicMock(return_value=mock_workflow_instance)
 
         with (
@@ -312,7 +450,6 @@ class TestRunFivepointsTfoneDevForIssue:
                 return_value={"ado_org": "Org", "ado_project": "Proj"},
             ),
             patch("claire_fivepoints.workflows.FivepointsConcreteADOAdapter", mock_ado_cls),
-            patch("claire_fivepoints.workflows.RealADOContextAdapter", mock_ado_ctx_cls),
             patch("claire_fivepoints.workflows.FivepointsTfoneDevWorkflow", mock_workflow_cls),
         ):
             result = run_fivepoints_tfone_dev_for_issue(42, "org/repo")
@@ -321,5 +458,7 @@ class TestRunFivepointsTfoneDevForIssue:
         mock_workflow_instance.run.assert_called_once()
         call_args = mock_workflow_instance.run.call_args
         task = call_args[0][0]
+        adapters = call_args[0][1]
         assert task.issue == 42
         assert task.repo == "org/repo"
+        assert isinstance(adapters.meta, GhCliIssueMetaAdapter)
