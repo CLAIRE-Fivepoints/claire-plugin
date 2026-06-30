@@ -390,7 +390,7 @@ def bridge_run_cmd(
         branch_sync=RealBranchSync(),
         worktree=RealWorktreePrepare(),
         assign=_RealAssignAdapter(),
-        ado=RealADOAdapter(),
+        ado=RealADOAdapter(repo=repo),
     )
     result = bridge_pipeline(task, adapters)
     if not result.ok:

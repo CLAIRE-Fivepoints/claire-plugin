@@ -4,7 +4,7 @@ category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
 keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention]
-updated: 2026-06-29
+updated: 2026-06-30
 ---
 
 # Azure DevOps Email Bridge
@@ -209,14 +209,14 @@ The bash router prepends `domain/scripts` to `PYTHONPATH` so the package is impo
 
 | File | Role |
 |------|------|
-| `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/bridge.py` | `is_pbi_email()` predicate + `MockEmailFilter` |
-| `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/adapters.py` | `EmailAdapter`, `GitHubAdapter`, `LabelAdapter`, `BranchSyncAdapter`, `WorktreePrepareAdapter`, `AssignAdapter` protocols + `BridgeAdapters` + test doubles (`MockWorktreePrepare`, `MockAssignAdapter`, …) |
+| `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/bridge.py` | `is_pbi_email()` + `parse_pbi_id()` predicates + `MockEmailFilter` |
+| `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/adapters.py` | `EmailAdapter`, `GitHubAdapter`, `LabelAdapter`, `BranchSyncAdapter`, `WorktreePrepareAdapter`, `AssignAdapter`, `ADOAdapter` protocols + `WorkItem` + `BridgeAdapters` + concrete adapters (`RealADOAdapter`, …) + test doubles (`MockWorktreePrepare`, `MockAssignAdapter`, `MockADOAdapter`, …) |
 | `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/steps.py` | Pure pipeline steps: `fetch_emails_step`, `filter_pbi_step`, `create_issues_step`, `add_label_step`, `sync_branch_step`, `assign_step` (`prepare_worktree_step` preserved but not in the pipeline) |
 | `plugins/fivepoints/src/claire_fivepoints/azure_issue_bridge/pipeline.py` | `BridgeTask` + `bridge_pipeline = pipe(...)` |
 | `src/claire_fivepoints/cli.py` | CLI entry point — `fivepoints azure-issue-bridge run [--from] [--repo] [--dry-run]` and `fivepoints azure-issue-bridge inject [--from] [--subject] [--dry-run] [--repo] [--agent]`; concrete subprocess adapters |
 | `src/claire_fivepoints/azure_issue_bridge/tests/` | Unit tests for email filtering, pipeline, and inject (zero subprocess, zero network) |
 
-The sender is passed via `--from` flag (`azuredevops@microsoft.com` by default). The pipeline is composed via `claire_core.pipeline.pipe()`. The core triage/ADO fetch logic remains in the fivepoints-plugin repo.
+The sender is passed via `--from` flag (`azuredevops@microsoft.com` by default). The pipeline is composed via `claire_core.pipeline.pipe()`. `create_issues_step` enriches the issue body with the ADO work item (state, area, type, parent PBI link + background) via `RealADOAdapter`, which delegates the REST call and `AZURE_DEVOPS_PAT` resolution to `RealADOContextAdapter` (`src/claire_fivepoints/ado_context_adapter.py`) rather than calling the ADO API a second way.
 
 ---
 

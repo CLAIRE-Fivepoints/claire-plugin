@@ -3,12 +3,13 @@
 - GmailApiAdapter: accesses Gmail via the Google API directly (OAuth2) — no subprocess.
 - RealBranchSync: syncs branches via the GitHub REST API (urllib) — no subprocess.
 - RealWorktreePrepare: creates git worktrees via subprocess git — no GitHub CLI.
-- RealADOAdapter: fetches Azure DevOps work items via the REST API (urllib) — no subprocess.
+- RealADOAdapter: fetches Azure DevOps work items, delegating the REST call and PAT
+  resolution to RealADOContextAdapter (claire_fivepoints.ado_context_adapter) — no
+  second hand-rolled HTTP client for the same ADO REST endpoint.
 - CLI-backed adapters (GhCliAdapter, RealLabelAdapter, RealAssignAdapter) remain in cli.py (subprocess.run in CLI entry points only).
 """
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
@@ -19,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from claire_adapters.token import CONFIG_DIR, parse_env_file
+from claire_fivepoints.ado_context_adapter import RealADOContextAdapter
 from claire_fivepoints.azure_issue_bridge.worktree import (
     MockWorktreePrepare,
     RealWorktreePrepare,
@@ -215,27 +216,6 @@ class RealBranchSync:
 
 _DEFAULT_ADO_ORG = "FivePointsTechnology"
 _DEFAULT_ADO_PROJECT = "TFIOne"
-_ADO_API_VERSION = "7.1"
-
-
-def _get_ado_pat() -> str:
-    """Resolve AZURE_DEVOPS_PAT from github_manager.env, .env, or the environment.
-
-    Mirrors RealADOContextAdapter.for_repo() in claire_fivepoints.ado_context_adapter.
-    """
-    env = parse_env_file(CONFIG_DIR / "github_manager.env")
-    shared_env = parse_env_file(CONFIG_DIR / ".env")
-    pat = (
-        env.get("AZURE_DEVOPS_PAT")
-        or shared_env.get("AZURE_DEVOPS_PAT")
-        or os.environ.get("AZURE_DEVOPS_PAT", "")
-    )
-    if not pat:
-        raise RuntimeError(
-            "AZURE_DEVOPS_PAT not found. "
-            f"Set it in the environment, {CONFIG_DIR / 'github_manager.env'}, or {CONFIG_DIR / '.env'}"
-        )
-    return pat
 
 
 def _strip_html(html: str) -> str:
@@ -254,8 +234,15 @@ def _strip_html(html: str) -> str:
 
 @dataclass
 class RealADOAdapter:
-    """Fetches Azure DevOps work items via the REST API (urllib) — no subprocess."""
+    """Fetches Azure DevOps work items for issue-body enrichment.
 
+    Delegates the raw REST call and AZURE_DEVOPS_PAT resolution to
+    RealADOContextAdapter (claire_fivepoints.ado_context_adapter) — both call
+    the same `_apis/wit/workitems/{id}` endpoint, so this adapter only maps
+    the returned dict onto the local WorkItem dataclass.
+    """
+
+    repo: str
     org: str = field(default_factory=lambda: os.environ.get("ADO_ORG", _DEFAULT_ADO_ORG))
     project: str = field(
         default_factory=lambda: os.environ.get("ADO_PROJECT", _DEFAULT_ADO_PROJECT)
@@ -265,30 +252,8 @@ class RealADOAdapter:
         return f"https://dev.azure.com/{self.org}/{self.project}/_workitems/edit/{work_item_id}"
 
     def fetch_work_item(self, pbi_id: str) -> WorkItem:
-        pat = _get_ado_pat()
-        auth = base64.b64encode(f":{pat}".encode()).decode()
-        url = (
-            f"https://dev.azure.com/{self.org}/{self.project}/_apis/wit/workitems/{pbi_id}"
-            f"?$expand=relations&api-version={_ADO_API_VERSION}"
-        )
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Authorization": f"Basic {auth}",
-                "Content-Type": "application/json",
-            },
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read())
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(
-                f"ADO API returned HTTP {exc.code} for work item {pbi_id}"
-            ) from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"ADO API request failed for work item {pbi_id}: {exc}"
-            ) from exc
+        context = RealADOContextAdapter.for_repo(self.repo)
+        data = context.fetch_work_item(self.org, self.project, int(pbi_id))
 
         if "errorCode" in data or ("message" in data and "id" not in data):
             raise RuntimeError(f"ADO API error: {data.get('message', data)}")
