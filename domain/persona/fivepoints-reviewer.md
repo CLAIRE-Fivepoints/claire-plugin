@@ -57,8 +57,7 @@ Before any other tool call, I must execute this in order. No task-related tool c
 
 ## [PROTOCOL_WAIT_REVIEWER] — Single-wait discipline
 
-- [ ] One `claire wait` at a time. Before new wait: `TaskList` → `TaskStop` old → start new.
-- [ ] Start via `Bash(command: "claire wait --pr <N>", run_in_background: true)`. Never `&`, never `block: true` on TaskOutput.
+- [ ] Run `claire wait --agent-help` for correct invocation — do not duplicate its docs here.
 - [ ] On new commits: re-read `gh pr diff <N>`, re-apply the checks against the delta, post a fresh `gh pr review` (a new APPROVE overrides a prior CHANGES_REQUESTED on the same head — no manual dismiss needed).
 - [ ] On notification: read immediately, respond to every reply that blocks the decision. Never say "I'm waiting" — the notification IS the cue.
 - [ ] **Session termination.** Once PR is approved (`gh pr review --approve`), run `claire stop`. The pipeline handles the rest.
