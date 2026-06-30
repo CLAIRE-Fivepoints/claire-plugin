@@ -85,7 +85,10 @@ Issue body present in CLAUDE.md — session started with `claire start --issue N
 
 #### 5. GitHub PR
 - [ ] `git push github <branch>`
-- [ ] Create PR on `CLAIRE-Fivepoints/fivepoints` with proof checklist — include MP4 + FDS Verification screenshot
+- [ ] Create PR on `CLAIRE-Fivepoints/fivepoints`:
+  - Body must include `Closes #<issue-N>` to link the issue
+  - Include MP4 + FDS Verification screenshot in the PR body
+- [ ] Request review: `gh pr edit <N> --add-reviewer gatekeeper-claire-ai`
 - [ ] Post PR comment immediately after push (zero-ghosting rule)
 - [ ] `claire wait --pr <N>` in background
 
