@@ -9,6 +9,7 @@ dependencies = [
     "claire-workflows",
     "google-api-python-client>=2.0",
     "google-auth>=2.0",
+    "requests>=2.31",
     "typer>=0.9",
 ]
 
@@ -26,6 +27,7 @@ fivepoints = "claire_fivepoints:plugin_info"
 [project.entry-points."claire.workflows"]
 "fivepoints.tfone.github" = "claire_fivepoints.workflows:run_fivepoints_tfone_github_for_issue"
 "fivepoints.tfone.full" = "claire_fivepoints.workflows:run_fivepoints_tfone_full_for_issue"
+"fivepoints.tfone.dev" = "claire_fivepoints.workflows:run_fivepoints_tfone_dev_for_issue"
 
 [build-system]
 requires = ["hatchling"]

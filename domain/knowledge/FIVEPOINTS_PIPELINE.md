@@ -3,8 +3,8 @@ domain: claire
 category: knowledge
 name: FIVEPOINTS_PIPELINE
 title: "Fivepoints Pipeline — issue-to-merge V2 workflow"
-keywords: [fivepoints, pipeline, workflow, analyst, dev, tester, ado, role, HydrateStateStep, SpawnAnalystStep, WaitForAnalystDoneStep, SpawnDevStep, WaitForDevDoneStep, SpawnTesterStep, WaitForTesterDoneStep, PushToADOStep, WaitForADOMergeStep, FivepointsGitHubWorkflow, FivepointsFullWorkflow, role:dev, role:tester, role:ready, ctx-aware, restart-recovery, pipe]
-updated: 2026-05-12
+keywords: [fivepoints, pipeline, workflow, analyst, dev, tester, ado, role, HydrateStateStep, SpawnAnalystStep, WaitForAnalystDoneStep, SpawnDevStep, WaitForDevDoneStep, SpawnTesterStep, WaitForTesterDoneStep, PushToADOStep, WaitForADOMergeStep, FivepointsGitHubWorkflow, FivepointsFullWorkflow, FivepointsTfoneDevWorkflow, DevWithADOContextStep, TesterStep, ADOContextAdapter, role:dev, role:tester, role:ready, ctx-aware, restart-recovery, pipe, fivepoints.tfone.dev]
+updated: 2026-06-30
 ---
 
 # Fivepoints Pipeline — issue-to-merge V2 workflow
@@ -30,7 +30,9 @@ WaitForTesterDoneStep()    ← polls for role:ready label
 [ WaitForADOMergeStep() ]  ← full workflow only
 ```
 
-## Two workflow classes
+## Workflow classes
+
+Three variants, selected at the call site. Adapter dataclasses enforce correctness at the type level.
 
 ```python
 class FivepointsGitHubWorkflow:
@@ -40,9 +42,22 @@ class FivepointsGitHubWorkflow:
 class FivepointsFullWorkflow:
     """analyst → dev → tester → ADO push → ADO merge."""
     def __init__(self): self._pipeline = pipe(*_core_steps(), PushToADOStep(), WaitForADOMergeStep())
+
+class FivepointsTfoneDevWorkflow:           # claire_fivepoints.tfone_dev_steps
+    """dev reads ADO context → tester → ADO push → ADO merge. No analyst."""
+    def __init__(self): self._pipeline = pipe(
+        HydrateStateStep(),
+        DevWithADOContextStep(),   # fetch ADO work item + attachments → spawn dev → wait role:tester
+        TesterStep(),              # spawn tester → wait role:ready
+        PushToADOStep(),
+        WaitForADOMergeStep(),
+    )
 ```
 
-Select the class at the call site. Adapter dataclasses enforce correctness at the type level.
+`FivepointsTfoneDevWorkflow` is registered as entry point `fivepoints.tfone.dev` and uses
+`FivepointsTfoneDevAdapters` (adds `ado_context: ADOContextAdapter`, `local_path`, `ado_org`,
+`ado_project` on top of the standard fields). Restart recovery uses the same `HydrateStateStep`
+label mapping — `role:tester` → `dev_done=True`, `role:ready` → `dev_done+tester_done=True`.
 
 ## Adapter protocols
 
@@ -76,7 +91,32 @@ class FivepointsFullAdapters:
     github: FivepointsGitHubAdapter
     terminal: FivepointsTerminalAdapter
     ado: FivepointsADOAdapter   # required, not Optional
+
+@dataclass
+class FivepointsTfoneDevAdapters:           # claire_fivepoints.tfone_dev_steps
+    github: FivepointsGitHubAdapter
+    terminal: FivepointsTerminalAdapter
+    ado: FivepointsADOAdapter
+    ado_context: ADOContextAdapter          # claire_fivepoints.ado_context_adapter
+    local_path: Path                        # root of the repo checkout; attachments go under .claire/attachments/issue-{N}/
+    ado_org: str
+    ado_project: str
 ```
+
+`ADOContextAdapter` Protocol (in `claire_fivepoints.ado_context_adapter`):
+
+```python
+class ADOContextAdapter(Protocol):
+    def fetch_work_item(self, org: str, project: str, item_id: int) -> dict: ...
+    def download_attachments(self, org: str, project: str, work_item: dict, dest: Path) -> list[Path]: ...
+```
+
+Concrete implementation: `RealADOContextAdapter` — reads `AZURE_DEVOPS_PAT` from
+`~/.config/claire/github_manager.env`, `~/.config/claire/.env`, or the environment.
+Test double: `MockADOContextAdapter(work_item={...}, attachments=[...])`.
+
+`download_attachments` takes the already-fetched `work_item` dict to avoid a redundant
+REST round-trip (the caller fetches once via `fetch_work_item` and passes it in).
 
 ## Restart recovery (HydrateStateStep)
 
@@ -102,6 +142,13 @@ class SpawnAnalystStep:
         return StepResult(ok=True, data={})
 ```
 
+## Tests
+
+`packages/workflows/src/claire_workflows/tests/test_fivepoints_pipeline.py`
+
+- **Level 1** (unit): each step in isolation with `MockAdapters`
+- **Level 2** (scenario): full end-to-end for both workflow classes including restart recovery
+
 ## Usage
 
 ```python
@@ -121,17 +168,30 @@ result = FivepointsGitHubWorkflow().run(task, adapters)
 # Full variant (with ADO)
 adapters_full = FivepointsFullAdapters(github=..., terminal=..., ado=...)
 result = FivepointsFullWorkflow().run(task, adapters_full)
+
+# Dev-only variant (no analyst, reads ADO context)
+from claire_fivepoints.tfone_dev_steps import FivepointsTfoneDevAdapters, FivepointsTfoneDevWorkflow
+from claire_fivepoints.ado_context_adapter import RealADOContextAdapter
+adapters_dev = FivepointsTfoneDevAdapters(
+    github=..., terminal=..., ado=...,
+    ado_context=RealADOContextAdapter.for_repo(repo),
+    local_path=Path("/path/to/repo"),
+    ado_org="MyOrg", ado_project="MyProject",
+)
+result = FivepointsTfoneDevWorkflow().run(task, adapters_dev)
 ```
 
 ## Tests
 
 `packages/workflows/src/claire_workflows/tests/test_fivepoints_pipeline.py`
+`src/claire_fivepoints/tests/test_tfone_dev.py`
 
-- **Level 1** (unit): each step in isolation with `MockAdapters`
-- **Level 2** (scenario): full end-to-end for both workflow classes including restart recovery
+- **Level 1** (unit): each step in isolation with `MockAdapters` / `MockADOContextAdapter`
+- **Level 2** (scenario): full end-to-end for all workflow classes including restart recovery
 
 ## See also
 
 - `claire domain read claire knowledge RUN_PIPELINE` — CLI entry point for e2e pipelines
 - `claire domain read core knowledge WORKFLOW_AUTHORING` — authoring guide for V2 workflows
 - Issue #478 — feat(workflows): add FivepointsPipeline
+- Issue #172 — feat(pipeline): fivepoints.tfone.dev — dev does everything, no analyst
