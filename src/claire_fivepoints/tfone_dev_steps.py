@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from claire_adapters.github import GhRunner, SubprocessGhRunner
 from claire_core.logging_config import get_logger
 from claire_core.pipeline import StepResult, pipe
 from claire_workflows.fivepoints_pipeline import (
@@ -47,6 +47,7 @@ _LABEL_READY = "role:ready"
 _META_TAG = "<!-- claire:meta -->"
 _PBI_ID_PATTERN = re.compile(r"_workitems/edit/(\d+)")
 _BRANCH_PATTERN = re.compile(r"\*\*Branch:\*\* `([^`]+)`")
+_BRANCH_NAME_PATTERN = re.compile(r"^feature/\d+-[a-z0-9-]+$")
 _SLUG_MAX_LEN = 50
 
 
@@ -75,6 +76,17 @@ def _extract_pbi_id(body: str) -> str:
     return match.group(1)
 
 
+def _is_valid_branch_name(branch_name: str) -> bool:
+    """Guard against forged/malformed branch names before they reach `git push`.
+
+    Anchored to the feature/{pbi_id}-{slug} shape this step itself produces — a
+    value recovered from an (unauthenticated) issue comment that doesn't match
+    can never start with '-' and can't smuggle extra git CLI flags/arguments
+    through the `{branch}:{branch}` refspec.
+    """
+    return bool(_BRANCH_NAME_PATTERN.match(branch_name))
+
+
 # ---------------------------------------------------------------------------
 # GhIssueMetaAdapter — reads the issue, reads/posts the claire:meta comment
 # ---------------------------------------------------------------------------
@@ -89,27 +101,34 @@ class GhIssueMetaAdapter(Protocol):
     def post_comment(self, repo: str, issue: int, body: str) -> None: ...
 
 
+@dataclass
 class GhCliIssueMetaAdapter:
-    """Concrete GhIssueMetaAdapter — shells out to the gh CLI."""
+    """Concrete GhIssueMetaAdapter — delegates to the shared GhRunner abstraction
+    (claire_adapters.github.SubprocessGhRunner), the same gh CLI wrapper already
+    used by GhProjectAdapter / FivepointsGhAdapter elsewhere in this plugin.
+    """
+
+    runner: GhRunner = field(default_factory=SubprocessGhRunner)
 
     def get_issue(self, repo: str, issue: int) -> dict[str, Any]:
-        result = subprocess.run(
-            ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "body,title"],
-            capture_output=True, text=True,
+        output = self.runner.run(
+            "issue", "view", str(issue), "--repo", repo, "--json", "body,title",
         )
-        if result.returncode != 0:
-            raise RuntimeError(f"gh issue view failed: {result.stderr.strip()}")
-        data: dict[str, Any] = json.loads(result.stdout)
+        data: dict[str, Any] = json.loads(output)
         return data
 
     def find_meta_comment(self, repo: str, issue: int) -> str | None:
-        result = subprocess.run(
-            ["gh", "issue", "view", str(issue), "--repo", repo, "--json", "comments"],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
+        try:
+            output = self.runner.run(
+                "issue", "view", str(issue), "--repo", repo, "--json", "comments",
+            )
+        except Exception as exc:
+            logger.debug(
+                "tfone_dev.find_meta_comment.failed",
+                extra={"issue": issue, "repo": repo, "error": str(exc)},
+            )
             return None
-        data = json.loads(result.stdout or "{}")
+        data = json.loads(output or "{}")
         for comment in data.get("comments", []):
             body = comment.get("body", "")
             if body.startswith(_META_TAG):
@@ -117,12 +136,7 @@ class GhCliIssueMetaAdapter:
         return None
 
     def post_comment(self, repo: str, issue: int, body: str) -> None:
-        result = subprocess.run(
-            ["gh", "issue", "comment", str(issue), "--repo", repo, "--body", body],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"gh issue comment failed: {result.stderr.strip()}")
+        self.runner.run("issue", "comment", str(issue), "--repo", repo, "--body", body)
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +183,7 @@ class PrepareWorktreeStep:
         if worktree_path.exists():
             meta_body = adapters.meta.find_meta_comment(task.repo, task.issue)
             match = _BRANCH_PATTERN.search(meta_body) if meta_body else None
-            if match:
+            if match and _is_valid_branch_name(match.group(1)):
                 branch_name = match.group(1)
                 logger.info(
                     "tfone_dev.prepare_worktree.skipped",
@@ -187,11 +201,28 @@ class PrepareWorktreeStep:
                         "worktree_path": str(worktree_path),
                     },
                 )
+            if match:
+                # Anyone able to comment on the issue can post a forged claire:meta
+                # comment — never trust a branch_name that doesn't match the
+                # convention this step itself produces. Fall through and re-derive.
+                logger.warning(
+                    "tfone_dev.prepare_worktree.meta_comment_rejected",
+                    extra={
+                        "issue": task.issue,
+                        "repo": task.repo,
+                        "rejected_branch_name": match.group(1),
+                    },
+                )
 
         issue_data = adapters.meta.get_issue(task.repo, task.issue)
         pbi_id = _extract_pbi_id(issue_data.get("body", "") or "")
         slug = _slugify(issue_data.get("title", "") or "")
         branch_name = f"feature/{pbi_id}-{slug}"
+        if not _is_valid_branch_name(branch_name):
+            raise RuntimeError(
+                f"Derived branch name {branch_name!r} failed validation against "
+                f"{_BRANCH_NAME_PATTERN.pattern!r} — check the issue title/body"
+            )
 
         worktree_path_str = RealWorktreePrepare(local_path=adapters.local_path).prepare(
             repo=task.repo,

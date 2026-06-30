@@ -21,6 +21,7 @@ from claire_fivepoints.tfone_dev_steps import (
     SpawnDevStep,
     TesterStep,
     _extract_pbi_id,
+    _is_valid_branch_name,
     _slugify,
 )
 
@@ -111,65 +112,100 @@ class TestExtractPbiId:
             _extract_pbi_id("no ado link here")
 
 
+class TestIsValidBranchName:
+    def test_accepts_convention_shaped_branch(self) -> None:
+        assert _is_valid_branch_name("feature/18840-case-face-sheet-enhancement")
+
+    def test_rejects_leading_dash_injection_attempt(self) -> None:
+        assert not _is_valid_branch_name("--upload-pack=evil")
+
+    def test_rejects_legacy_issue_branch_name(self) -> None:
+        assert not _is_valid_branch_name("issue-42")
+
+    def test_rejects_uppercase_or_invalid_chars(self) -> None:
+        assert not _is_valid_branch_name("feature/18840-Has Spaces")
+
+    def test_rejects_missing_pbi_id(self) -> None:
+        assert not _is_valid_branch_name("feature/-no-id")
+
+
 # ---------------------------------------------------------------------------
-# GhCliIssueMetaAdapter
+# GhCliIssueMetaAdapter — delegates to the shared GhRunner abstraction
 # ---------------------------------------------------------------------------
 
 
 class TestGhCliIssueMetaAdapter:
     def test_get_issue_parses_json(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=0, stdout=json.dumps({"body": "b", "title": "t"}))
-        with patch("subprocess.run", return_value=fake_result) as mock_run:
-            data = adapter.get_issue("org/repo", 5)
-        assert data == {"body": "b", "title": "t"}
-        cmd = mock_run.call_args[0][0]
-        assert cmd[:3] == ["gh", "issue", "view"]
-        assert "--json" in cmd and "body,title" in cmd
+        runner = MagicMock()
+        runner.run.return_value = json.dumps({"body": "b", "title": "t"})
+        adapter = GhCliIssueMetaAdapter(runner=runner)
 
-    def test_get_issue_raises_on_failure(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=1, stderr="boom")
-        with patch("subprocess.run", return_value=fake_result):
-            with pytest.raises(RuntimeError, match="boom"):
-                adapter.get_issue("org/repo", 5)
+        data = adapter.get_issue("org/repo", 5)
+
+        assert data == {"body": "b", "title": "t"}
+        runner.run.assert_called_once_with(
+            "issue", "view", "5", "--repo", "org/repo", "--json", "body,title",
+        )
+
+    def test_get_issue_propagates_runner_failure(self) -> None:
+        runner = MagicMock()
+        runner.run.side_effect = RuntimeError("boom")
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            adapter.get_issue("org/repo", 5)
 
     def test_find_meta_comment_returns_matching_comment(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
+        runner = MagicMock()
         comments = {"comments": [{"body": "unrelated"}, {"body": "<!-- claire:meta -->\nstuff"}]}
-        fake_result = MagicMock(returncode=0, stdout=json.dumps(comments))
-        with patch("subprocess.run", return_value=fake_result):
-            result = adapter.find_meta_comment("org/repo", 5)
+        runner.run.return_value = json.dumps(comments)
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        result = adapter.find_meta_comment("org/repo", 5)
+
         assert result == "<!-- claire:meta -->\nstuff"
 
     def test_find_meta_comment_returns_none_when_absent(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=0, stdout=json.dumps({"comments": [{"body": "unrelated"}]}))
-        with patch("subprocess.run", return_value=fake_result):
-            result = adapter.find_meta_comment("org/repo", 5)
+        runner = MagicMock()
+        runner.run.return_value = json.dumps({"comments": [{"body": "unrelated"}]})
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        result = adapter.find_meta_comment("org/repo", 5)
+
         assert result is None
 
-    def test_find_meta_comment_returns_none_on_gh_failure(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=1, stdout="", stderr="boom")
-        with patch("subprocess.run", return_value=fake_result):
-            result = adapter.find_meta_comment("org/repo", 5)
+    def test_find_meta_comment_returns_none_on_runner_failure(self) -> None:
+        runner = MagicMock()
+        runner.run.side_effect = RuntimeError("boom")
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        result = adapter.find_meta_comment("org/repo", 5)
+
         assert result is None
 
-    def test_post_comment_calls_gh(self) -> None:
-        adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=0)
-        with patch("subprocess.run", return_value=fake_result) as mock_run:
+    def test_post_comment_calls_runner(self) -> None:
+        runner = MagicMock()
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        adapter.post_comment("org/repo", 5, "hello")
+
+        runner.run.assert_called_once_with(
+            "issue", "comment", "5", "--repo", "org/repo", "--body", "hello",
+        )
+
+    def test_post_comment_propagates_runner_failure(self) -> None:
+        runner = MagicMock()
+        runner.run.side_effect = RuntimeError("boom")
+        adapter = GhCliIssueMetaAdapter(runner=runner)
+
+        with pytest.raises(RuntimeError, match="boom"):
             adapter.post_comment("org/repo", 5, "hello")
-        cmd = mock_run.call_args[0][0]
-        assert cmd == ["gh", "issue", "comment", "5", "--repo", "org/repo", "--body", "hello"]
 
-    def test_post_comment_raises_on_failure(self) -> None:
+    def test_default_runner_is_subprocess_gh_runner(self) -> None:
+        from claire_adapters.github import SubprocessGhRunner
+
         adapter = GhCliIssueMetaAdapter()
-        fake_result = MagicMock(returncode=1, stderr="boom")
-        with patch("subprocess.run", return_value=fake_result):
-            with pytest.raises(RuntimeError, match="boom"):
-                adapter.post_comment("org/repo", 5, "hello")
+        assert isinstance(adapter.runner, SubprocessGhRunner)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +283,29 @@ class TestPrepareWorktreeStep:
         task = _make_task(issue=9)
         with pytest.raises(RuntimeError, match="pbi_id"):
             PrepareWorktreeStep()(task, {}, adapters)
+
+    def test_rejects_forged_meta_comment_and_re_derives(self, tmp_path: Path) -> None:
+        """A branch_name that doesn't match feature/{pbi_id}-{slug} — e.g. posted by an
+        attacker able to comment on the issue, or a stale/malformed comment — must never
+        be trusted as-is. Falls through to deriving + recreating instead."""
+        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
+        worktree_dir.mkdir(parents=True)
+        forged_comment = (
+            "<!-- claire:meta -->\n"
+            "**Branch:** `--upload-pack=evil`\n"
+            "**Worktree:** `/some/path`"
+        )
+        adapters = _make_adapters(tmp_path, meta_comment=forged_comment)
+        task = _make_task(issue=7)
+
+        with _patch_worktree_prepare() as mock_cls:
+            mock_cls.return_value.prepare.return_value = str(worktree_dir)
+            result = PrepareWorktreeStep()(task, {}, adapters)
+
+        assert result.ok
+        assert result.data["branch_name"] == _DEFAULT_BRANCH
+        mock_cls.return_value.prepare.assert_called_once()
+        adapters.meta.post_comment.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
