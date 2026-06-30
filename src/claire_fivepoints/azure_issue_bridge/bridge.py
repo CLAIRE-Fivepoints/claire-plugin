@@ -19,6 +19,15 @@ _PBI_SUBJECT_RE = re.compile(
 _DEFAULT_SENDER = "azuredevops@microsoft.com"
 
 
+def parse_pbi_id(subject: str) -> str | None:
+    """Extract the ADO work item ID from a PBI assignment email subject.
+
+    Returns the numeric ID as a string, or None if the subject does not match.
+    """
+    m = _PBI_SUBJECT_RE.search(subject)
+    return m.group(1) if m else None
+
+
 def is_pbi_email(msg: EmailMessage, sender: str) -> bool:
     """Return True if msg is a PBI assignment email from the given sender.
 

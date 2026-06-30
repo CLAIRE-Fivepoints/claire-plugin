@@ -5,17 +5,20 @@ import pytest
 
 from claire_fivepoints.azure_issue_bridge.adapters import (
     BridgeAdapters,
+    MockADOAdapter,
     MockAssignAdapter,
     MockBranchSync,
     MockEmailAdapter,
     MockGitHubAdapter,
     MockLabelAdapter,
     MockWorktreePrepare,
+    WorkItem,
 )
 from claire_fivepoints.azure_issue_bridge.pipeline import BridgeTask, bridge_pipeline
 from claire_fivepoints.azure_issue_bridge.steps import (
     add_label_step,
     assign_step,
+    create_issues_step,
     prepare_worktree_step,
     sync_branch_step,
 )
@@ -44,6 +47,7 @@ def _make_adapters(
     branch_sync: MockBranchSync | None = None,
     worktree: MockWorktreePrepare | None = None,
     assign: MockAssignAdapter | None = None,
+    ado: MockADOAdapter | None = None,
 ) -> BridgeAdapters:
     return BridgeAdapters(
         email=MockEmailAdapter(emails),
@@ -52,6 +56,7 @@ def _make_adapters(
         branch_sync=branch_sync or MockBranchSync(),
         worktree=worktree or MockWorktreePrepare(),
         assign=assign or MockAssignAdapter(),
+        ado=ado or MockADOAdapter(),
     )
 
 
@@ -177,6 +182,115 @@ def test_bridge_max_results_respected() -> None:
 
 
 # ---------------------------------------------------------------------------
+# create_issues_step — ADO body enrichment
+# ---------------------------------------------------------------------------
+
+
+def test_create_issues_step_enriches_body_with_ado_fields() -> None:
+    emails = [_make_email("Product Backlog Item 42 - DEV - Title")]
+    work_items = {
+        "42": WorkItem(
+            id=42,
+            title="Title",
+            description="Do the thing.",
+            acceptance_criteria="It should work.",
+            area_path="TFIOne",
+            state="To Do",
+            work_item_type="Task",
+        )
+    }
+    gh = MockGitHubAdapter()
+    ado = MockADOAdapter(work_items=work_items)
+    adapters = _make_adapters(emails, gh=gh, ado=ado)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = create_issues_step(task, {"pbi_emails": emails}, adapters)
+    assert result.ok
+    body = gh.created[0]["body"]
+    assert "https://dev.azure.com/FivePointsTechnology/TFIOne/_workitems/edit/42" in body
+    assert "**State:** To Do" in body
+    assert "**Area:** TFIOne" in body
+    assert "**Type:** Task" in body
+    assert "**Description:**\nDo the thing." in body
+    assert "**Acceptance Criteria:**\nIt should work." in body
+    assert "Parent PBI" not in body
+
+
+def test_create_issues_step_includes_parent_pbi_background() -> None:
+    emails = [_make_email("Task 7 - DEV - Subtask")]
+    work_items = {
+        "7": WorkItem(
+            id=7,
+            title="Subtask",
+            description="Do the subtask.",
+            acceptance_criteria="",
+            area_path="TFIOne",
+            state="To Do",
+            parent_id=99,
+            work_item_type="Task",
+        ),
+        "99": WorkItem(
+            id=99,
+            title="Parent feature",
+            description="Business background for the feature.",
+            acceptance_criteria="",
+        ),
+    }
+    gh = MockGitHubAdapter()
+    ado = MockADOAdapter(work_items=work_items)
+    adapters = _make_adapters(emails, gh=gh, ado=ado)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = create_issues_step(task, {"pbi_emails": emails}, adapters)
+    assert result.ok
+    body = gh.created[0]["body"]
+    assert "**Parent PBI:** https://dev.azure.com/FivePointsTechnology/TFIOne/_workitems/edit/99" in body
+    assert "**Parent PBI — Background:**\nBusiness background for the feature." in body
+    assert ado.calls == ["7", "99"]
+
+
+def test_create_issues_step_parent_fetch_failure_keeps_link_only() -> None:
+    """Parent fetch failures degrade gracefully — link stays, no background section."""
+
+    class FailingParentADO(MockADOAdapter):
+        def fetch_work_item(self, pbi_id: str) -> WorkItem:
+            if pbi_id == "99":
+                raise RuntimeError("ADO API returned HTTP 404")
+            return super().fetch_work_item(pbi_id)
+
+    emails = [_make_email("Task 7 - DEV - Subtask")]
+    work_items = {
+        "7": WorkItem(
+            id=7,
+            title="Subtask",
+            description="Do the subtask.",
+            acceptance_criteria="",
+            parent_id=99,
+        ),
+    }
+    gh = MockGitHubAdapter()
+    ado = FailingParentADO(work_items=work_items)
+    adapters = _make_adapters(emails, gh=gh, ado=ado)
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = create_issues_step(task, {"pbi_emails": emails}, adapters)
+    assert result.ok
+    body = gh.created[0]["body"]
+    assert "**Parent PBI:** https://dev.azure.com/FivePointsTechnology/TFIOne/_workitems/edit/99" in body
+    assert "Background" not in body
+
+
+def test_create_issues_step_fetch_failure_aborts() -> None:
+    class FailingADO(MockADOAdapter):
+        def fetch_work_item(self, pbi_id: str) -> WorkItem:
+            raise RuntimeError("ADO API returned HTTP 401")
+
+    emails = [_make_email("Product Backlog Item 1 - DEV - Title")]
+    adapters = _make_adapters(emails, ado=FailingADO())
+    task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
+    result = create_issues_step(task, {"pbi_emails": emails}, adapters)
+    assert not result.ok
+    assert "fetch_work_item failed" in result.error
+
+
+# ---------------------------------------------------------------------------
 # add_label_step — unit tests
 # ---------------------------------------------------------------------------
 
@@ -190,6 +304,7 @@ def _simple_adapters() -> tuple[MockLabelAdapter, BridgeAdapters]:
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     return labels, adapters
 
@@ -249,6 +364,7 @@ def _sync_adapters(branch_sync: MockBranchSync | None = None) -> tuple[MockBranc
         branch_sync=sync,
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     return sync, adapters
 
@@ -289,6 +405,7 @@ def test_sync_branch_step_failure_returns_error() -> None:
         branch_sync=FailingBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     result = sync_branch_step(task, {}, adapters)
@@ -353,6 +470,7 @@ def test_bridge_pipeline_sync_failure_aborts() -> None:
         branch_sync=FailingBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     result = bridge_pipeline(task, adapters)
@@ -391,6 +509,7 @@ def test_add_label_step_failure_aborts_pipeline() -> None:
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     ctx = {"created": [{"subject": "S", "issue": 1}]}
@@ -413,6 +532,7 @@ def test_bridge_pipeline_labels_created_issues() -> None:
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", client="fivepoints")
     result = bridge_pipeline(task, adapters)
@@ -435,6 +555,7 @@ def _worktree_adapters(worktree: MockWorktreePrepare | None = None) -> tuple[Moc
         branch_sync=MockBranchSync(),
         worktree=wt,
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     return wt, adapters
 
@@ -504,6 +625,7 @@ def test_prepare_worktree_step_failure_returns_ok_false() -> None:
         branch_sync=MockBranchSync(),
         worktree=FailingWorktree(),
         assign=MockAssignAdapter(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     ctx = {"created": [{"subject": "S", "issue": 5}]}
@@ -538,6 +660,7 @@ def _assign_adapters(assign: MockAssignAdapter | None = None) -> tuple[MockAssig
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=a,
+        ado=MockADOAdapter(),
     )
     return a, adapters
 
@@ -574,6 +697,7 @@ def test_assign_step_failure_returns_error() -> None:
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=FailingAssign(),
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo")
     ctx = {"created": [{"subject": "S", "issue": 1}]}
@@ -617,6 +741,7 @@ def test_pipeline_full_end_to_end() -> None:
         branch_sync=MockBranchSync(),
         worktree=MockWorktreePrepare(),
         assign=a,
+        ado=MockADOAdapter(),
     )
     task = BridgeTask(sender=_ADO_SENDER, repo="owner/repo", agent="claire-test-ai")
     result = bridge_pipeline(task, adapters)
