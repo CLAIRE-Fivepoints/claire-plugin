@@ -142,13 +142,6 @@ class SpawnAnalystStep:
         return StepResult(ok=True, data={})
 ```
 
-## Tests
-
-`packages/workflows/src/claire_workflows/tests/test_fivepoints_pipeline.py`
-
-- **Level 1** (unit): each step in isolation with `MockAdapters`
-- **Level 2** (scenario): full end-to-end for both workflow classes including restart recovery
-
 ## Usage
 
 ```python
