@@ -35,15 +35,15 @@ def filter_pbi_step(task, ctx: dict, adapters) -> StepResult:
     return StepResult(ok=True, data={"pbi_emails": pbi_emails})
 
 
-def _build_issue_body(work_item: WorkItem, ado: ADOAdapter) -> str:
+def _build_issue_body(work_item: WorkItem, ado: ADOAdapter, received_date: str = "") -> str:
     """Build an enriched issue body from the ADO work item (state, area, type,
     parent PBI link + background) — falls back to source/thread when no PBI ID
     could be parsed from the email subject.
     """
-    body = (
-        f"**Azure DevOps:** {ado.work_item_url(work_item.id)}\n\n"
-        f"**State:** {work_item.state}\n**Area:** {work_item.area_path}"
-    )
+    body = f"**Azure DevOps:** {ado.work_item_url(work_item.id)}\n"
+    if received_date:
+        body += f"**Received:** {received_date}\n"
+    body += f"\n**State:** {work_item.state}\n**Area:** {work_item.area_path}"
     if work_item.work_item_type:
         body += f"\n**Type:** {work_item.work_item_type}"
 
@@ -84,7 +84,7 @@ def create_issues_step(task, ctx: dict, adapters) -> StepResult:
                 work_item = adapters.ado.fetch_work_item(pbi_id)
             except Exception as exc:
                 return StepResult(ok=False, error=f"fetch_work_item failed: {exc}")
-            body = _build_issue_body(work_item, adapters.ado)
+            body = _build_issue_body(work_item, adapters.ado, received_date=e.get("received_date", ""))
 
         try:
             issue_number = adapters.github.create_issue(

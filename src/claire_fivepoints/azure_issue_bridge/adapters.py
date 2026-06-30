@@ -321,12 +321,21 @@ class GmailApiAdapter:
                 .execute()
             )
             headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
+            internal_date_ms = int(msg.get("internalDate", 0))
+            from datetime import datetime, timezone
+            received_date = (
+                datetime.fromtimestamp(internal_date_ms / 1000, tz=timezone.utc)
+                .strftime("%Y-%m-%d")
+                if internal_date_ms
+                else ""
+            )
             emails.append(
                 {
                     "message_id": m["id"],
                     "thread_id": msg["threadId"],
                     "from_addr": headers.get("From", ""),
                     "subject": headers.get("Subject", ""),
+                    "received_date": received_date,
                 }
             )
         return emails
