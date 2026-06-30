@@ -223,7 +223,7 @@ When `AZURE_DEVOPS_PAT` is set (env or `~/.config/claire/.env`), `claire infra s
 Each issue is created with:
 - **Title:** `{PBI title} (PBI #{id})`
 - **Body:** ADO link, state, area path, description, acceptance criteria (when available)
-- **Repo:** configured via `ADO_BRIDGE_REPO` (default: `claire-labs/fivepoints-test`)
+- **Repo:** configured via `ADO_BRIDGE_REPO` (default: `CLAIRE-Fivepoints/fivepoints`)
 
 ---
 
@@ -235,7 +235,7 @@ Before the bridge can run, three things must be in place:
 |-------------|-----------------|---------------|
 | `AZURE_DEVOPS_PAT` | Fetch PBI details from ADO REST API | Set in `~/.config/claire/.env` or export in shell |
 | Gmail OAuth2 | Read + archive Gmail inbox | Run `claire email auth` (one-time browser flow) |
-| `ADO_BRIDGE_REPO` | Where GitHub issues are created | Set in `~/.config/claire/.env`; defaults to `claire-labs/fivepoints-test` |
+| `ADO_BRIDGE_REPO` | Where GitHub issues are created | Set in `~/.config/claire/.env`; defaults to `CLAIRE-Fivepoints/fivepoints` |
 
 ---
 
@@ -263,7 +263,7 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 |----------|---------|-------------|
 | `AZURE_DEVOPS_PAT` | _(required)_ | Read-only PAT for issue bridge — auto-starts daemon via `claire infra start` when set |
 | `AZURE_DEVOPS_DEV_PAT` | _(optional)_ | Full-access PAT for fivepoints plugin — falls back to `AZURE_DEVOPS_PAT` |
-| `ADO_BRIDGE_REPO` | `claire-labs/fivepoints-test` | Target GitHub repo for created issues (also sets `CLAIRE_WAIT_REPO` in spawned agents) |
+| `ADO_BRIDGE_REPO` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo for created issues (also sets `CLAIRE_WAIT_REPO` in spawned agents) |
 | `ADO_ORG` | `FivePointsTechnology` | Azure DevOps organization |
 | `ADO_PROJECT` | `TFIOne` | Azure DevOps project |
 | `ADO_BRIDGE_HOUR_START` | `8` | Business hours start (local time, inclusive) |
@@ -271,7 +271,7 @@ The azure-issue-bridge uses `AZURE_DEVOPS_PAT`. The fivepoints plugin (`ado_comm
 | `PBI_SENDER` | `azuredevops@microsoft.com` | Override the production ADO sender. Use when ADO notifications come from a custom address. Falls back to the ADO default when unset. |
 | `ADO_BRIDGE_AGENT` | `claire-test-ai` | GitHub username assigned to each new issue. **Set this explicitly in production** — the default targets the test account. |
 | `ADO_BRIDGE_CLIENT` | `fivepoints` | Client slug used to build the role label: `role:{ADO_BRIDGE_CLIENT}-dev`. Determines which agent persona is activated by the spawn daemon. |
-| `ADO_BRIDGE_SYNC_SOURCE` | `CLAIRE-Fivepoints/fivepoints-test` | Source GitHub repo for branch sync (the repo Claire agents push to). |
+| `ADO_BRIDGE_SYNC_SOURCE` | `CLAIRE-Fivepoints/fivepoints` | Source GitHub repo for branch sync (the repo Claire agents push to). |
 | `ADO_BRIDGE_SYNC_TARGET` | `CLAIRE-Fivepoints/fivepoints` | Target GitHub repo where issues are created, where the worktree branch is pushed, and where the issue is assigned. |
 | `ADO_BRIDGE_SYNC_BRANCH` | `develop` | Branch name synced from source to target (legacy scripts only). The Python package (`claire fivepoints azure-issue-bridge`) hardcodes `develop` in `sync_branch_step`; this variable has no effect on the Typer CLI. |
 
