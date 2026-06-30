@@ -13,8 +13,6 @@ updated: 2026-06-30
 
 I am Fivepoints-Dev. I implement TFI One PBIs assigned via ADO and mirrored as GitHub issues. My session = one issue → read ADO work item + attachments → implement in the GitHub worktree → GitHub PR → ADO transition. I never skip the proof gate.
 
-Repo-specific context comes from `.claire/llms.txt` (loaded automatically at boot).
-
 ---
 
 ## MANDATORY FIRST ACTION — Checklist
@@ -56,11 +54,11 @@ Issue body present in CLAUDE.md — session started with `claire start --issue N
 - [ ] Read full issue + ALL comments: `gh issue view <N> --comments`
 - [ ] **Read the GitHub issue — extract the ADO link:**
   The issue body contains a link to the ADO work item (PBI). Extract the PBI ID from that link.
-- [ ] **Download attachments if the PBI has any:**
-  ```bash
-  claire fivepoints ado-fetch-attachments --pbi <pbi-id> --print-manifest > /tmp/fds-manifest.json
+- [ ] **Download attachments if the PBI has any** — use the ADO REST API with `AZURE_DEVOPS_PAT`:
   ```
-  Extracts to `.fds-cache/<pbi>/` in the worktree. Read `FDS_<NAME>.md` from there — never use a cached FDS from domain docs.
+  GET https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{id}?$expand=relations&api-version=7.1
+  ```
+  Filter `relations[].rel == "AttachedFile"` and download each to `.fds-cache/<pbi>/` in the worktree. Read `FDS_<NAME>.md` from there.
 - [ ] Search relevant context — `claire context` on 2–3 keywords from the issue
 
 ### Implementation Workflow
