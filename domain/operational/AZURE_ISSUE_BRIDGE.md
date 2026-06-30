@@ -3,8 +3,8 @@ domain: fivepoints
 category: operational
 name: AZURE_ISSUE_BRIDGE
 title: "Five Points — Azure DevOps Email Bridge (PBI Assignment → GitHub Issue Pipeline)"
-keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_SENDER, configurable-sender, branch-sync, inject, synthetic-email, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label]
-updated: 2026-06-29
+keywords: [five-points, azure-devops, email-bridge, pbi, github-issue, gmail, automation, fivepoints, triage, dedup, duplicate-prevention, PBI_SENDER, configurable-sender, branch-sync, inject, synthetic-email, ADO_BRIDGE_SYNC_SOURCE, ADO_BRIDGE_SYNC_TARGET, ADO_BRIDGE_SYNC_BRANCH, ADO_BRIDGE_AGENT, ADO_BRIDGE_CLIENT, worktree, role-label, PrepareWorktreeStep, claire:meta, feature-branch, branch-convention, pbi_id, slug]
+updated: 2026-06-30
 ---
 
 # Azure DevOps Email Bridge
@@ -28,13 +28,19 @@ ADO PBI assigned to andre.perez@dothelpllc.com
   → creates GitHub issue in ADO_BRIDGE_SYNC_TARGET repo
   → adds role label: role:{ADO_BRIDGE_CLIENT}-dev
   → syncs ADO_BRIDGE_SYNC_SOURCE/develop → ADO_BRIDGE_SYNC_TARGET/develop (GitHub REST API)
-  → assigns issue to ADO_BRIDGE_AGENT                                                ← ALWAYS LAST
   → archives email in Gmail
-  → claire spawn daemon (consumer.py) detects assignment
-  → creates git worktree at <local>/.claire/worktrees/issue-{N} on branch pbi-{N}
-  → launches Claire agent in the worktree
+  → (manual) operator assigns the issue — the bridge no longer auto-assigns (#175)
+  → session-monitor detects the assignment, runs:
+      claire run-pipeline run --workflow fivepoints.tfone.dev --issue N
+  → PrepareWorktreeStep creates <local>/.claire/worktrees/issue-{N}
+      on branch feature/{pbi_id}-{slug} (see § Worktree Creation below)
   → agent receives CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET> for wait/PR targeting
 ```
+
+> The bridge pipeline (`bridge_pipeline` in `azure_issue_bridge/pipeline.py`) itself ends at
+> `sync_branch_step` — it creates the issue, labels it, and syncs the branch, nothing more.
+> Assignment is a manual operator step; worktree creation belongs to the `fivepoints.tfone.dev`
+> pipeline, not the bridge (issue #178).
 
 ---
 
@@ -99,14 +105,47 @@ Gmail inbox
 
 ---
 
-## Spawn Daemon Pickup
+## Worktree Creation — `PrepareWorktreeStep` (issue #178)
 
-After the bridge creates the GitHub issue, adds the role label, syncs the branch, and assigns the issue, the **claire spawn daemon** (`consumer.py`) takes over:
+After the bridge finishes and the issue is assigned (manually, or by automation outside the
+bridge), the **session-monitor** detects the assignment and runs:
 
-1. The spawn daemon monitors `ADO_BRIDGE_SYNC_TARGET` for newly assigned issues
-2. When it detects the assignment to `ADO_BRIDGE_AGENT`, it creates an isolated git worktree at `.claire/worktrees/issue-{N}` on branch `pbi-{N}`
-3. A Claire agent is launched inside the worktree with the issue as its task
-4. The agent receives `CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET>` in its environment so `claire wait` targets the correct repo for PR creation and review polling
+```bash
+claire run-pipeline run --workflow fivepoints.tfone.dev --issue N --repo <ADO_BRIDGE_SYNC_TARGET>
+```
+
+This executes `FivepointsTfoneDevWorkflow` (`claire_fivepoints.tfone_dev_steps`), whose second
+step — `PrepareWorktreeStep`, right after `HydrateStateStep` and before `SpawnDevStep` — owns
+worktree creation. The bridge itself (`prepare_worktree_step` in `azure_issue_bridge/steps.py`)
+is **not** wired into `bridge_pipeline` — worktree creation lives entirely in the dev pipeline.
+
+### What `PrepareWorktreeStep` does
+
+1. Checks whether `<local_path>/.claire/worktrees/issue-{N}` already exists. If it does, it reads
+   the branch name back from a `<!-- claire:meta -->` comment on the issue and returns
+   immediately — **idempotent on pipeline restart**, no second worktree, no re-derivation.
+2. Otherwise: `gh issue view N --repo R --json body,title` to read the issue.
+3. Extracts the ADO PBI id from the body via the `_workitems/edit/(\d+)` link FivePoints already
+   embeds in every issue (see `_build_issue_body` in `azure_issue_bridge/steps.py`).
+4. Derives a slug from the title — `PBI: Case Face Sheet - Enhancement` → `case-face-sheet-enhancement`
+   (strip `PBI:` prefix, lowercase, non-alphanumeric runs collapsed to `-`, capped at 50 chars).
+5. Branch name: `feature/{pbi_id}-{slug}` — the FivePoints convention
+   (`claire domain read fivepoints knowledge DEV_RULES` rule #5), replacing the old `pbi-{N}` /
+   `issue-{N}` naming.
+6. Creates the worktree via the existing `RealWorktreePrepare` adapter
+   (`azure_issue_bridge/worktree.py`), based on `develop`.
+7. Posts a `<!-- claire:meta -->` comment on the issue recording the branch and worktree path —
+   the same tag step 1 reads back on restart. Both the freshly-derived branch name and any
+   branch name recovered from a `claire:meta` comment are validated against
+   `^feature/\d+-[a-z0-9-]+$` before use — a malformed or forged comment is never trusted as-is.
+
+`SpawnDevStep` then opens the dev terminal in the worktree as usual. `PushToADOStep`
+(`claire_fivepoints.tfone_dev_steps`, a local variant — not the one in core's
+`claire_workflows.fivepoints_pipeline`) reads the `branch_name` this step put in `ctx` and
+pushes that exact branch to the `ado` remote, instead of re-deriving `issue-{N}`.
+
+`CLAIRE_WAIT_REPO=<ADO_BRIDGE_SYNC_TARGET>` is still set in the agent's environment so
+`claire wait` targets the correct repo for PR creation and review polling.
 
 **`ADO_BRIDGE_SYNC_TARGET` vs `CLAIRE_WAIT_REPO`:**
 - `ADO_BRIDGE_SYNC_TARGET` — configures where the bridge creates GitHub issues (set at bridge/operator level)

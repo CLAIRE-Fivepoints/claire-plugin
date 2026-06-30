@@ -24,6 +24,7 @@ from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
 from claire_fivepoints.tfone_dev_steps import (
     FivepointsTfoneDevAdapters,
     FivepointsTfoneDevWorkflow,
+    GhCliIssueMetaAdapter,
 )
 
 
@@ -75,7 +76,7 @@ def run_fivepoints_tfone_dev_for_issue(
 ) -> StepResult:
     """Entry point for run-pipeline: builds adapters and runs FivepointsTfoneDevWorkflow.
 
-    Workflow shape: DevWithADOContextStep → TesterStep → ADO push → ADO merge.
+    Workflow shape: PrepareWorktree → SpawnDev → TesterStep → ADO push → ADO merge.
 
     The dev reads the ADO work item and downloads attachments before implementing;
     no analyst session is required.
@@ -99,6 +100,7 @@ def run_fivepoints_tfone_dev_for_issue(
         github=FivepointsGhAdapter.default(repo=repo, poll_interval=poll_interval),
         terminal=FivepointsOsascriptTerminalAdapter.with_role_tokens(repo),
         ado=FivepointsConcreteADOAdapter.for_repo(repo),
+        meta=GhCliIssueMetaAdapter(),
         local_path=local_path,
         ado_org=ado_org,
         ado_project=ado_project,

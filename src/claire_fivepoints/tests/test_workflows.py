@@ -233,10 +233,33 @@ class TestFivepointsConcreteADOAdapter:
         mock_ado.find_pr_for_branch.return_value = {"pullRequestId": 42}
 
         adapter = FivepointsConcreteADOAdapter(ado=mock_ado, git=_FakeGit())
-        pr_id = adapter.push_branch_and_create_pr(99)
+        pr_id = adapter.push_branch_and_create_pr(99, "feature/123-my-feature")
 
         assert pr_id == 42
+        assert push_calls == [
+            ("ado", "feature/123-my-feature:feature/123-my-feature")
+        ]
+
+    def test_push_branch_falls_back_to_issue_branch_when_name_omitted(self) -> None:
+        """fivepoints.tfone.full still calls push_branch_and_create_pr(issue) with no
+        branch_name (core's single-arg PushToADOStep) — must keep working unchanged."""
+        from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
+
+        push_calls: list[tuple] = []
+
+        class _FakeGit:
+            def push(self, remote: str, refspec: str) -> None:
+                push_calls.append((remote, refspec))
+
+        mock_ado = MagicMock()
+        mock_ado.find_pr_for_branch.return_value = {"pullRequestId": 7}
+
+        adapter = FivepointsConcreteADOAdapter(ado=mock_ado, git=_FakeGit())
+        pr_id = adapter.push_branch_and_create_pr(99)
+
+        assert pr_id == 7
         assert push_calls == [("ado", "issue-99:issue-99")]
+        mock_ado.find_pr_for_branch.assert_called_once_with("issue-99")
 
     def test_wait_for_merge_returns_on_completed(self) -> None:
         from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
@@ -258,3 +281,49 @@ class TestFivepointsConcreteADOAdapter:
         adapter = FivepointsConcreteADOAdapter(ado=mock_ado, git=MagicMock())
         with pytest.raises(RuntimeError, match="abandoned"):
             adapter.wait_for_merge(7)
+
+    def test_subprocess_git_runner_passes_cwd_to_git_push(self) -> None:
+        from claire_fivepoints.ado_adapter import SubprocessGitRunner
+
+        with patch("subprocess.run") as mock_run:
+            runner = SubprocessGitRunner(cwd="/some/repo")
+            runner.push("ado", "feature/1-foo:feature/1-foo")
+
+        mock_run.assert_called_once_with(
+            ["git", "push", "ado", "feature/1-foo:feature/1-foo"],
+            check=True,
+            cwd="/some/repo",
+        )
+
+    def test_subprocess_git_runner_defaults_cwd_to_none(self) -> None:
+        from claire_fivepoints.ado_adapter import SubprocessGitRunner
+
+        with patch("subprocess.run") as mock_run:
+            SubprocessGitRunner().push("ado", "develop:develop")
+
+        assert mock_run.call_args.kwargs["cwd"] is None
+
+    def test_for_repo_wires_local_path_into_git_runner_cwd(self) -> None:
+        from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
+
+        with (
+            patch(
+                "claire_fivepoints.ado_adapter.find_repo_entry",
+                return_value={
+                    "ado_org": "Org",
+                    "ado_project": "Proj",
+                    "ado_repo": "TFIOneGit",
+                },
+            ),
+            patch(
+                "claire_fivepoints.ado_adapter.parse_env_file",
+                return_value={"AZURE_DEVOPS_PAT": "fake-pat"},
+            ),
+            patch(
+                "claire_fivepoints.ado_adapter.load_local_path",
+                return_value="/Users/andreperez/projects/fivepoints",
+            ),
+        ):
+            adapter = FivepointsConcreteADOAdapter.for_repo("CLAIRE-Fivepoints/fivepoints")
+
+        assert adapter.git._cwd == "/Users/andreperez/projects/fivepoints"
