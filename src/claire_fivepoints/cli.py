@@ -51,14 +51,21 @@ _BRIDGE_AGENT_HELP = """\
   claire fivepoints azure-issue-bridge run [--from SENDER] [--repo owner/name] [--dry-run] [--max-results N] [--client SLUG] [--source-repo OWNER/REPO]
   claire fivepoints azure-issue-bridge inject --from ADDRESS --subject SUBJECT [--dry-run] [--repo OWNER/NAME] [--agent USERNAME]
 
+## Required env vars
+
+  GH_TOKEN              GitHub token — required for gh issue create / gh issue edit
+                        (or GITHUB_TOKEN; gh CLI picks up either)
+  ADO_BRIDGE_SYNC_SOURCE  Override --source-repo (e.g. CLAIRE-Fivepoints/fivepoints)
+  ADO_BRIDGE_CLIENT       Override --client slug (e.g. fivepoints)
+
 ## Options (run)
 
   --from TEXT       Sender email filter (default: azuredevops@microsoft.com)
-  --repo TEXT       Target GitHub repo (default: claire-labs/fivepoints-test)
+  --repo TEXT       Target GitHub repo (default: CLAIRE-Fivepoints/fivepoints)
   --dry-run         Show detected emails without creating issues
   --max-results N   Max inbox emails to scan (default: 20)
-  --client SLUG        Client slug for the role:{client}-dev label (default: fivepoints)
-  --source-repo TEXT   Source repo for branch sync (default: CLAIRE-Fivepoints/fivepoints-test, envvar: ADO_BRIDGE_SYNC_SOURCE)
+  --client SLUG     Client slug for the role:{client}-dev label (default: fivepoints, envvar: ADO_BRIDGE_CLIENT)
+  --source-repo TEXT  Source repo for branch sync (default: CLAIRE-Fivepoints/fivepoints, envvar: ADO_BRIDGE_SYNC_SOURCE)
 
 ## Options (inject)
 
@@ -72,12 +79,29 @@ _BRIDGE_AGENT_HELP = """\
 
   Product Backlog Item {ID} - {area} - {title}
 
-## Example
+## Examples
 
-  fivepoints azure-issue-bridge run --from andreoperez@gmail.com --dry-run
-  fivepoints azure-issue-bridge run --repo claire-labs/fivepoints-test
-  fivepoints azure-issue-bridge inject --from azuredevops@microsoft.com \\
-    --subject "Product Backlog Item 12345 - DEV - Client Management test" --dry-run
+  # dry-run — vérifier les emails détectés sans créer d'issues
+  claire fivepoints azure-issue-bridge run --dry-run
+
+  # run réel — créer les issues GitHub depuis les emails ADO
+  claire fivepoints azure-issue-bridge run
+
+  # run avec repo et sender explicites
+  claire fivepoints azure-issue-bridge run \\
+    --from azuredevops@microsoft.com \\
+    --repo CLAIRE-Fivepoints/fivepoints
+
+  # inject dry-run — tester le parsing sans Gmail ni ADO
+  claire fivepoints azure-issue-bridge inject \\
+    --from azuredevops@microsoft.com \\
+    --subject "Product Backlog Item 12345 - DEV - Client Management" \\
+    --dry-run
+
+  # inject réel — pipeline complet (create issue → label → sync → worktree → assign)
+  claire fivepoints azure-issue-bridge inject \\
+    --from azuredevops@microsoft.com \\
+    --subject "Product Backlog Item 12345 - DEV - Client Management"
 """
 
 _STEP_AGENT_HELP = """\
@@ -325,7 +349,7 @@ def bridge_run_cmd(
         help="Sender email filter (ADO default).",
     ),
     repo: str = typer.Option(
-        "claire-labs/fivepoints-test", "--repo",
+        "CLAIRE-Fivepoints/fivepoints", "--repo",
         help="Target GitHub repo (owner/name).",
     ),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show detected emails without creating issues."),
@@ -335,7 +359,7 @@ def bridge_run_cmd(
         help="Client slug for the role:{client}-dev label.",
     ),
     source_repo: str = typer.Option(
-        "CLAIRE-Fivepoints/fivepoints-test", "--source-repo", envvar="ADO_BRIDGE_SYNC_SOURCE",
+        "CLAIRE-Fivepoints/fivepoints", "--source-repo", envvar="ADO_BRIDGE_SYNC_SOURCE",
         help="Source repo for branch sync (develop → target/develop).",
     ),
     agent: str = typer.Option(
