@@ -73,6 +73,7 @@ def run_fivepoints_tfone_dev_for_issue(
     repo: str,
     *,
     poll_interval: float = 30.0,
+    dry_run: bool = False,
 ) -> StepResult:
     """Entry point for run-pipeline: builds adapters and runs FivepointsTfoneDevWorkflow.
 
@@ -80,6 +81,9 @@ def run_fivepoints_tfone_dev_for_issue(
 
     The dev reads the ADO work item and downloads attachments before implementing;
     no analyst session is required.
+
+    `dry_run` is forwarded to `terminal.spawn_dev()`, which passes `--dry-run` to
+    `claire start` — no dry-run short-circuit logic lives in this workflow itself.
 
     Requires ADO configuration in github_repos.yaml:
       ado_org, ado_project, ado_repo
@@ -104,5 +108,6 @@ def run_fivepoints_tfone_dev_for_issue(
         local_path=local_path,
         ado_org=ado_org,
         ado_project=ado_project,
+        dry_run=dry_run,
     )
     return FivepointsTfoneDevWorkflow().run(task, adapters)

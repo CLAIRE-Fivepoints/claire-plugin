@@ -100,6 +100,50 @@ class TestFivepointsGhAdapter:
 
 
 # ---------------------------------------------------------------------------
+# FivepointsOsascriptTerminalAdapter.spawn_dev — dry_run flag
+# ---------------------------------------------------------------------------
+
+
+class TestFivepointsOsascriptTerminalAdapterSpawnDev:
+    def _make_adapter(self) -> FivepointsOsascriptTerminalAdapter:
+        return FivepointsOsascriptTerminalAdapter(runner=MagicMock())
+
+    def test_spawn_dev_appends_dry_run_flag_when_true(self) -> None:
+        adapter = self._make_adapter()
+        with (
+            patch(
+                "claire_fivepoints.adapters.load_local_path",
+                return_value="/repo",
+            ),
+            patch(
+                "claire_fivepoints.adapters.find_repo_entry",
+                return_value={},
+            ),
+        ):
+            adapter.spawn_dev(42, "org/repo", dry_run=True)
+
+        script = adapter.runner.run.call_args[0][0]
+        assert "--dry-run" in script
+
+    def test_spawn_dev_omits_dry_run_flag_by_default(self) -> None:
+        adapter = self._make_adapter()
+        with (
+            patch(
+                "claire_fivepoints.adapters.load_local_path",
+                return_value="/repo",
+            ),
+            patch(
+                "claire_fivepoints.adapters.find_repo_entry",
+                return_value={},
+            ),
+        ):
+            adapter.spawn_dev(42, "org/repo")
+
+        script = adapter.runner.run.call_args[0][0]
+        assert "--dry-run" not in script
+
+
+# ---------------------------------------------------------------------------
 # run_fivepoints_tfone_github_for_issue
 # ---------------------------------------------------------------------------
 

@@ -107,8 +107,8 @@ class FivepointsOsascriptTerminalAdapter:
         self._open_role_terminal(issue, repo, "analyst", self.analyst_token)
         logger.info("fivepoints.spawn_analyst.terminal", extra={"issue": issue, "repo": repo})
 
-    def spawn_dev(self, issue: int, repo: str) -> None:
-        self._open_role_terminal(issue, repo, "dev", self.dev_token)
+    def spawn_dev(self, issue: int, repo: str, *, dry_run: bool = False) -> None:
+        self._open_role_terminal(issue, repo, "dev", self.dev_token, dry_run=dry_run)
         logger.info("fivepoints.spawn_dev.terminal", extra={"issue": issue, "repo": repo})
 
     def spawn_tester(self, issue: int, repo: str) -> None:
@@ -116,7 +116,7 @@ class FivepointsOsascriptTerminalAdapter:
         logger.info("fivepoints.spawn_tester.terminal", extra={"issue": issue, "repo": repo})
 
     def _open_role_terminal(
-        self, issue: int, repo: str, role: str, token: str | None
+        self, issue: int, repo: str, role: str, token: str | None, *, dry_run: bool = False
     ) -> None:
         local_path = load_local_path(repo, config_dir=self.config_dir)
         entry = find_repo_entry(repo, config_dir=self.config_dir) or {}
@@ -124,11 +124,13 @@ class FivepointsOsascriptTerminalAdapter:
         prefix = build_token_export_prefix(token) if token else ""
         cd_prefix = f"cd {shlex.quote(str(local_path))} && "
         persona_flag = f"--persona {shlex.quote(persona)} " if persona else ""
+        dry_run_flag = "--dry-run " if dry_run else ""
         cmd = (
             f"{prefix}{cd_prefix}claire start "
             f"--issue {issue} "
             f"--repo {shlex.quote(repo)} "
             f"{persona_flag}"
+            f"{dry_run_flag}"
         )
         escaped = cmd.replace('"', '\\"')
         script = f'tell application "Terminal" to do script "{escaped}"'
