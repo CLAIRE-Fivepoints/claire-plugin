@@ -155,6 +155,7 @@ class FivepointsTfoneDevAdapters:
     local_path: Path
     ado_org: str
     ado_project: str
+    dry_run: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +277,7 @@ class SpawnDevStep:
             )
             return StepResult(ok=True, data={})
 
-        adapters.terminal.spawn_dev(task.issue, task.repo)
+        adapters.terminal.spawn_dev(task.issue, task.repo, dry_run=adapters.dry_run)
         logger.info(
             "tfone_dev.spawn_dev.done",
             extra={"issue": task.issue, "repo": task.repo},

@@ -44,6 +44,7 @@ def _make_adapters(
     issue_body: str = _DEFAULT_BODY,
     issue_title: str = _DEFAULT_TITLE,
     meta_comment: str | None = None,
+    dry_run: bool = False,
 ) -> FivepointsTfoneDevAdapters:
     gh = MagicMock()
     gh.is_issue_closed.return_value = closed
@@ -69,6 +70,7 @@ def _make_adapters(
         local_path=tmp_path,
         ado_org="TestOrg",
         ado_project="TestProject",
+        dry_run=dry_run,
     )
 
 
@@ -327,10 +329,17 @@ class TestSpawnDevStep:
         task = _make_task(issue=5)
         result = SpawnDevStep()(task, {}, adapters)
         assert result.ok
-        adapters.terminal.spawn_dev.assert_called_once_with(5, "org/repo")
+        adapters.terminal.spawn_dev.assert_called_once_with(5, "org/repo", dry_run=False)
         adapters.github.wait_for_label.assert_called_once_with(
             "org/repo", 5, "role:tester"
         )
+
+    def test_forwards_dry_run_to_terminal(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path, dry_run=True)
+        task = _make_task(issue=5)
+        result = SpawnDevStep()(task, {}, adapters)
+        assert result.ok
+        adapters.terminal.spawn_dev.assert_called_once_with(5, "org/repo", dry_run=True)
 
     def test_returns_dev_done_and_pr_number(self, tmp_path: Path) -> None:
         adapters = _make_adapters(tmp_path, pr_number=99)
@@ -521,3 +530,44 @@ class TestRunFivepointsTfoneDevForIssue:
         assert task.issue == 42
         assert task.repo == "org/repo"
         assert isinstance(adapters.meta, GhCliIssueMetaAdapter)
+        assert adapters.dry_run is False
+
+    def test_entry_point_accepts_and_forwards_dry_run(self, tmp_path: Path) -> None:
+        """claire run-pipeline run --dry-run calls the entry point with dry_run=True
+        (packages/cli/src/claire_cli/commands/run_pipeline.py: _accepts_kwarg check) —
+        this must not raise TypeError, and must reach FivepointsTfoneDevAdapters.dry_run."""
+        from claire_core.pipeline import StepResult as _SR
+        from claire_fivepoints.workflows import run_fivepoints_tfone_dev_for_issue
+
+        mock_workflow_instance = MagicMock()
+        mock_workflow_instance.run.return_value = _SR(ok=True, data={})
+
+        mock_ado_cls = MagicMock()
+        mock_ado_cls.for_repo.return_value = MagicMock()
+        mock_workflow_cls = MagicMock(return_value=mock_workflow_instance)
+
+        with (
+            patch(
+                "claire_fivepoints.workflows.FivepointsGhAdapter.default",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "claire_fivepoints.workflows.FivepointsOsascriptTerminalAdapter.with_role_tokens",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "claire_fivepoints.workflows.load_local_path",
+                return_value=str(tmp_path),
+            ),
+            patch(
+                "claire_fivepoints.workflows.find_repo_entry",
+                return_value={"ado_org": "Org", "ado_project": "Proj"},
+            ),
+            patch("claire_fivepoints.workflows.FivepointsConcreteADOAdapter", mock_ado_cls),
+            patch("claire_fivepoints.workflows.FivepointsTfoneDevWorkflow", mock_workflow_cls),
+        ):
+            result = run_fivepoints_tfone_dev_for_issue(42, "org/repo", dry_run=True)
+
+        assert result.ok
+        adapters = mock_workflow_instance.run.call_args[0][1]
+        assert adapters.dry_run is True
