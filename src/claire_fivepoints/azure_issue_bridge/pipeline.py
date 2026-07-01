@@ -6,6 +6,7 @@ from claire_core.types import Task
 
 from claire_fivepoints.azure_issue_bridge.steps import (
     add_label_step,
+    assign_step,
     create_issues_step,
     fetch_emails_step,
     filter_pbi_step,
@@ -29,5 +30,6 @@ bridge_pipeline = pipe(
     filter_pbi_step,
     create_issues_step,
     add_label_step,
+    assign_step,
     sync_branch_step,
 )
