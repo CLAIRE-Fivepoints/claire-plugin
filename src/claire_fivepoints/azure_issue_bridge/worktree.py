@@ -1,9 +1,12 @@
 """azure_issue_bridge.worktree — WorktreePrepare adapter: Protocol + real/mock implementations.
 
-Responsible for creating a git worktree for a GitHub issue on a named branch
-before the issue is assigned to the agent.  The worktree is created at the
-standard path (<local_path>/.claire/worktrees/issue-<N>) so that claire start
---issue N --repo R reuses it without re-creating (idempotent hand-off).
+Responsible for creating a git worktree for a GitHub issue before the issue is
+assigned to the agent.  The worktree is created at the standard path
+(<local_path>/.claire/worktrees/issue-<N>) so that claire start --issue N
+--repo R reuses it without re-creating (idempotent hand-off). Naming a branch
+for the worktree is optional (branch_name) — when omitted, the worktree checks
+out base_branch in a detached HEAD state and branch naming is left to the
+caller (e.g. the dev agent, see PrepareWorktreeStep).
 """
 
 from __future__ import annotations
@@ -64,6 +67,14 @@ class RealWorktreePrepare:
         base_branch: str,
         branch_name: str | None = None,
     ) -> str:
+        if base_branch != "develop":
+            raise ValueError(
+                f"RealWorktreePrepare only supports base_branch='develop' "
+                f"(got {base_branch!r}) — the sync fetch is hardcoded to the "
+                "ado remote's dev branch (TFIOneGit/dev) and force-updates "
+                "base_branch to match it."
+            )
+
         local_path = Path(self._local_path or self._resolve_local_path(repo))
         worktree_path = local_path / ".claire" / "worktrees" / f"issue-{issue}"
 

@@ -132,7 +132,10 @@ checklist).
 2. Otherwise, via `RealWorktreePrepare` (`azure_issue_bridge/worktree.py`):
    a. `git fetch ado dev` — pulls the latest `TFIOneGit/dev` from the ADO remote. The
       GitHub mirror (`origin/develop`) can lag behind ADO, so this step syncs directly
-      from ADO rather than trusting the mirror.
+      from ADO rather than trusting the mirror. **Prerequisite:** the `ado` git remote
+      is not auto-created — see `claire domain read fivepoints operational
+      PIPELINE_WORKFLOW` § "V2 (fivepoints.tfone.dev) prerequisite — the ado remote
+      is NOT auto-created" for the one-time per-machine setup command.
    b. `git branch -f develop ado/dev` — force-updates the local `develop` branch to match.
    c. `git worktree add --detach <path> develop` — checks out `develop` in the new
       worktree in a **detached HEAD** state. No branch is created or named here.
