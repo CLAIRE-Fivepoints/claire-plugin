@@ -24,15 +24,19 @@ class WorktreePrepareAdapter(Protocol):
         repo: str,
         issue: int,
         base_branch: str,
-        branch_name: str,
+        branch_name: str | None = None,
     ) -> str:
-        """Create a worktree on base_branch with a new branch branch_name.
+        """Create a worktree on base_branch, optionally on a new named branch.
 
         Args:
             repo:        GitHub repo slug, e.g. "CLAIRE-Fivepoints/fivepoints".
             issue:       GitHub issue number.
-            base_branch: Branch to base the new branch on, e.g. "develop".
-            branch_name: Name of the new branch, e.g. "pbi-42".
+            base_branch: Branch to base the worktree on, e.g. "develop".
+            branch_name: Name of a new branch to create for the worktree, e.g.
+                         "pbi-42". When omitted, the worktree checks out
+                         base_branch in a detached HEAD state — no branch is
+                         created or named. Branch naming is the dev agent's
+                         responsibility (see PrepareWorktreeStep).
 
         Returns:
             Absolute filesystem path to the created (or already-existing) worktree.
@@ -58,7 +62,7 @@ class RealWorktreePrepare:
         repo: str,
         issue: int,
         base_branch: str,
-        branch_name: str,
+        branch_name: str | None = None,
     ) -> str:
         local_path = Path(self._local_path or self._resolve_local_path(repo))
         worktree_path = local_path / ".claire" / "worktrees" / f"issue-{issue}"
@@ -67,35 +71,59 @@ class RealWorktreePrepare:
             logger.info("Worktree already exists at %s — reusing", worktree_path)
             return str(worktree_path)
 
-        logger.info("Fetching %s from origin to get latest %s", repo, base_branch)
-        self._run(
-            ["git", "-C", str(local_path), "fetch", "origin", base_branch],
-            repo=repo,
-        )
-
         logger.info(
-            "Creating worktree %s on branch %s (from origin/%s)",
-            worktree_path,
-            branch_name,
-            base_branch,
+            "Fetching %s from ado remote to sync %s with TFIOneGit/dev", repo, base_branch
         )
+        self._run(["git", "-C", str(local_path), "fetch", "ado", "dev"], repo=repo)
         self._run(
-            [
-                "git",
-                "-C",
-                str(local_path),
-                "worktree",
-                "add",
-                "--track",
-                "-b",
-                branch_name,
-                str(worktree_path),
-                f"origin/{base_branch}",
-            ],
+            ["git", "-C", str(local_path), "branch", "-f", base_branch, "ado/dev"],
             repo=repo,
         )
 
-        logger.info("Worktree created at %s (branch: %s)", worktree_path, branch_name)
+        if branch_name:
+            logger.info(
+                "Creating worktree %s on branch %s (from %s)",
+                worktree_path,
+                branch_name,
+                base_branch,
+            )
+            self._run(
+                [
+                    "git",
+                    "-C",
+                    str(local_path),
+                    "worktree",
+                    "add",
+                    "--track",
+                    "-b",
+                    branch_name,
+                    str(worktree_path),
+                    base_branch,
+                ],
+                repo=repo,
+            )
+            logger.info("Worktree created at %s (branch: %s)", worktree_path, branch_name)
+        else:
+            logger.info(
+                "Creating worktree %s on %s (detached — no named branch)",
+                worktree_path,
+                base_branch,
+            )
+            self._run(
+                [
+                    "git",
+                    "-C",
+                    str(local_path),
+                    "worktree",
+                    "add",
+                    "--detach",
+                    str(worktree_path),
+                    base_branch,
+                ],
+                repo=repo,
+            )
+            logger.info("Worktree created at %s (detached from %s)", worktree_path, base_branch)
+
         return str(worktree_path)
 
     @staticmethod
@@ -158,7 +186,7 @@ class MockWorktreePrepare:
         repo: str,
         issue: int,
         base_branch: str,
-        branch_name: str,
+        branch_name: str | None = None,
     ) -> str:
         entry = {
             "repo": repo,
@@ -168,4 +196,4 @@ class MockWorktreePrepare:
         }
         self.prepared.append(entry)
         logger.debug("MockWorktreePrepare.prepare called: %s", entry)
-        return f"/mock/worktrees/{branch_name}"
+        return f"/mock/worktrees/{branch_name or f'issue-{issue}'}"

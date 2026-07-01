@@ -3,19 +3,21 @@
 Pipeline shape:
   pipe(
     HydrateStateStep(),     # reads role label; populates ctx for restart recovery
-    PrepareWorktreeStep(),  # idempotent worktree + feature/{pbi_id}-{slug} branch
+    PrepareWorktreeStep(),  # idempotent worktree on develop — no named branch
     SpawnDevStep(),         # spawn dev terminal + wait for role:tester label
     TesterStep(),           # spawn tester + wait role:ready
-    PushToADOStep(),        # push branch_name (from ctx) to ADO + create PR
+    PushToADOStep(),        # push branch_name (from claire:meta comment) to ADO + create PR
     WaitForADOMergeStep(),  # block until ADO PR merged        (from fivepoints_pipeline)
   )
 
 The dev agent reads the GitHub issue body (populated by the bridge) and downloads
-ADO attachments itself — the workflow does not pre-fetch ADO context.
+ADO attachments itself — the workflow does not pre-fetch ADO context. It also
+creates the feature/{pbi_id}-{slug} branch itself (after reading the issue and
+the FDS) and posts the branch name in a <!-- claire:meta --> comment.
 
 PushToADOStep is defined locally (not imported from claire_workflows.fivepoints_pipeline)
-because it pushes the branch_name produced by PrepareWorktreeStep rather than deriving
-issue-{N} from the issue number alone.
+because it pushes the branch_name recovered from the claire:meta comment rather than
+deriving issue-{N} from the issue number alone.
 """
 from __future__ import annotations
 
@@ -45,10 +47,8 @@ _LABEL_TESTER = "role:tester"
 _LABEL_READY = "role:ready"
 
 _META_TAG = "<!-- claire:meta -->"
-_PBI_ID_PATTERN = re.compile(r"_workitems/edit/(\d+)")
 _BRANCH_PATTERN = re.compile(r"\*\*Branch:\*\* `([^`]+)`")
 _BRANCH_NAME_PATTERN = re.compile(r"^feature/\d+-[a-z0-9-]+$")
-_SLUG_MAX_LEN = 50
 
 
 # ---------------------------------------------------------------------------
@@ -56,30 +56,10 @@ _SLUG_MAX_LEN = 50
 # ---------------------------------------------------------------------------
 
 
-def _slugify(title: str, max_len: int = _SLUG_MAX_LEN) -> str:
-    """Derive a branch-safe slug from an issue title.
-
-    "PBI: Case Face Sheet - Enhancement" -> "case-face-sheet-enhancement"
-    """
-    text = re.sub(r"^PBI:\s*", "", title, flags=re.IGNORECASE)
-    text = re.sub(r"[^a-zA-Z0-9]+", "-", text).strip("-").lower()
-    return text[:max_len].rstrip("-")
-
-
-def _extract_pbi_id(body: str) -> str:
-    match = _PBI_ID_PATTERN.search(body)
-    if not match:
-        raise RuntimeError(
-            "Could not extract pbi_id from issue body — "
-            "no ADO _workitems/edit/<id> link found"
-        )
-    return match.group(1)
-
-
 def _is_valid_branch_name(branch_name: str) -> bool:
     """Guard against forged/malformed branch names before they reach `git push`.
 
-    Anchored to the feature/{pbi_id}-{slug} shape this step itself produces — a
+    Anchored to the feature/{pbi_id}-{slug} shape the dev agent produces — a
     value recovered from an (unauthenticated) issue comment that doesn't match
     can never start with '-' and can't smuggle extra git CLI flags/arguments
     through the `{branch}:{branch}` refspec.
@@ -164,13 +144,17 @@ class FivepointsTfoneDevAdapters:
 
 
 class PrepareWorktreeStep:
-    """Create the dev worktree on a FivePoints-convention branch, idempotently.
+    """Create the dev worktree on develop, idempotently.
 
-    Branch name: feature/{pbi_id}-{slug} — pbi_id is parsed from the ADO
-    _workitems/edit/<id> link in the issue body, slug is derived from the issue
-    title. The chosen branch name is persisted as a <!-- claire:meta --> comment
-    on the issue so a restarted pipeline recovers it without recreating the
-    worktree or re-deriving the branch name.
+    Only prepares the worktree — it does not derive or create a named branch.
+    The underlying adapter (RealWorktreePrepare) first syncs the local develop
+    branch from the ado remote's dev branch (TFIOneGit/dev), then checks out
+    develop in the new worktree in a detached HEAD state (no branch is created
+    or named here).
+
+    Branch naming is the dev agent's responsibility: after reading the issue
+    and the FDS, it creates feature/{pbi_id}-{slug} itself and posts the name
+    in a <!-- claire:meta --> comment (see PushToADOStep, which reads it back).
     """
 
     def __call__(
@@ -182,74 +166,28 @@ class PrepareWorktreeStep:
         worktree_path = adapters.local_path / ".claire" / "worktrees" / f"issue-{task.issue}"
 
         if worktree_path.exists():
-            meta_body = adapters.meta.find_meta_comment(task.repo, task.issue)
-            match = _BRANCH_PATTERN.search(meta_body) if meta_body else None
-            if match and _is_valid_branch_name(match.group(1)):
-                branch_name = match.group(1)
-                logger.info(
-                    "tfone_dev.prepare_worktree.skipped",
-                    extra={
-                        "issue": task.issue,
-                        "repo": task.repo,
-                        "branch_name": branch_name,
-                    },
-                )
-                return StepResult(
-                    ok=True,
-                    data={
-                        "worktree_ready": True,
-                        "branch_name": branch_name,
-                        "worktree_path": str(worktree_path),
-                    },
-                )
-            if match:
-                # Anyone able to comment on the issue can post a forged claire:meta
-                # comment — never trust a branch_name that doesn't match the
-                # convention this step itself produces. Fall through and re-derive.
-                logger.warning(
-                    "tfone_dev.prepare_worktree.meta_comment_rejected",
-                    extra={
-                        "issue": task.issue,
-                        "repo": task.repo,
-                        "rejected_branch_name": match.group(1),
-                    },
-                )
-
-        issue_data = adapters.meta.get_issue(task.repo, task.issue)
-        pbi_id = _extract_pbi_id(issue_data.get("body", "") or "")
-        slug = _slugify(issue_data.get("title", "") or "")
-        branch_name = f"feature/{pbi_id}-{slug}"
-        if not _is_valid_branch_name(branch_name):
-            raise RuntimeError(
-                f"Derived branch name {branch_name!r} failed validation against "
-                f"{_BRANCH_NAME_PATTERN.pattern!r} — check the issue title/body"
+            logger.info(
+                "tfone_dev.prepare_worktree.skipped",
+                extra={"issue": task.issue, "repo": task.repo},
+            )
+            return StepResult(
+                ok=True,
+                data={"worktree_ready": True, "worktree_path": str(worktree_path)},
             )
 
         worktree_path_str = RealWorktreePrepare(local_path=adapters.local_path).prepare(
             repo=task.repo,
             issue=task.issue,
             base_branch="develop",
-            branch_name=branch_name,
         )
-
-        comment_body = (
-            f"{_META_TAG}\n"
-            f"**Branch:** `{branch_name}`\n"
-            f"**Worktree:** `{worktree_path_str}`"
-        )
-        adapters.meta.post_comment(task.repo, task.issue, comment_body)
 
         logger.info(
             "tfone_dev.prepare_worktree.done",
-            extra={"issue": task.issue, "repo": task.repo, "branch_name": branch_name},
+            extra={"issue": task.issue, "repo": task.repo},
         )
         return StepResult(
             ok=True,
-            data={
-                "worktree_ready": True,
-                "branch_name": branch_name,
-                "worktree_path": worktree_path_str,
-            },
+            data={"worktree_ready": True, "worktree_path": worktree_path_str},
         )
 
 
@@ -331,9 +269,10 @@ class TesterStep:
 class PushToADOStep:
     """Push the feature branch to ADO and create a PR.
 
-    Reads branch_name from ctx (set by PrepareWorktreeStep) instead of deriving
-    issue-{N} from the issue number, so the branch pushed to ADO matches the
-    FivePoints feature/{pbi_id}-{slug} convention.
+    Reads branch_name from the <!-- claire:meta --> comment on the issue —
+    posted by the dev agent after it creates the feature/{pbi_id}-{slug}
+    branch — instead of ctx, since PrepareWorktreeStep no longer derives or
+    names the branch.
     """
 
     def __call__(
@@ -342,7 +281,16 @@ class PushToADOStep:
         ctx: dict[str, Any],
         adapters: FivepointsTfoneDevAdapters,
     ) -> StepResult:
-        branch_name = ctx["branch_name"]
+        meta_body = adapters.meta.find_meta_comment(task.repo, task.issue)
+        match = _BRANCH_PATTERN.search(meta_body) if meta_body else None
+        if not match or not _is_valid_branch_name(match.group(1)):
+            raise RuntimeError(
+                f"No valid branch_name found in a {_META_TAG} comment on issue "
+                f"{task.issue} — the dev agent must post it after creating the "
+                "feature branch"
+            )
+        branch_name = match.group(1)
+
         ado_pr_id = adapters.ado.push_branch_and_create_pr(task.issue, branch_name)
         logger.info(
             "tfone_dev.push_to_ado.done",
@@ -353,7 +301,7 @@ class PushToADOStep:
                 "ado_pr_id": ado_pr_id,
             },
         )
-        return StepResult(ok=True, data={"ado_pr_id": ado_pr_id})
+        return StepResult(ok=True, data={"ado_pr_id": ado_pr_id, "branch_name": branch_name})
 
 
 # ---------------------------------------------------------------------------
@@ -369,8 +317,8 @@ class FivepointsTfoneDevWorkflow:
       role:tester present  → dev_done=True  (skip SpawnDevStep)
       role:ready  present  → dev_done=True, tester_done=True (skip both)
 
-    PrepareWorktreeStep is idempotent on its own (worktree-on-disk + claire:meta
-    comment check) and always runs — it no-ops itself rather than relying on ctx.
+    PrepareWorktreeStep is idempotent on its own (worktree-on-disk check) and
+    always runs — it no-ops itself rather than relying on ctx.
 
     Usage::
 

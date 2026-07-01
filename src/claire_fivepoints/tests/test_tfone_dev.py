@@ -20,14 +20,17 @@ from claire_fivepoints.tfone_dev_steps import (
     PushToADOStep,
     SpawnDevStep,
     TesterStep,
-    _extract_pbi_id,
     _is_valid_branch_name,
-    _slugify,
 )
 
 _DEFAULT_BODY = "ADO: https://dev.azure.com/Org/Proj/_workitems/edit/18840"
 _DEFAULT_TITLE = "PBI: Case Face Sheet - Enhancement"
 _DEFAULT_BRANCH = "feature/18840-case-face-sheet-enhancement"
+_DEFAULT_META_COMMENT = (
+    "<!-- claire:meta -->\n"
+    f"**Branch:** `{_DEFAULT_BRANCH}`\n"
+    "**Worktree:** `/mock/worktree`"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +46,7 @@ def _make_adapters(
     pr_number: int | None = 10,
     issue_body: str = _DEFAULT_BODY,
     issue_title: str = _DEFAULT_TITLE,
-    meta_comment: str | None = None,
+    meta_comment: str | None = _DEFAULT_META_COMMENT,
     dry_run: bool = False,
 ) -> FivepointsTfoneDevAdapters:
     gh = MagicMock()
@@ -81,37 +84,6 @@ def _make_task(issue: int = 42, repo: str = "org/repo"):
 
 def _patch_worktree_prepare(worktree_path: str = "/mock/worktrees/issue-42"):
     return patch("claire_fivepoints.tfone_dev_steps.RealWorktreePrepare")
-
-
-# ---------------------------------------------------------------------------
-# _slugify / _extract_pbi_id
-# ---------------------------------------------------------------------------
-
-
-class TestSlugify:
-    def test_strips_pbi_prefix_and_lowercases(self) -> None:
-        assert _slugify("PBI: Case Face Sheet - Enhancement") == "case-face-sheet-enhancement"
-
-    def test_no_pbi_prefix(self) -> None:
-        assert _slugify("Client Management Test") == "client-management-test"
-
-    def test_truncates_to_max_len(self) -> None:
-        title = "PBI: " + "word " * 30
-        slug = _slugify(title)
-        assert len(slug) <= 50
-
-    def test_collapses_non_alnum_runs(self) -> None:
-        assert _slugify("PBI: A/B  &  C!!!") == "a-b-c"
-
-
-class TestExtractPbiId:
-    def test_extracts_id_from_workitems_link(self) -> None:
-        body = "See https://dev.azure.com/Org/Proj/_workitems/edit/18840 for details"
-        assert _extract_pbi_id(body) == "18840"
-
-    def test_raises_when_no_link_present(self) -> None:
-        with pytest.raises(RuntimeError, match="pbi_id"):
-            _extract_pbi_id("no ado link here")
 
 
 class TestIsValidBranchName:
@@ -216,8 +188,8 @@ class TestGhCliIssueMetaAdapter:
 
 
 class TestPrepareWorktreeStep:
-    def test_fresh_start_creates_worktree_and_posts_comment(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, meta_comment=None)
+    def test_fresh_start_creates_worktree(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path)
         task = _make_task(issue=18842, repo="org/repo")
         worktree_path = str(tmp_path / ".claire" / "worktrees" / "issue-18842")
 
@@ -227,87 +199,35 @@ class TestPrepareWorktreeStep:
 
         assert result.ok
         assert result.data["worktree_ready"] is True
-        assert result.data["branch_name"] == _DEFAULT_BRANCH
         assert result.data["worktree_path"] == worktree_path
+        assert "branch_name" not in result.data
 
         mock_cls.assert_called_once_with(local_path=tmp_path)
         mock_cls.return_value.prepare.assert_called_once_with(
             repo="org/repo",
             issue=18842,
             base_branch="develop",
-            branch_name=_DEFAULT_BRANCH,
         )
 
-        adapters.meta.post_comment.assert_called_once()
-        posted_repo, posted_issue, posted_body = adapters.meta.post_comment.call_args[0]
-        assert posted_repo == "org/repo"
-        assert posted_issue == 18842
-        assert "<!-- claire:meta -->" in posted_body
-        assert f"`{_DEFAULT_BRANCH}`" in posted_body
-        assert worktree_path in posted_body
-
-    def test_idempotent_when_worktree_exists_and_meta_comment_found(self, tmp_path: Path) -> None:
-        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
-        worktree_dir.mkdir(parents=True)
-        meta_comment = (
-            "<!-- claire:meta -->\n"
-            "**Branch:** `feature/100-existing-branch`\n"
-            "**Worktree:** `/some/path`"
-        )
-        adapters = _make_adapters(tmp_path, meta_comment=meta_comment)
-        task = _make_task(issue=7)
-
-        with _patch_worktree_prepare() as mock_cls:
-            result = PrepareWorktreeStep()(task, {}, adapters)
-
-        assert result.ok
-        assert result.data["branch_name"] == "feature/100-existing-branch"
-        mock_cls.assert_not_called()
         adapters.meta.get_issue.assert_not_called()
+        adapters.meta.find_meta_comment.assert_not_called()
         adapters.meta.post_comment.assert_not_called()
 
-    def test_falls_through_when_worktree_exists_but_no_meta_comment(self, tmp_path: Path) -> None:
+    def test_idempotent_when_worktree_exists(self, tmp_path: Path) -> None:
         worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
         worktree_dir.mkdir(parents=True)
-        adapters = _make_adapters(tmp_path, meta_comment=None)
+        adapters = _make_adapters(tmp_path)
         task = _make_task(issue=7)
 
         with _patch_worktree_prepare() as mock_cls:
-            mock_cls.return_value.prepare.return_value = str(worktree_dir)
             result = PrepareWorktreeStep()(task, {}, adapters)
 
         assert result.ok
-        mock_cls.return_value.prepare.assert_called_once()
-        adapters.meta.post_comment.assert_called_once()
-
-    def test_missing_pbi_id_raises(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path, issue_body="no ado link here", meta_comment=None)
-        task = _make_task(issue=9)
-        with pytest.raises(RuntimeError, match="pbi_id"):
-            PrepareWorktreeStep()(task, {}, adapters)
-
-    def test_rejects_forged_meta_comment_and_re_derives(self, tmp_path: Path) -> None:
-        """A branch_name that doesn't match feature/{pbi_id}-{slug} — e.g. posted by an
-        attacker able to comment on the issue, or a stale/malformed comment — must never
-        be trusted as-is. Falls through to deriving + recreating instead."""
-        worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-7"
-        worktree_dir.mkdir(parents=True)
-        forged_comment = (
-            "<!-- claire:meta -->\n"
-            "**Branch:** `--upload-pack=evil`\n"
-            "**Worktree:** `/some/path`"
-        )
-        adapters = _make_adapters(tmp_path, meta_comment=forged_comment)
-        task = _make_task(issue=7)
-
-        with _patch_worktree_prepare() as mock_cls:
-            mock_cls.return_value.prepare.return_value = str(worktree_dir)
-            result = PrepareWorktreeStep()(task, {}, adapters)
-
-        assert result.ok
-        assert result.data["branch_name"] == _DEFAULT_BRANCH
-        mock_cls.return_value.prepare.assert_called_once()
-        adapters.meta.post_comment.assert_called_once()
+        assert result.data["worktree_path"] == str(worktree_dir)
+        mock_cls.assert_not_called()
+        adapters.meta.get_issue.assert_not_called()
+        adapters.meta.find_meta_comment.assert_not_called()
+        adapters.meta.post_comment.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -386,14 +306,34 @@ class TestTesterStep:
 
 
 class TestPushToADOStep:
-    def test_reads_branch_name_from_ctx_and_calls_adapter(self, tmp_path: Path) -> None:
-        adapters = _make_adapters(tmp_path)
+    def test_reads_branch_name_from_meta_comment_and_calls_adapter(self, tmp_path: Path) -> None:
+        meta_comment = "<!-- claire:meta -->\n**Branch:** `feature/1-foo`\n**Worktree:** `/some/path`"
+        adapters = _make_adapters(tmp_path, meta_comment=meta_comment)
         adapters.ado.push_branch_and_create_pr.return_value = 77
         task = _make_task(issue=5)
-        result = PushToADOStep()(task, {"branch_name": "feature/1-foo"}, adapters)
+        result = PushToADOStep()(task, {}, adapters)
         assert result.ok
         assert result.data["ado_pr_id"] == 77
+        assert result.data["branch_name"] == "feature/1-foo"
         adapters.ado.push_branch_and_create_pr.assert_called_once_with(5, "feature/1-foo")
+
+    def test_raises_when_meta_comment_missing(self, tmp_path: Path) -> None:
+        adapters = _make_adapters(tmp_path, meta_comment=None)
+        task = _make_task(issue=5)
+        with pytest.raises(RuntimeError, match="claire:meta"):
+            PushToADOStep()(task, {}, adapters)
+        adapters.ado.push_branch_and_create_pr.assert_not_called()
+
+    def test_raises_when_meta_comment_branch_name_is_forged(self, tmp_path: Path) -> None:
+        """A branch_name that doesn't match feature/{pbi_id}-{slug} — e.g. posted by an
+        attacker able to comment on the issue, or a stale/malformed comment — must never
+        be trusted and must never reach `git push`."""
+        forged_comment = "<!-- claire:meta -->\n**Branch:** `--upload-pack=evil`\n"
+        adapters = _make_adapters(tmp_path, meta_comment=forged_comment)
+        task = _make_task(issue=5)
+        with pytest.raises(RuntimeError, match="claire:meta"):
+            PushToADOStep()(task, {}, adapters)
+        adapters.ado.push_branch_and_create_pr.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -438,10 +378,11 @@ class TestFivepointsTfoneDevWorkflow:
         adapters.terminal.spawn_tester.assert_not_called()
         adapters.ado.push_branch_and_create_pr.assert_called_once()
 
-    def test_restart_with_existing_worktree_reuses_branch_from_meta_comment(
+    def test_restart_with_existing_worktree_pushes_branch_from_meta_comment(
         self, tmp_path: Path
     ) -> None:
-        """PrepareWorktreeStep recovers branch_name from the claire:meta comment — no re-derivation, no worktree recreation."""
+        """PrepareWorktreeStep no-ops when the worktree already exists (no recreation);
+        PushToADOStep reads the branch_name straight from the claire:meta comment."""
         worktree_dir = tmp_path / ".claire" / "worktrees" / "issue-42"
         worktree_dir.mkdir(parents=True)
         meta_comment = (
