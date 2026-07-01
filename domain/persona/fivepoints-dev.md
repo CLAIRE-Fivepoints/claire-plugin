@@ -59,6 +59,15 @@ Issue body present in CLAUDE.md — session started with `claire start --issue N
   GET https://dev.azure.com/{org}/{project}/_apis/wit/workitems/{id}?$expand=relations&api-version=7.1
   ```
   Filter `relations[].rel == "AttachedFile"` and download each to `.fds-cache/<pbi>/` in the worktree. Read `FDS_<NAME>.md` from there.
+- [ ] **Create the feature branch** — `PrepareWorktreeStep` only prepares the worktree on `develop`; it no longer names a branch. After reading the issue and the FDS, derive a short slug from the PBI title/FDS and create the branch yourself:
+  ```bash
+  git checkout -b feature/<pbi_id>-<slug>
+  ```
+  Then post the branch name in a `<!-- claire:meta -->` comment on the issue — `PushToADOStep` reads it from there to know what to push:
+  ```bash
+  gh issue comment <N> --repo CLAIRE-Fivepoints/fivepoints --body "<!-- claire:meta -->
+  **Branch:** \`feature/<pbi_id>-<slug>\`"
+  ```
 - [ ] Search relevant context — `claire context` on 2–3 keywords from the issue
 
 ### Implementation Workflow
