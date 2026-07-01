@@ -52,6 +52,12 @@ Issue body present in CLAUDE.md — session started with `claire start --issue N
 ### Before You Start
 
 - [ ] Read full issue + ALL comments: `gh issue view <N> --comments`
+- [ ] **Extract and follow every link in the issue body.**
+  The issue body may contain links to SharePoint folders, ADO wiki pages, test scripts, or other resources. For each link found:
+  - SharePoint folder → list or download the relevant files (test scripts, templates, reference docs)
+  - ADO work item URL → extract the PBI ID and read the work item
+  - Any other URL → fetch and read the content if accessible
+  Do not skip links — they are part of the requirements.
 - [ ] **Read the GitHub issue — extract the ADO link:**
   The issue body contains a link to the ADO work item (PBI). Extract the PBI ID from that link.
 - [ ] **Download attachments if the PBI has any** — use the ADO REST API with `AZURE_DEVOPS_PAT`:
@@ -86,18 +92,30 @@ Issue body present in CLAUDE.md — session started with `claire start --issue N
 - [ ] Run gates: build + unit tests + lint baseline
 - [ ] On 2 consecutive failures: `claire discord send "BLOCKED on #<N>: <reason>"` — stop, wait
 
-#### 4. Test Environment + Swagger + Playwright
-- [ ] `fivepoints test-env-start`
-- [ ] `fivepoints swagger-verify`
-- [ ] Run Playwright E2E — record MP4
-- [ ] If `test-env-start` fails: trigger Discord Ping Protocol — never self-authorize a fallback
+#### 4. Verification before PR (dev acts as tester)
+
+**This step is mandatory. No PR without completed evidence.**
+
+Read and follow the tester checklist — steps [1/8] through [6/8] only:
+
+```
+claire domain read claire-plugin operational CHECKLIST_TESTER
+```
+
+- Complete steps [1/8] Deploy → [2/8] Swagger → [3/8] Login fixture → [4/8] Playwright → [5/8] MP4 proof → [6/8] Post report
+- **Skip [7/8] ado-push** — the pipeline handles ADO transition automatically after PR approval
+- **Skip [8/8] claire stop** — session continues to step 5 (GitHub PR)
+
+All evidence (MP4 + FDS screenshots) must be posted on the issue before creating the PR.
 
 #### 5. GitHub PR
 - [ ] `git push github <branch>`
 - [ ] Create PR on `CLAIRE-Fivepoints/fivepoints`:
   - Body must include `Closes #<issue-N>` to link the issue
-  - Include MP4 + FDS Verification screenshot in the PR body
-- [ ] Request review: `gh pr edit <N> --add-reviewer gatekeeper-claire-ai`
+  - Embed or attach all evidence from step 4:
+    - Link or embed `e2e.mp4`
+    - One screenshot per FDS requirement, each labelled with the requirement ID
+  - PR body without evidence = incomplete, do not submit
 - [ ] Post PR comment immediately after push (zero-ghosting rule)
 - [ ] `claire wait --pr <N>` in background
 
@@ -148,11 +166,11 @@ I am a critical engineering partner — not a validation machine.
 - [x] Post comments on the GitHub issue and its PR
 
 ### I CANNOT
-- [ ] `git push origin` — ADO remote; only `fivepoints ado-transition` may push there
+- [ ] `git push origin` — ADO remote; the pipeline's `PushToADOStep` handles it after PR approval
 - [ ] `gh pr merge` my own GitHub PR
 - [ ] Close my own GitHub issue
 - [ ] `claire spawn` / `reopen` / `issue reset`
-- [ ] Skip MP4 or FDS Verification before `ado-transition`
+- [ ] Skip MP4 or FDS Verification before creating the PR
 - [ ] Touch `main` / `master` directly
 
 ---

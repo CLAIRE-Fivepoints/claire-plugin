@@ -69,7 +69,61 @@ class FivepointsGhAdapter:
             time.sleep(self.poll_interval)
 
     def find_pr_for_issue(self, repo: str, issue: int) -> int | None:
-        return self._gh.find_pr_for_issue(repo, issue)
+        # The base implementation searches by branch name "issue-{N}" which doesn't
+        # match fivepoints feature branches (feature/{pbi_id}-{slug}).  Search by
+        # body text instead: any open PR whose body mentions "Closes #{issue}".
+        output = self._gh.runner.run(
+            "pr", "list",
+            "--repo", repo,
+            "--state", "open",
+            "--search", f"Closes #{issue} in:body",
+            "--json", "number",
+            "--limit", "1",
+        )
+        import json as _json
+        data: list[dict] = _json.loads(output or "[]")
+        if data:
+            return data[0]["number"]
+        # Fallback: scan all open PRs and check body text directly (handles
+        # cases where GitHub search indexing is delayed).
+        output2 = self._gh.runner.run(
+            "pr", "list",
+            "--repo", repo,
+            "--state", "open",
+            "--json", "number,body",
+            "--limit", "50",
+        )
+        prs: list[dict] = _json.loads(output2 or "[]")
+        needle = f"closes #{issue}"
+        for pr in prs:
+            if needle in (pr.get("body") or "").lower():
+                return pr["number"]
+        return None
+
+    def wait_for_pr_approval(self, repo: str, pr_number: int) -> None:
+        """Block until the PR has at least one APPROVED review."""
+        while True:
+            decision = self._gh.runner.run(
+                "pr", "view", str(pr_number),
+                "--repo", repo,
+                "--json", "reviewDecision",
+                "-q", ".reviewDecision",
+            ).strip()
+            if decision == "APPROVED":
+                logger.info(
+                    "fivepoints.pr_approved",
+                    extra={"repo": repo, "pr_number": pr_number},
+                )
+                return
+            time.sleep(self.poll_interval)
+
+    def close_pr(self, repo: str, pr_number: int) -> None:
+        """Close the GitHub PR without merging (work is going through ADO)."""
+        self._gh.runner.run("pr", "close", str(pr_number), "--repo", repo)
+        logger.info(
+            "fivepoints.pr_closed",
+            extra={"repo": repo, "pr_number": pr_number},
+        )
 
 
 @dataclass
@@ -77,15 +131,17 @@ class FivepointsOsascriptTerminalAdapter:
     """Implements FivepointsTerminalAdapter — opens Terminal.app windows via osascript.
 
     Reads role-specific personas and tokens from github_repos.yaml:
-      analyst_persona / analyst_agent
-      dev_persona     / dev_agent
-      tester_persona  / tester_agent
+      analyst_persona  / analyst_agent
+      dev_persona      / dev_agent
+      tester_persona   / tester_agent
+      reviewer_persona / reviewer_agent
     """
 
     runner: OsascriptRunner
     analyst_token: str | None = None
     dev_token: str | None = None
     tester_token: str | None = None
+    reviewer_token: str | None = None
     config_dir: Path | None = None
 
     @classmethod
@@ -95,11 +151,13 @@ class FivepointsOsascriptTerminalAdapter:
         analyst_agent = resolve_repo_agent(repo, "analyst", config_dir=config_dir)
         dev_agent = resolve_repo_agent(repo, "dev", config_dir=config_dir)
         tester_agent = resolve_repo_agent(repo, "tester", config_dir=config_dir)
+        reviewer_agent = resolve_repo_agent(repo, "reviewer", config_dir=config_dir)
         return cls(
             runner=SubprocessOsascriptRunner(),
             analyst_token=load_token_for_agent(analyst_agent, config_dir=config_dir),
             dev_token=load_token_for_agent(dev_agent, config_dir=config_dir),
             tester_token=load_token_for_agent(tester_agent, config_dir=config_dir),
+            reviewer_token=load_token_for_agent(reviewer_agent, config_dir=config_dir),
             config_dir=config_dir,
         )
 
@@ -114,6 +172,10 @@ class FivepointsOsascriptTerminalAdapter:
     def spawn_tester(self, issue: int, repo: str) -> None:
         self._open_role_terminal(issue, repo, "tester", self.tester_token)
         logger.info("fivepoints.spawn_tester.terminal", extra={"issue": issue, "repo": repo})
+
+    def spawn_reviewer(self, issue: int, repo: str) -> None:
+        self._open_role_terminal(issue, repo, "reviewer", self.reviewer_token)
+        logger.info("fivepoints.spawn_reviewer.terminal", extra={"issue": issue, "repo": repo})
 
     def _open_role_terminal(
         self, issue: int, repo: str, role: str, token: str | None, *, dry_run: bool = False

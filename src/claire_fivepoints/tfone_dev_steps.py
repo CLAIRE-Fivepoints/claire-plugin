@@ -1,6 +1,6 @@
 """Steps and workflow for fivepoints.tfone.dev — dev does everything, no analyst.
 
-Pipeline shape:
+Pipeline shape (fivepoints.tfone.dev):
   pipe(
     HydrateStateStep(),     # reads role label; populates ctx for restart recovery
     PrepareWorktreeStep(),  # idempotent worktree on develop — no named branch
@@ -9,6 +9,17 @@ Pipeline shape:
     PushToADOStep(),        # push branch_name (from claire:meta comment) to ADO + create PR
     WaitForADOMergeStep(),  # block until ADO PR merged        (from fivepoints_pipeline)
   )
+
+Pipeline shape (fivepoints.tfone.dev.noreview):
+  pipe(
+    HydrateStateStep(),         # same hydration/recovery step
+    PrepareWorktreeStep(),       # same idempotent worktree
+    SpawnDevNoReviewStep(),      # spawn dev + wait for GitHub issue closed (PR merged)
+    PushToADOStep(),             # push to ADO — no separate tester step
+    WaitForADOMergeStep(),       # wait for ADO PR merged
+  )
+  The reviewer IS the tester: gatekeeper reviews and merges the GitHub PR,
+  closing the issue via 'Closes #N' — that merge event is the signal.
 
 The dev agent reads the GitHub issue body (populated by the bridge) and downloads
 ADO attachments itself — the workflow does not pre-fetch ADO context. It also
@@ -23,6 +34,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -304,6 +316,120 @@ class PushToADOStep:
         return StepResult(ok=True, data={"ado_pr_id": ado_pr_id, "branch_name": branch_name})
 
 
+class SpawnDevNoReviewStep:
+    """Spawn dev session and wait until a PR linking this issue appears.
+
+    The dev agent creates the feature branch, implements, opens a GitHub PR with
+    'Closes #{issue}' in the body, and calls claire stop.  This step polls
+    find_pr_for_issue() until that PR is detected, then returns its number so
+    the next step (SpawnReviewerStep) can spawn the gatekeeper for it.
+
+    On restart, HydrateStateStep pre-populates ctx with dev_done=True when
+    role:ready is already present — this step no-ops.
+    """
+
+    _POLL_INTERVAL: float = 30.0
+
+    def __call__(
+        self,
+        task: FivepointsTask,
+        ctx: dict[str, Any],
+        adapters: FivepointsTfoneDevAdapters,
+    ) -> StepResult:
+        if ctx.get("dev_done"):
+            logger.info(
+                "tfone_noreview.spawn_dev.skipped",
+                extra={"issue": task.issue, "repo": task.repo},
+            )
+            return StepResult(ok=True, data={})
+
+        adapters.terminal.spawn_dev(task.issue, task.repo, dry_run=adapters.dry_run)
+        logger.info(
+            "tfone_noreview.spawn_dev.done",
+            extra={"issue": task.issue, "repo": task.repo},
+        )
+
+        pr_number: int | None = None
+        while pr_number is None:
+            pr_number = adapters.github.find_pr_for_issue(task.repo, task.issue)
+            if pr_number is None:
+                time.sleep(self._POLL_INTERVAL)
+
+        logger.info(
+            "tfone_noreview.pr_found",
+            extra={"issue": task.issue, "repo": task.repo, "pr_number": pr_number},
+        )
+        return StepResult(ok=True, data={"dev_done": True, "pr_number": pr_number})
+
+
+class SpawnReviewerStep:
+    """Spawn gatekeeper session and wait for PR approval.
+
+    Triggered as soon as a PR with 'Closes #{issue}' is detected (pr_number in
+    ctx, set by SpawnDevNoReviewStep).  Spawns the reviewer terminal and blocks
+    until the PR reaches reviewDecision == APPROVED.
+
+    The reviewer persona is responsible for:
+    - Reading the PR diff
+    - Verifying the implementation against the FDS
+    - Approving (or requesting changes — in which case this step keeps polling)
+
+    Does NOT merge the PR — the pipeline pushes directly to ADO after approval
+    and closes the GitHub PR separately.
+    """
+
+    def __call__(
+        self,
+        task: FivepointsTask,
+        ctx: dict[str, Any],
+        adapters: FivepointsTfoneDevAdapters,
+    ) -> StepResult:
+        if ctx.get("reviewer_done"):
+            logger.info(
+                "tfone_noreview.reviewer.skipped",
+                extra={"issue": task.issue, "repo": task.repo},
+            )
+            return StepResult(ok=True, data={})
+
+        pr_number: int = ctx.get("pr_number") or adapters.github.find_pr_for_issue(
+            task.repo, task.issue
+        )
+
+        adapters.terminal.spawn_reviewer(task.issue, task.repo)
+        logger.info(
+            "tfone_noreview.spawn_reviewer.done",
+            extra={"issue": task.issue, "repo": task.repo, "pr_number": pr_number},
+        )
+
+        adapters.github.wait_for_pr_approval(task.repo, pr_number)
+        logger.info(
+            "tfone_noreview.reviewer_done",
+            extra={"issue": task.issue, "repo": task.repo, "pr_number": pr_number},
+        )
+        return StepResult(ok=True, data={"reviewer_done": True, "pr_number": pr_number})
+
+
+class CloseGitHubPRStep:
+    """Close the GitHub PR after pushing to ADO (no merge — ADO is the target).
+
+    The PR served as a review gate; once approved and pushed to ADO, it is
+    closed here so the GitHub repo stays clean.
+    """
+
+    def __call__(
+        self,
+        task: FivepointsTask,
+        ctx: dict[str, Any],
+        adapters: FivepointsTfoneDevAdapters,
+    ) -> StepResult:
+        pr_number: int | None = ctx.get("pr_number")
+        if not pr_number:
+            pr_number = adapters.github.find_pr_for_issue(task.repo, task.issue)
+        if pr_number:
+            adapters.github.close_pr(task.repo, pr_number)
+        return StepResult(ok=True, data={})
+
+
 # ---------------------------------------------------------------------------
 # Workflow
 # ---------------------------------------------------------------------------
@@ -333,6 +459,37 @@ class FivepointsTfoneDevWorkflow:
             SpawnDevStep(),
             TesterStep(),
             PushToADOStep(),
+            WaitForADOMergeStep(),
+        )
+
+    def run(
+        self, task: FivepointsTask, adapters: FivepointsTfoneDevAdapters
+    ) -> StepResult:
+        return self._pipeline(task, adapters)
+
+
+class FivepointsTfoneDevNoReviewWorkflow:
+    """Reviewer-as-tester variant: gatekeeper spawned automatically on PR, no TesterStep.
+
+    Pipeline shape:
+      HydrateState → PrepareWorktree → SpawnDevNoReview → SpawnReviewer
+        → PushToADO → CloseGitHubPR → WaitForADOMerge
+
+    Trigger sequence:
+      1. Dev creates PR with 'Closes #{issue}' → pipeline detects PR, spawns gatekeeper
+      2. Gatekeeper reviews diff + FDS, approves → pipeline pushes to ADO
+      3. GitHub PR closed (no GitHub merge — ADO is the merge target)
+      4. Pipeline waits for ADO PR to be merged
+    """
+
+    def __init__(self) -> None:
+        self._pipeline = pipe(
+            HydrateStateStep(),
+            PrepareWorktreeStep(),
+            SpawnDevNoReviewStep(),
+            SpawnReviewerStep(),
+            PushToADOStep(),
+            CloseGitHubPRStep(),
             WaitForADOMergeStep(),
         )
 

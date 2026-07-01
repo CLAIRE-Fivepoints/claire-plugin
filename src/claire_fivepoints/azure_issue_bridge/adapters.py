@@ -223,7 +223,35 @@ _DEFAULT_ADO_PROJECT = "TFIOne"
 
 
 def _strip_html(html: str) -> str:
-    """Remove HTML tags, decode common entities, and normalise whitespace."""
+    """Remove HTML tags, decode common entities, and normalise whitespace.
+
+    Links (<a href="...">) are preserved as Markdown [text](url) so that
+    SharePoint folders, ADO wiki pages, and other embedded URLs survive the
+    conversion and reach the GitHub issue body intact.
+    """
+    def _replace_anchor(m: re.Match) -> str:
+        href = (m.group(1) or "").replace("&amp;", "&").replace("&quot;", '"').replace("&#39;", "'")
+        label = re.sub(r"<[^>]+>", "", m.group(2)).strip()
+        if not label:
+            label = href
+        return f"[{label}]({href})" if href else label
+
+    # Convert <a href="..."> links to Markdown before stripping other tags.
+    # Handles both double-quoted and single-quoted href values.
+    html = re.sub(
+        r'<a[^>]+href=["\']([^"\']*)["\'][^>]*>(.*?)</a>',
+        _replace_anchor,
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Also catch unquoted href=... (rare but present in ADO HTML).
+    html = re.sub(
+        r'<a[^>]+href=([^\s>]+)[^>]*>(.*?)</a>',
+        _replace_anchor,
+        html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
     text = re.sub(r"<[^>]+>", " ", html)
     text = (
         text.replace("&amp;", "&")

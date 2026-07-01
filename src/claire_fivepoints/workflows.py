@@ -23,6 +23,7 @@ from claire_fivepoints.adapters import FivepointsGhAdapter, FivepointsOsascriptT
 from claire_fivepoints.ado_adapter import FivepointsConcreteADOAdapter
 from claire_fivepoints.tfone_dev_steps import (
     FivepointsTfoneDevAdapters,
+    FivepointsTfoneDevNoReviewWorkflow,
     FivepointsTfoneDevWorkflow,
     GhCliIssueMetaAdapter,
 )
@@ -111,3 +112,44 @@ def run_fivepoints_tfone_dev_for_issue(
         dry_run=dry_run,
     )
     return FivepointsTfoneDevWorkflow().run(task, adapters)
+
+
+def run_fivepoints_tfone_dev_noreview_for_issue(
+    issue: int,
+    repo: str,
+    *,
+    poll_interval: float = 30.0,
+    dry_run: bool = False,
+    force: bool = False,
+) -> StepResult:
+    """Entry point for run-pipeline: builds adapters and runs FivepointsTfoneDevNoReviewWorkflow.
+
+    Workflow shape: PrepareWorktree → SpawnDev → (reviewer merges PR) → ADO push → ADO merge.
+
+    No TesterStep.  The reviewer acts as the tester — they review and merge the
+    GitHub PR, closing the issue via 'Closes #N'.  That close event is the signal
+    to push the feature branch to ADO.
+    """
+    entry = find_repo_entry(repo) or {}
+    ado_org = (
+        entry.get("ado_org")
+        or os.environ.get("AZURE_DEVOPS_ORG", "FivePointsTechnology")
+    )
+    ado_project = (
+        entry.get("ado_project")
+        or os.environ.get("AZURE_DEVOPS_PROJECT", "TFIOne")
+    )
+    local_path = Path(load_local_path(repo))
+
+    task = FivepointsTask(issue=issue, repo=repo)
+    adapters = FivepointsTfoneDevAdapters(
+        github=FivepointsGhAdapter.default(repo=repo, poll_interval=poll_interval),
+        terminal=FivepointsOsascriptTerminalAdapter.with_role_tokens(repo),
+        ado=FivepointsConcreteADOAdapter.for_repo(repo),
+        meta=GhCliIssueMetaAdapter(),
+        local_path=local_path,
+        ado_org=ado_org,
+        ado_project=ado_project,
+        dry_run=dry_run,
+    )
+    return FivepointsTfoneDevNoReviewWorkflow().run(task, adapters)

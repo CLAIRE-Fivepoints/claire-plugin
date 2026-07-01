@@ -90,6 +90,13 @@ class RealWorktreePrepare:
             ["git", "-C", str(local_path), "branch", "-f", base_branch, "ado/dev"],
             repo=repo,
         )
+        logger.info(
+            "Pushing %s to origin to align GitHub mirror with ADO", base_branch
+        )
+        self._run(
+            ["git", "-C", str(local_path), "push", "origin", base_branch],
+            repo=repo,
+        )
 
         if branch_name:
             logger.info(
